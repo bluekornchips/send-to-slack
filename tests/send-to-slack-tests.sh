@@ -212,6 +212,180 @@ mock_curl_network_error() {
 }
 
 ########################################################
+# get_message_permalink
+########################################################
+
+mock_curl_permalink_success() {
+	#shellcheck disable=SC2329
+	curl() {
+		if [[ "$*" == *"chat.getPermalink"* ]]; then
+			echo '{"ok": true, "permalink": "https://workspace.slack.com/archives/C123456/p1234567890123456"}'
+			return 0
+		else
+			echo '{"ok": true, "channel": "C123456", "ts": "1234567890.123456"}'
+			return 0
+		fi
+	}
+
+	export -f curl
+}
+
+@test "get_message_permalink:: extracts permalink from API call" {
+	mock_curl_permalink_success
+	DRY_RUN="false"
+	SLACK_BOT_USER_OAUTH_TOKEN="test-token"
+
+	get_message_permalink "C123456" "1234567890.123456"
+	[[ "$?" -eq 0 ]]
+	[[ "$NOTIFICATION_PERMALINK" == "https://workspace.slack.com/archives/C123456/p1234567890123456" ]]
+}
+
+@test "get_message_permalink:: fails with missing channel" {
+	SLACK_BOT_USER_OAUTH_TOKEN="test-token"
+
+	run get_message_permalink "" "1234567890.123456"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "channel is required"
+}
+
+@test "get_message_permalink:: fails with missing message_ts" {
+	SLACK_BOT_USER_OAUTH_TOKEN="test-token"
+
+	run get_message_permalink "C123456" ""
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "message_ts is required"
+}
+
+@test "get_message_permalink:: fails with missing token" {
+	SLACK_BOT_USER_OAUTH_TOKEN=""
+
+	run get_message_permalink "C123456" "1234567890.123456"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "SLACK_BOT_USER_OAUTH_TOKEN is required"
+}
+
+mock_curl_permalink_failure() {
+	#shellcheck disable=SC2329
+	curl() {
+		if [[ "$*" == *"chat.getPermalink"* ]]; then
+			echo '{"ok": false, "error": "channel_not_found"}'
+			return 0
+		else
+			echo '{"ok": true, "channel": "C123456", "ts": "1234567890.123456"}'
+			return 0
+		fi
+	}
+
+	export -f curl
+}
+
+@test "get_message_permalink:: fails when API returns error" {
+	mock_curl_permalink_failure
+	DRY_RUN="false"
+	SLACK_BOT_USER_OAUTH_TOKEN="test-token"
+
+	run get_message_permalink "C123456" "1234567890.123456"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "Slack API returned error"
+}
+
+########################################################
+# send_crossposts
+########################################################
+
+@test "send_crossposts:: does nothing when CROSSPOST_ENABLED is false" {
+	CROSSPOST_ENABLED="false"
+	NOTIFICATION_PERMALINK="https://example.com/permalink"
+
+	run send_crossposts
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -vq "starting crosspost"
+}
+
+@test "send_crossposts:: does nothing when NOTIFICATION_PERMALINK is not set" {
+	CROSSPOST_ENABLED="true"
+	unset NOTIFICATION_PERMALINK
+	CROSSPOST_CHANNELS='["#channel1"]'
+	CROSSPOST_TEXT="Test crosspost"
+
+	run send_crossposts
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "NOTIFICATION_PERMALINK is not set"
+}
+
+@test "send_crossposts:: does nothing when CROSSPOST_CHANNELS is empty" {
+	CROSSPOST_ENABLED="true"
+	NOTIFICATION_PERMALINK="https://example.com/permalink"
+	CROSSPOST_CHANNELS="[]"
+	CROSSPOST_TEXT="Test crosspost"
+
+	run send_crossposts
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "CROSSPOST_CHANNELS is empty"
+}
+
+@test "send_crossposts:: does nothing when CROSSPOST_TEXT is empty" {
+	CROSSPOST_ENABLED="true"
+	NOTIFICATION_PERMALINK="https://example.com/permalink"
+	CROSSPOST_CHANNELS='["#channel1"]'
+	CROSSPOST_TEXT=""
+
+	run send_crossposts
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "CROSSPOST_TEXT is empty"
+}
+
+mock_curl_crosspost_success() {
+	#shellcheck disable=SC2329
+	curl() {
+		if [[ "$*" == *"chat.getPermalink"* ]]; then
+			echo '{"ok": true, "permalink": "https://workspace.slack.com/archives/C123456/p1234567890123456"}'
+			return 0
+		else
+			echo '{"ok": true, "channel": "C123456", "ts": "1234567890.123456"}'
+			return 0
+		fi
+	}
+
+	export -f curl
+}
+
+@test "send_crossposts:: sends crosspost to single channel successfully" {
+	mock_curl_crosspost_success
+	DRY_RUN="false"
+	SLACK_BOT_USER_OAUTH_TOKEN="test-token"
+	CROSSPOST_ENABLED="true"
+	NOTIFICATION_PERMALINK="https://workspace.slack.com/archives/C123456/p1234567890123456"
+	CROSSPOST_CHANNELS='["#crosspost-channel"]'
+	CROSSPOST_TEXT="Crosspost message"
+	SEND_TO_SLACK_ROOT="$GIT_ROOT"
+	PAYLOAD='{"channel": "#test", "blocks": []}'
+
+	run send_crossposts
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "starting crosspost"
+	echo "$output" | grep -q "successfully sent crosspost"
+}
+
+@test "send_crossposts:: sends crosspost to multiple channels" {
+	mock_curl_crosspost_success
+	DRY_RUN="false"
+	SLACK_BOT_USER_OAUTH_TOKEN="test-token"
+	CROSSPOST_ENABLED="true"
+	NOTIFICATION_PERMALINK="https://workspace.slack.com/archives/C123456/p1234567890123456"
+	CROSSPOST_CHANNELS='["#channel1", "#channel2"]'
+	CROSSPOST_TEXT="Crosspost message"
+	SEND_TO_SLACK_ROOT="$GIT_ROOT"
+	PAYLOAD='{"channel": "#test", "blocks": []}'
+
+	run send_crossposts
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "starting crosspost"
+	echo "$output" | grep -q "completed crossposting"
+	echo "$output" | grep -q "2 succeeded"
+}
+
+########################################################
 # Input options
 ########################################################
 

@@ -197,11 +197,79 @@ process_input() {
 	return 0
 }
 
+# Get message permalink from Slack API
+#
+# Arguments:
+#   $1 - channel: Channel ID where the message was posted
+#   $2 - message_ts: Message timestamp from chat.postMessage response
+#
+# Side Effects:
+#   Exports NOTIFICATION_PERMALINK if permalink is found
+#
+# Returns:
+#   0 if permalink is found and exported
+#   1 if API call fails or permalink is not found
+get_message_permalink() {
+	local channel="$1"
+	local message_ts="$2"
+
+	if [[ -z "$channel" ]]; then
+		echo "get_message_permalink:: channel is required" >&2
+		return 1
+	fi
+
+	if [[ -z "$message_ts" ]]; then
+		echo "get_message_permalink:: message_ts is required" >&2
+		return 1
+	fi
+
+	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
+		echo "get_message_permalink:: SLACK_BOT_USER_OAUTH_TOKEN is required" >&2
+		return 1
+	fi
+
+	local api_response
+	if ! api_response=$(curl -X POST "https://slack.com/api/chat.getPermalink" \
+		-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
+		-H "Content-Type: application/x-www-form-urlencoded" \
+		--data-urlencode "channel=${channel}" \
+		--data-urlencode "message_ts=${message_ts}" \
+		--silent --show-error \
+		--max-time 30 \
+		--connect-timeout 10); then
+		echo "get_message_permalink:: curl failed to send request" >&2
+		return 1
+	fi
+
+	# Check if Slack API returned success
+	if ! echo "${api_response}" | jq -e '.ok' >/dev/null 2>&1; then
+		echo "get_message_permalink:: Slack API returned error:" >&2
+		jq -r '.' <<<"${api_response}" >&2
+		return 1
+	fi
+
+	local permalink
+	permalink=$(echo "${api_response}" | jq -r '.permalink // empty')
+
+	if [[ -z "$permalink" ]] || [[ "$permalink" == "null" ]]; then
+		echo "get_message_permalink:: permalink not found in API response" >&2
+		return 1
+	fi
+
+	NOTIFICATION_PERMALINK="$permalink"
+	export NOTIFICATION_PERMALINK
+
+	echo "get_message_permalink:: permalink extracted: ${NOTIFICATION_PERMALINK}"
+
+	return 0
+}
+
 # Send notification to Slack API
 #
 # Side Effects:
 # - Sends HTTP POST request to Slack API
 # - Outputs success or error messages to stdout/stderr
+# - Exports NOTIFICATION_PERMALINK if successful
 #
 # Returns:
 # - 0 on successful message delivery
@@ -241,7 +309,159 @@ send_notification() {
 		return 1
 	fi
 
+	# Extract channel and timestamp from response to get permalink
+	local channel
+	local message_ts
+	channel=$(echo "${response}" | jq -r '.channel // empty')
+	message_ts=$(echo "${response}" | jq -r '.ts // empty')
+
+	if [[ -n "$channel" ]] && [[ -n "$message_ts" ]] && [[ "$channel" != "null" ]] && [[ "$message_ts" != "null" ]]; then
+		get_message_permalink "${channel}" "${message_ts}"
+	fi
+
 	echo "send_notification:: message delivered to Slack successfully"
+
+	return 0
+}
+
+# Send crossposts to additional channels
+#
+# Side Effects:
+# - Reads payload files from CROSSPOST_PAYLOADS array
+# - Appends permalink to each payload and sends to Slack
+# - Logs errors but continues processing if a crosspost fails
+#
+# Returns:
+# - 0 if all crossposts succeed or if crossposting is not enabled
+# - 0 even if some crossposts fail (errors are logged but don't stop execution)
+send_crossposts() {
+	if [[ ${#CROSSPOST_PAYLOADS[@]} -eq 0 ]]; then
+		return 0
+	fi
+
+	if [[ -z "${NOTIFICATION_PERMALINK}" ]]; then
+		echo "send_crossposts:: NOTIFICATION_PERMALINK is not set, skipping crossposts" >&2
+		# Clean up payload files
+		for payload_file in "${CROSSPOST_PAYLOADS[@]}"; do
+			[[ -f "$payload_file" ]] && rm -f "$payload_file"
+		done
+		return 0
+	fi
+
+	echo "send_crossposts:: starting crosspost to channels"
+
+	local rich_text_script_path
+	if [[ -n "${SEND_TO_SLACK_ROOT}" ]]; then
+		rich_text_script_path="${SEND_TO_SLACK_ROOT}/bin/blocks/rich-text.sh"
+	else
+		rich_text_script_path="bin/blocks/rich-text.sh"
+	fi
+
+	if [[ ! -f "$rich_text_script_path" ]]; then
+		echo "send_crossposts:: rich-text script not found: $rich_text_script_path" >&2
+		for payload_file in "${CROSSPOST_PAYLOADS[@]}"; do
+			[[ -f "$payload_file" ]] && rm -f "$payload_file"
+		done
+		return 0
+	fi
+
+	if [[ ! -x "$rich_text_script_path" ]]; then
+		echo "send_crossposts:: rich-text script not executable: $rich_text_script_path" >&2
+		for payload_file in "${CROSSPOST_PAYLOADS[@]}"; do
+			[[ -f "$payload_file" ]] && rm -f "$payload_file"
+		done
+		return 0
+	fi
+
+	# Combine crosspost text with permalink
+	local combined_text="${CROSSPOST_TEXT} ${NOTIFICATION_PERMALINK}"
+
+	# Create rich-text block input JSON
+	local rich_text_input
+	rich_text_input=$(jq -n \
+		--arg text "$combined_text" \
+		'{
+			elements: [
+				{
+					type: "rich_text_section",
+					elements: [
+						{
+							type: "text",
+							text: $text
+						}
+					]
+				}
+			]
+		}')
+
+	# Create the rich-text block
+	local rich_text_block
+	if ! rich_text_block=$("$rich_text_script_path" <<<"$rich_text_input"); then
+		echo "send_crossposts:: failed to create rich-text block" >&2
+		return 0
+	fi
+
+	# Save original permalink and payload
+	local original_permalink="${NOTIFICATION_PERMALINK}"
+	local original_payload="${PAYLOAD}"
+
+	# Iterate through each channel and send crosspost
+	local channel_count
+	channel_count=$(echo "${CROSSPOST_CHANNELS}" | jq '. | length')
+
+	local success_count=0
+	local failure_count=0
+
+	for ((i = 0; i < channel_count; i++)); do
+		local channel
+		channel=$(echo "${CROSSPOST_CHANNELS}" | jq -r ".[$i]")
+
+		if [[ -z "$channel" ]] || [[ "$channel" == "null" ]]; then
+			echo "send_crossposts:: skipping invalid channel at index $i" >&2
+			((failure_count++)) || true
+			continue
+		fi
+
+		# Create payload for this channel
+		local crosspost_payload
+		crosspost_payload=$(jq -n \
+			--arg channel "$channel" \
+			--argjson rich_text_block "$rich_text_block" \
+			'{
+				channel: $channel,
+				blocks: [$rich_text_block]
+			}')
+
+		# Set new payload for crosspost
+		PAYLOAD="$crosspost_payload"
+		export PAYLOAD
+
+		# Temporarily unset NOTIFICATION_PERMALINK to prevent send_notification from overwriting it
+		unset NOTIFICATION_PERMALINK
+
+		# Send notification to this channel
+		if send_notification; then
+			echo "send_crossposts:: successfully sent crosspost to channel: $channel"
+			((success_count++)) || true
+		else
+			echo "send_crossposts:: failed to send crosspost to channel: $channel" >&2
+			((failure_count++)) || true
+		fi
+
+		# Restore original permalink for next iteration
+		if [[ -n "$original_permalink" ]]; then
+			export NOTIFICATION_PERMALINK="$original_permalink"
+		fi
+	done
+
+	# Restore original payload and permalink
+	PAYLOAD="$original_payload"
+	export PAYLOAD
+	if [[ -n "$original_permalink" ]]; then
+		export NOTIFICATION_PERMALINK="$original_permalink"
+	fi
+
+	echo "send_crossposts:: completed crossposting: $success_count succeeded, $failure_count failed"
 
 	return 0
 }
@@ -353,6 +573,11 @@ main() {
 	if ! send_notification; then
 		echo "main:: failed to send notification" >&2
 		return 1
+	fi
+
+	echo "main:: sending crossposts"
+	if ! send_crossposts; then
+		echo "main:: warning: crossposting encountered issues, continuing" >&2
 	fi
 
 	# Output version JSON for Concourse
