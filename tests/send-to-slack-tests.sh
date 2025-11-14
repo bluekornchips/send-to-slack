@@ -136,9 +136,9 @@ mock_curl_network_error() {
 	SHOW_METADATA="true"
 	DRY_RUN="true"
 	SHOW_PAYLOAD="false"
-	PAYLOAD='{"channel": "#test", "text": "test"}'
+	local payload='{"channel": "#test", "text": "test"}'
 
-	create_metadata
+	create_metadata "$payload"
 	[[ -n "$METADATA" ]]
 	echo "$METADATA" | jq -e '.metadata[] | select(.name == "dry_run") | .value == "true"' >/dev/null
 }
@@ -147,16 +147,18 @@ mock_curl_network_error() {
 	SHOW_METADATA="true"
 	DRY_RUN="false"
 	SHOW_PAYLOAD="true"
-	PAYLOAD='{"channel": "#test", "text": "test"}'
+	local payload='{"channel": "#test", "text": "test"}'
 
-	create_metadata
+	create_metadata "$payload"
 	[[ -n "$METADATA" ]]
+	echo "$METADATA" | jq -e '.metadata[] | select(.name == "payload")' >/dev/null
 }
 
 @test "create_metadata:: does nothing when show_metadata is false" {
 	SHOW_METADATA="false"
+	local payload='{"channel": "#test", "text": "test"}'
 
-	create_metadata
+	create_metadata "$payload"
 	[[ "$METADATA" == "[]" ]]
 }
 
@@ -166,8 +168,9 @@ mock_curl_network_error() {
 
 @test "send_notification:: skips API call when dry run enabled" {
 	DRY_RUN="true"
+	local payload='{"channel": "#test"}'
 
-	run send_notification
+	run send_notification "$payload"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "DRY_RUN enabled"
 }
@@ -175,9 +178,9 @@ mock_curl_network_error() {
 @test "send_notification:: fails with missing token" {
 	DRY_RUN="false"
 	SLACK_BOT_USER_OAUTH_TOKEN=""
-	PAYLOAD='{"channel": "#test"}'
+	local payload='{"channel": "#test"}'
 
-	run send_notification
+	run send_notification "$payload"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "SLACK_BOT_USER_OAUTH_TOKEN is required"
 }
@@ -185,19 +188,18 @@ mock_curl_network_error() {
 @test "send_notification:: fails with missing payload" {
 	DRY_RUN="false"
 	SLACK_BOT_USER_OAUTH_TOKEN="test-token"
-	PAYLOAD=""
 
-	run send_notification
+	run send_notification ""
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "PAYLOAD is required"
+	echo "$output" | grep -q "payload is required"
 }
 
 @test "send_notification:: fails when curl fails" {
 	mock_curl_failure
 	DRY_RUN="false"
-	PAYLOAD='{"channel": "#test"}'
+	local payload='{"channel": "#test"}'
 
-	run send_notification
+	run send_notification "$payload"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "curl failed to send request"
 }
@@ -205,12 +207,11 @@ mock_curl_network_error() {
 @test "send_notification:: fails when Slack API returns error" {
 	mock_curl_failure
 	DRY_RUN="false"
-	PAYLOAD='{"channel": "#test"}'
+	local payload='{"channel": "#test"}'
 
-	run send_notification
+	run send_notification "$payload"
 	[[ "$status" -eq 1 ]]
 }
-
 
 ########################################################
 # get_message_permalink
@@ -288,6 +289,113 @@ mock_curl_permalink_failure() {
 	run get_message_permalink "C123456" "1234567890.123456"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "Slack API returned error"
+}
+
+########################################################
+# crosspost_notification
+########################################################
+
+@test "crosspost_notification:: skips when crosspost is empty" {
+	local input_payload
+	input_payload=$(mktemp /tmp/test-crosspost.XXXXXX)
+	jq -n '{
+		source: { slack_bot_user_oauth_token: "test-token" },
+		params: { channel: "#test", blocks: [] }
+	}' >"$input_payload"
+
+	run crosspost_notification "$input_payload"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "crosspost is empty, skipping"
+
+	rm -f "$input_payload"
+}
+
+@test "crosspost_notification:: skips when channels not set" {
+	local input_payload
+	input_payload=$(mktemp /tmp/test-crosspost.XXXXXX)
+	jq -n '{
+		source: { slack_bot_user_oauth_token: "test-token" },
+		params: {
+			channel: "#test",
+			blocks: [],
+			crosspost: {
+				channels: []
+			}
+		}
+	}' >"$input_payload"
+
+	run crosspost_notification "$input_payload"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "channels not set, skipping"
+
+	rm -f "$input_payload"
+}
+
+@test "crosspost_notification:: uses default text when text not provided" {
+	DRY_RUN="true"
+	NOTIFICATION_PERMALINK="https://workspace.slack.com/archives/C123/p123"
+	local input_payload
+	input_payload=$(mktemp /tmp/test-crosspost.XXXXXX)
+	jq -n '{
+		source: { slack_bot_user_oauth_token: "test-token" },
+		params: {
+			channel: "#test",
+			blocks: [],
+			crosspost: {
+				channels: ["#channel1"]
+			}
+		}
+	}' >"$input_payload"
+
+	run crosspost_notification "$input_payload"
+	[[ "$status" -eq 0 ]]
+
+	rm -f "$input_payload"
+}
+
+@test "crosspost_notification:: uses custom text when provided" {
+	DRY_RUN="true"
+	NOTIFICATION_PERMALINK="https://workspace.slack.com/archives/C123/p123"
+	local input_payload
+	input_payload=$(mktemp /tmp/test-crosspost.XXXXXX)
+	jq -n '{
+		source: { slack_bot_user_oauth_token: "test-token" },
+		params: {
+			channel: "#test",
+			blocks: [],
+			crosspost: {
+				channels: ["#channel1"],
+				text: "Custom crosspost message"
+			}
+		}
+	}' >"$input_payload"
+
+	run crosspost_notification "$input_payload"
+	[[ "$status" -eq 0 ]]
+
+	rm -f "$input_payload"
+}
+
+@test "crosspost_notification:: processes multiple channels" {
+	DRY_RUN="true"
+	NOTIFICATION_PERMALINK="https://workspace.slack.com/archives/C123/p123"
+	local input_payload
+	input_payload=$(mktemp /tmp/test-crosspost.XXXXXX)
+	jq -n '{
+		source: { slack_bot_user_oauth_token: "test-token" },
+		params: {
+			channel: "#test",
+			blocks: [],
+			crosspost: {
+				channels: ["#channel1", "#channel2", "#channel3"]
+			}
+		}
+	}' >"$input_payload"
+
+	run crosspost_notification "$input_payload"
+	[[ "$status" -eq 0 ]]
+
+	rm -f "$input_payload"
 }
 
 ########################################################
@@ -720,4 +828,76 @@ mock_curl_permalink_failure() {
 
 	# Clean up test file
 	[[ -f "$ACCEPTANCE_PAYLOAD_FILE" ]] && rm -f "$ACCEPTANCE_PAYLOAD_FILE"
+}
+
+@test "acceptance:: crosspost" {
+	if [[ "$ACCEPTANCE_TEST" != "true" ]]; then
+		skip "ACCEPTANCE_TEST is not set"
+	fi
+
+	if [[ -z "$REAL_TOKEN" ]]; then
+		skip "REAL_TOKEN is required for acceptance tests"
+	fi
+
+	local token="$REAL_TOKEN"
+	CHANNEL="notification-testing"
+	DRY_RUN="false"
+
+	# Create payload with crosspost configuration
+	jq -n \
+		--arg token "$token" \
+		--arg channel "$CHANNEL" \
+		--arg dry_run "$DRY_RUN" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: $token
+			},
+			params: {
+				channel: $channel,
+				dry_run: $dry_run,
+				blocks: [
+					{
+						section: {
+							type: "text",
+							text: {
+								type: "plain_text",
+								text: "Smoke test for crossposting functionality"
+							}
+						}
+					}
+				],
+				crosspost: {
+					channels: ["side-channel"],
+					text: "See the original message"
+				}
+			}
+		}' >"$TEST_PAYLOAD_FILE"
+
+	# Validate JSON before testing
+	if ! jq . "$TEST_PAYLOAD_FILE" >/dev/null 2>&1; then
+		echo "Invalid JSON in test payload file" >&2
+		cat "$TEST_PAYLOAD_FILE" >&2
+		return 1
+	fi
+
+	# Test the full script with crosspost
+	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
+	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "version"
+	echo "$output" | grep -q "timestamp"
+	echo "$output" | grep -q "main:: parsing payload"
+	echo "$output" | grep -q "main:: creating Concourse metadata"
+	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
+
+	if [[ "$DRY_RUN" == "true" ]]; then
+		echo "$output" | grep -q "DRY_RUN enabled"
+	else
+		# When actually sending, verify crosspost was processed by checking for multiple send notifications
+		# (one for original channel, one for each crosspost channel)
+		local send_count
+		send_count=$(echo "$output" | grep -c "send_notification:: message delivered to Slack successfully" || echo "0")
+		[[ "$send_count" -ge 2 ]]
+	fi
 }

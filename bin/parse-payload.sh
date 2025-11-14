@@ -296,8 +296,8 @@ load_configuration() {
 #
 # Uses global variable: INPUT_PAYLOAD
 #
-# Side Effects:
-#   Exports PAYLOAD with complete Slack API payload
+# Outputs:
+#   Writes complete Slack API payload JSON to stdout
 #
 # Returns:
 #   0 on success
@@ -376,7 +376,8 @@ process_blocks() {
 		return 1
 	fi
 
-	PAYLOAD=$(jq -n \
+	local payload
+	payload=$(jq -n \
 		--arg channel "$CHANNEL" \
 		--argjson blocks "$blocks" \
 		--argjson attachments "$attachments" \
@@ -393,10 +394,10 @@ process_blocks() {
 			return 1
 		fi
 		# Add text field to payload if provided
-		PAYLOAD=$(jq --arg text "$text_field" '. + {text: $text}' <<<"$PAYLOAD")
+		payload=$(jq --arg text "$text_field" '. + {text: $text}' <<<"$payload")
 	fi
 
-	export PAYLOAD
+	echo "$payload"
 
 	return 0
 }
@@ -406,9 +407,12 @@ process_blocks() {
 # Arguments:
 #   $1 - payload_file: Path to payload file
 #
+# Outputs:
+#   Writes complete Slack API payload JSON to stdout
+#
 # Side Effects:
 #   Sets global INPUT_PAYLOAD variable
-#   Exports PAYLOAD, SLACK_BOT_USER_OAUTH_TOKEN, CHANNEL, DRY_RUN
+#   Exports SLACK_BOT_USER_OAUTH_TOKEN, CHANNEL, DRY_RUN
 #
 # Returns:
 #   0 on success
