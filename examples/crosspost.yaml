@@ -1,0 +1,75 @@
+# Example Concourse CI pipeline for Slack crossposting
+# Crossposting allows you to send a message to multiple channels with a link back to the original message
+
+resource_types:
+  - name: slack
+    type: docker-image
+    source:
+      repository: sunflowersoftware/send-to-slack
+      tag: latest
+
+resources:
+  - name: slack-notification
+    type: slack
+    source:
+      slack_bot_user_oauth_token: ((SLACK_BOT_USER_OAUTH_TOKEN))
+
+# Basic crosspost example
+jobs:
+  - name: basic-crosspost
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          channel: notification-testing
+          blocks:
+            - section:
+                type: text
+                text:
+                  type: plain_text
+                  text: "New feature has been released!"
+          crosspost:
+            channels:
+              - side-channel
+              - side-channel # Purposefully sending twice to test multiple crossposts
+            text: "Check out the announcement"
+
+  # Crosspost with rich formatting
+  - name: crosspost-with-rich-text
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          channel: notification-testing
+          blocks:
+            - header:
+                text:
+                  type: plain_text
+                  text: "Important Update"
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "*Deployment Status:* Successfully deployed to production"
+          crosspost:
+            channels:
+              - side-channel
+            text: "See the full update"
+
+  # Crosspost to a single channel
+  - name: single-channel-crosspost
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          channel: notification-testing
+          blocks:
+            - section:
+                type: text
+                text:
+                  type: plain_text
+                  text: "Version 2.0.0 is now available"
+          crosspost:
+            channels:
+              - side-channel
+            text: "Read the release notes"

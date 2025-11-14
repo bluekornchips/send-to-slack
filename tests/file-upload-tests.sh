@@ -443,19 +443,20 @@ teardown() {
 
 	smoke_test_setup "$blocks_json"
 
-	if ! parse_payload "$SMOKE_TEST_PAYLOAD_FILE"; then
+	local parsed_payload
+	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
 		echo "parse_payload failed" >&2
 		rm -f "$hello_world_file"
 		return 1
 	fi
 
-	if [[ -z "$PAYLOAD" ]]; then
-		echo "PAYLOAD is not set" >&2
+	if [[ -z "$parsed_payload" ]]; then
+		echo "parsed_payload is empty" >&2
 		rm -f "$hello_world_file"
 		return 1
 	fi
 
-	run send_notification
+	run send_notification "$parsed_payload"
 	local test_result=$status
 
 	rm -f "$hello_world_file"
@@ -486,19 +487,20 @@ teardown() {
 
 	smoke_test_setup "$blocks_json"
 
-	if ! parse_payload "$SMOKE_TEST_PAYLOAD_FILE"; then
+	local parsed_payload
+	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
 		echo "parse_payload failed" >&2
 		rm -f "$slack_logo_file"
 		return 1
 	fi
 
-	if [[ -z "$PAYLOAD" ]]; then
-		echo "PAYLOAD is not set" >&2
+	if [[ -z "$parsed_payload" ]]; then
+		echo "parsed_payload is empty" >&2
 		rm -f "$slack_logo_file"
 		return 1
 	fi
 
-	run send_notification
+	run send_notification "$parsed_payload"
 	local test_result=$status
 
 	# Clean up the downloaded file
@@ -526,19 +528,20 @@ teardown() {
 
 	smoke_test_setup "$blocks_json"
 
-	if ! parse_payload "$SMOKE_TEST_PAYLOAD_FILE"; then
+	local parsed_payload
+	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
 		echo "parse_payload failed" >&2
 		rm -f "$file1" "$file2"
 		return 1
 	fi
 
-	if [[ -z "$PAYLOAD" ]]; then
-		echo "PAYLOAD is not set" >&2
+	if [[ -z "$parsed_payload" ]]; then
+		echo "parsed_payload is empty" >&2
 		rm -f "$file1" "$file2"
 		return 1
 	fi
 
-	run send_notification
+	run send_notification "$parsed_payload"
 	local test_result=$status
 
 	rm -f "$file1" "$file2"
@@ -556,19 +559,20 @@ teardown() {
 
 	smoke_test_setup "$blocks_json"
 
-	if ! parse_payload "$SMOKE_TEST_PAYLOAD_FILE"; then
+	local parsed_payload
+	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
 		echo "parse_payload failed" >&2
 		rm -f "$test_file"
 		return 1
 	fi
 
-	if [[ -z "$PAYLOAD" ]]; then
-		echo "PAYLOAD is not set" >&2
+	if [[ -z "$parsed_payload" ]]; then
+		echo "parsed_payload is empty" >&2
 		rm -f "$test_file"
 		return 1
 	fi
 
-	run send_notification
+	run send_notification "$parsed_payload"
 	local test_result=$status
 
 	# Clean up
@@ -594,19 +598,20 @@ teardown() {
 
 	smoke_test_setup "$blocks_json"
 
-	if ! parse_payload "$SMOKE_TEST_PAYLOAD_FILE"; then
+	local parsed_payload
+	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
 		echo "parse_payload failed" >&2
 		rm -f "$test_file"
 		return 1
 	fi
 
-	if [[ -z "$PAYLOAD" ]]; then
-		echo "PAYLOAD is not set" >&2
+	if [[ -z "$parsed_payload" ]]; then
+		echo "parsed_payload is empty" >&2
 		rm -f "$test_file"
 		return 1
 	fi
 
-	run send_notification
+	run send_notification "$parsed_payload"
 	local test_result=$status
 
 	# Clean up
@@ -631,20 +636,21 @@ teardown() {
 
 	smoke_test_setup "$blocks_json"
 
-	if ! parse_payload "$SMOKE_TEST_PAYLOAD_FILE"; then
+	local parsed_payload
+	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
 		echo "parse_payload failed" >&2
 		rm -f "$test_file"
 		return 1
 	fi
 
-	if [[ -z "$PAYLOAD" ]]; then
-		echo "PAYLOAD is not set" >&2
+	if [[ -z "$parsed_payload" ]]; then
+		echo "parsed_payload is empty" >&2
 		rm -f "$test_file"
 		return 1
 	fi
 
 	# Permission logs go to stderr, so they'll be visible in test output but may not be captured in $output variable because why not
-	run send_notification
+	run send_notification "$parsed_payload"
 	local test_result=$status
 
 	local final_perms

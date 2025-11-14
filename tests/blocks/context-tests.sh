@@ -262,16 +262,17 @@ smoke_test_teardown() {
 	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "basic-context") | .plan[0].params.blocks' "$EXAMPLES_FILE")
 
 	smoke_test_setup "$blocks_json"
-	if ! parse_payload "$SMOKE_TEST_PAYLOAD_FILE"; then
+	local parsed_payload
+	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
 
-	if [[ -z "$PAYLOAD" ]]; then
-		echo "PAYLOAD is not set" >&2
+	if [[ -z "$parsed_payload" ]]; then
+		echo "parsed_payload is empty" >&2
 		return 1
 	fi
 
-	run send_notification
+	run send_notification "$parsed_payload"
 	[[ "$status" -eq 0 ]]
 }

@@ -93,6 +93,11 @@ send_request_to_slack() {
 			return 0
 		fi
 
+		if echo "$error_msg" | grep -q "video_http_failure"; then
+			echo "Skipping test: Video URL not accessible or invalid (Slack API error)" >&2
+			return 0
+		fi
+
 		echo "Slack API error: $error" >&2
 		if [[ -n "$error_msg" ]]; then
 			echo "Error details: $error_msg" >&2
@@ -430,20 +435,24 @@ smoke_test_teardown() {
 	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "basic-video") | .plan[0].params.blocks' "$EXAMPLES_FILE")
 
 	smoke_test_setup "$blocks_json"
-	if ! parse_payload "$SMOKE_TEST_PAYLOAD_FILE"; then
+	local parsed_payload
+	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
 
-	if [[ -z "$PAYLOAD" ]]; then
-		echo "PAYLOAD is not set" >&2
+	if [[ -z "$parsed_payload" ]]; then
+		echo "parsed_payload is empty" >&2
 		return 1
 	fi
 
-	run send_notification
+	run send_notification "$parsed_payload"
 	if [[ "$status" -ne 0 ]]; then
 		if echo "$output" | grep -q "Domain is not a valid unfurl domain"; then
 			skip "Video domain not configured in Slack app unfurl domains"
+		fi
+		if echo "$output" | grep -q "video_http_failure"; then
+			skip "Video URL not accessible or invalid (Slack API error)"
 		fi
 		return 1
 	fi

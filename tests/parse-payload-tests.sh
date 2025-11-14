@@ -641,14 +641,14 @@ create_test_payload() {
 
 	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
 
-	# Call parse_payload directly so PAYLOAD export is available
-	if ! parse_payload "$TEST_PAYLOAD_FILE"; then
+	local payload_output
+	if ! payload_output=$(parse_payload "$TEST_PAYLOAD_FILE"); then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
 
-	[[ -n "$PAYLOAD" ]]
-	echo "$PAYLOAD" | jq -e --arg text "$test_text" '.text == $text' >/dev/null
+	[[ -n "$payload_output" ]]
+	echo "$payload_output" | jq -e --arg text "$test_text" '.text == $text' >/dev/null
 }
 
 ########################################################
@@ -695,20 +695,21 @@ smoke_test_setup() {
 	params_json=$(jq -n --arg raw "$raw_params" '{ raw: $raw }')
 
 	smoke_test_setup "$params_json"
-	if ! parse_payload "$SMOKE_TEST_PAYLOAD_FILE"; then
+	local payload_output
+	if ! payload_output=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
 
-	if [[ -z "$PAYLOAD" ]]; then
-		echo "PAYLOAD is not set" >&2
+	if [[ -z "$payload_output" ]]; then
+		echo "payload output is empty" >&2
 		return 1
 	fi
 
-	echo "$PAYLOAD" | jq -e '.channel == "notification-testing"' >/dev/null
-	echo "$PAYLOAD" | jq -e '.blocks[0].type == "section"' >/dev/null
-	echo "$PAYLOAD" | jq -e '.blocks[0].text.type == "plain_text"' >/dev/null
-	echo "$PAYLOAD" | jq -e '.blocks[0].text.text == "Smoke test for params.raw"' >/dev/null
+	echo "$payload_output" | jq -e '.channel == "notification-testing"' >/dev/null
+	echo "$payload_output" | jq -e '.blocks[0].type == "section"' >/dev/null
+	echo "$payload_output" | jq -e '.blocks[0].text.type == "plain_text"' >/dev/null
+	echo "$payload_output" | jq -e '.blocks[0].text.text == "Smoke test for params.raw"' >/dev/null
 }
 
 @test "smoke test, params.from_file" {
@@ -734,20 +735,21 @@ smoke_test_setup() {
 	params_json=$(jq -n --arg file "$payload_file" '{ from_file: $file }')
 
 	smoke_test_setup "$params_json"
-	if ! parse_payload "$SMOKE_TEST_PAYLOAD_FILE"; then
+	local payload_output
+	if ! payload_output=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
 
-	if [[ -z "$PAYLOAD" ]]; then
-		echo "PAYLOAD is not set" >&2
+	if [[ -z "$payload_output" ]]; then
+		echo "payload output is empty" >&2
 		return 1
 	fi
 
-	echo "$PAYLOAD" | jq -e '.channel == "notification-testing"' >/dev/null
-	echo "$PAYLOAD" | jq -e '.blocks[0].type == "section"' >/dev/null
-	echo "$PAYLOAD" | jq -e '.blocks[0].text.type == "plain_text"' >/dev/null
-	echo "$PAYLOAD" | jq -e '.blocks[0].text.text == "Smoke test for params.from_file"' >/dev/null
+	echo "$payload_output" | jq -e '.channel == "notification-testing"' >/dev/null
+	echo "$payload_output" | jq -e '.blocks[0].type == "section"' >/dev/null
+	echo "$payload_output" | jq -e '.blocks[0].text.type == "plain_text"' >/dev/null
+	echo "$payload_output" | jq -e '.blocks[0].text.text == "Smoke test for params.from_file"' >/dev/null
 
 	rm -f "$payload_file"
 }

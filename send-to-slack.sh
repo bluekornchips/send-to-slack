@@ -40,19 +40,23 @@ check_dependencies() {
 
 # Create Concourse metadata output structure
 #
+# Arguments:
+#   $1 - payload: JSON payload to include in metadata (optional, only if SHOW_PAYLOAD is true)
+#
 # Side Effects:
 # - Sets global METADATA variable with Concourse metadata format
 #
 # Returns:
 # - 0 on successful metadata creation
 create_metadata() {
+	local payload="$1"
+
 	if [[ "${SHOW_METADATA}" != "true" ]]; then
 		return 0
 	fi
 
 	METADATA=$(
 		jq -n \
-			--arg payload "$PAYLOAD" \
 			--arg dry_run "$DRY_RUN" \
 			--arg show_metadata "$SHOW_METADATA" \
 			--arg show_payload "$SHOW_PAYLOAD" \
@@ -65,13 +69,266 @@ create_metadata() {
       }'
 	)
 
-	if [[ "${SHOW_PAYLOAD}" == "true" ]]; then
+	if [[ "${SHOW_PAYLOAD}" == "true" ]] && [[ -n "${payload}" ]]; then
 		local safe_payload
-		safe_payload=$(jq '.source.slack_bot_user_oauth_token = "[REDACTED]"' <<<"${PAYLOAD}")
+		# Redact token if source field exists, otherwise use payload as-is
+		if jq -e '.source' <<<"${payload}" >/dev/null 2>&1; then
+			safe_payload=$(jq '.source.slack_bot_user_oauth_token = "[REDACTED]"' <<<"${payload}")
+		else
+			safe_payload="${payload}"
+		fi
 		METADATA=$(echo "$METADATA" | jq \
 			--arg payload "$safe_payload" \
 			'.metadata += [{"name": "payload", "value": $payload}]')
 	fi
+
+	return 0
+}
+
+# Get message permalink from Slack API
+#
+# Arguments:
+#   $1 - channel: Channel ID where the message was posted
+#   $2 - message_ts: Message timestamp from chat.postMessage response
+#
+# Side Effects:
+#   Exports NOTIFICATION_PERMALINK if permalink is found
+#
+# Returns:
+#   0 if permalink is found and exported
+#   1 if API call fails or permalink is not found
+get_message_permalink() {
+	local channel="$1"
+	local message_ts="$2"
+
+	if [[ -z "$channel" ]]; then
+		echo "get_message_permalink:: channel is required" >&2
+		return 1
+	fi
+
+	if [[ -z "$message_ts" ]]; then
+		echo "get_message_permalink:: message_ts is required" >&2
+		return 1
+	fi
+
+	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
+		echo "get_message_permalink:: SLACK_BOT_USER_OAUTH_TOKEN is required" >&2
+		return 1
+	fi
+
+	local api_response
+	if ! api_response=$(curl -X POST "https://slack.com/api/chat.getPermalink" \
+		-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
+		-H "Content-Type: application/x-www-form-urlencoded" \
+		--data-urlencode "channel=${channel}" \
+		--data-urlencode "message_ts=${message_ts}" \
+		--silent --show-error \
+		--max-time 30 \
+		--connect-timeout 10); then
+		echo "get_message_permalink:: curl failed to send request" >&2
+		return 1
+	fi
+
+	# Check if Slack API returned success
+	if ! echo "${api_response}" | jq -e '.ok' >/dev/null 2>&1; then
+		echo "get_message_permalink:: Slack API returned error:" >&2
+		jq -r '.' <<<"${api_response}" >&2
+		return 1
+	fi
+
+	local permalink
+	permalink=$(echo "${api_response}" | jq -r '.permalink // empty')
+
+	if [[ -z "$permalink" ]] || [[ "$permalink" == "null" ]]; then
+		echo "get_message_permalink:: permalink not found in API response" >&2
+		return 1
+	fi
+
+	NOTIFICATION_PERMALINK="$permalink"
+	export NOTIFICATION_PERMALINK
+
+	echo "get_message_permalink:: permalink extracted: ${NOTIFICATION_PERMALINK}"
+
+	return 0
+}
+
+crosspost_notification() {
+	local input_payload="$1"
+
+	local crosspost
+	crosspost=$(jq '.params.crosspost // {}' "$input_payload")
+
+	if [[ -z "${crosspost}" ]] || [[ "${crosspost}" == "{}" ]]; then
+		echo "crosspost_notification:: crosspost is empty, skipping."
+		return 0
+	fi
+
+	local channels_json
+	local text
+	local default_text="This is an automated crosspost."
+
+	channels_json=$(jq '.params.crosspost.channels // []' "$input_payload")
+	text=$(jq -r '.params.crosspost.text // ""' "$input_payload")
+
+	if [[ -z "${channels_json}" ]] || [[ "${channels_json}" == "[]" ]]; then
+		echo "crosspost_notification:: channels not set, skipping."
+		return 0
+	fi
+
+	if [[ -z "${text}" ]]; then
+		text="${default_text}"
+	fi
+
+	# Create a structured rich text block with proper link element format
+	# Text and permalink are on separate lines using separate rich_text_section elements
+	local rich_text_block
+	rich_text_block=$(jq -n \
+		--arg text "$text" \
+		--arg permalink "$NOTIFICATION_PERMALINK" \
+		'
+			{
+				"type": "rich_text",
+				"elements": [
+					{
+						"type": "rich_text_section",
+						"elements": [
+							{
+								"type": "text",
+								"text": $text
+							}
+						]
+					},
+					{
+						"type": "rich_text_section",
+						"elements": [
+							{
+								"type": "link",
+								"url": $permalink
+							}
+						]
+					}
+				]
+			}
+		')
+
+	# Get source from original payload for crosspost payloads
+	local source_json
+	source_json=$(jq '.source // {}' "$input_payload")
+
+	# Process each channel
+	local channel_count
+	channel_count=$(jq '. | length' <<<"${channels_json}")
+	for ((i = 0; i < channel_count; i++)); do
+		local channel
+		channel=$(jq -r ".[$i]" <<<"${channels_json}")
+
+		# Create a full payload for this channel
+		local crosspost_payload
+		crosspost_payload=$(jq -n \
+			--argjson source "$source_json" \
+			--arg channel "$channel" \
+			--argjson rich_text_block "$rich_text_block" \
+			'{
+				"source": $source,
+				"params": {
+					"channel": $channel,
+					"blocks": [
+						{
+							"rich-text": $rich_text_block
+						}
+					]
+				}
+			}')
+
+		# Write payload to temp file for parsing
+		local temp_payload
+		temp_payload=$(mktemp /tmp/crosspost-payload.XXXXXX)
+		echo "$crosspost_payload" >"$temp_payload"
+
+		# Parse the payload
+		local parsed_payload
+		if ! parsed_payload=$(parse_payload "$temp_payload"); then
+			echo "crosspost_notification:: failed to parse payload for channel $channel" >&2
+			rm -f "$temp_payload"
+			continue
+		fi
+
+		rm -f "$temp_payload"
+
+		# Send the notification
+		if ! send_notification "$parsed_payload"; then
+			echo "crosspost_notification:: failed to send notification to channel $channel" >&2
+			continue
+		fi
+	done
+
+	return 0
+}
+
+# Send notification to Slack API
+#
+# Arguments:
+#   $1 - payload: JSON payload to send to Slack API
+#
+# Side Effects:
+# - Sends HTTP POST request to Slack API
+# - Outputs success or error messages to stdout/stderr
+# - Exports NOTIFICATION_PERMALINK if successful
+#
+# Returns:
+# - 0 on successful message delivery
+# - 1 if dry run is enabled, token/payload missing, or API call fails
+send_notification() {
+	local payload="$1"
+
+	if [[ "${DRY_RUN}" == "true" ]]; then
+		echo "send_notification:: DRY_RUN enabled, skipping Slack API call"
+		return 0
+	fi
+
+	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
+		echo "send_notification:: SLACK_BOT_USER_OAUTH_TOKEN is required" >&2
+		return 1
+	fi
+
+	if [[ -z "${payload}" ]]; then
+		echo "send_notification:: payload is required" >&2
+		return 1
+	fi
+
+	local response
+	if ! response=$(curl -X POST "${SLACK_API_URL}" \
+		-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
+		-H "Content-type: application/json; charset=utf-8" \
+		-d "${payload}" \
+		--silent --show-error \
+		--max-time 30 \
+		--connect-timeout 10); then
+		echo "send_notification:: curl failed to send request" >&2
+		return 1
+	fi
+
+	# Check if Slack API returned success
+	if ! echo "${response}" | jq -e '.ok' >/dev/null 2>&1; then
+		echo "send_notification:: Slack API returned error:" >&2
+		jq -r '.' <<<"${response}" >&2
+		return 1
+	fi
+
+	# Extract channel and timestamp from response to get permalink
+	local channel
+	local message_ts
+	channel=$(echo "${response}" | jq -r '.channel // empty')
+	message_ts=$(echo "${response}" | jq -r '.ts // empty')
+
+	if [[ -n "$channel" ]] && [[ -n "$message_ts" ]] && [[ "$channel" != "null" ]] && [[ "$message_ts" != "null" ]]; then
+		get_message_permalink "${channel}" "${message_ts}"
+	fi
+
+	echo "send_notification:: message delivered to Slack successfully"
+
+	RESPONSE="$response"
+	export RESPONSE
 
 	return 0
 }
@@ -197,55 +454,6 @@ process_input() {
 	return 0
 }
 
-# Send notification to Slack API
-#
-# Side Effects:
-# - Sends HTTP POST request to Slack API
-# - Outputs success or error messages to stdout/stderr
-#
-# Returns:
-# - 0 on successful message delivery
-# - 1 if dry run is enabled, token/payload missing, or API call fails
-send_notification() {
-	if [[ "${DRY_RUN}" == "true" ]]; then
-		echo "send_notification:: DRY_RUN enabled, skipping Slack API call"
-		return 0
-	fi
-
-	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
-		echo "send_notification:: SLACK_BOT_USER_OAUTH_TOKEN is required" >&2
-		return 1
-	fi
-
-	if [[ -z "${PAYLOAD}" ]]; then
-		echo "send_notification:: PAYLOAD is required" >&2
-		return 1
-	fi
-
-	local response
-	if ! response=$(curl -X POST "${SLACK_API_URL}" \
-		-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
-		-H "Content-type: application/json; charset=utf-8" \
-		-d "${PAYLOAD}" \
-		--silent --show-error \
-		--max-time 30 \
-		--connect-timeout 10); then
-		echo "send_notification:: curl failed to send request" >&2
-		return 1
-	fi
-
-	# Check if Slack API returned success
-	if ! echo "${response}" | jq -e '.ok' >/dev/null 2>&1; then
-		echo "send_notification:: Slack API returned error:" >&2
-		jq -r '.' <<<"${response}" >&2
-		return 1
-	fi
-
-	echo "send_notification:: message delivered to Slack successfully"
-
-	return 0
-}
-
 # Main entry point that processes stdin payload and sends to Slack
 #
 # Inputs:
@@ -338,20 +546,32 @@ main() {
 		echo "main:: cannot locate parse-payload.sh at ${SEND_TO_SLACK_BIN_DIR}/parse-payload.sh" >&2
 		return 1
 	fi
-	if ! parse_payload "${input_payload}"; then
+
+	local parsed_payload_file
+	parsed_payload_file=$(mktemp /tmp/parsed-payload.XXXXXX)
+	if ! parse_payload "${input_payload}" >"${parsed_payload_file}"; then
 		echo "main:: failed to parse payload" >&2
+		rm -f "${parsed_payload_file}"
+		return 1
+	fi
+	local parsed_payload
+	parsed_payload=$(cat "${parsed_payload_file}")
+	rm -f "${parsed_payload_file}"
+
+	echo "main:: sending notification"
+	if ! send_notification "$parsed_payload"; then
+		echo "main:: failed to send notification" >&2
+		return 1
+	fi
+
+	if ! crosspost_notification "${input_payload}"; then
+		echo "main:: failed to crosspost notification" >&2
 		return 1
 	fi
 
 	echo "main:: creating Concourse metadata"
-	if ! create_metadata; then
+	if ! create_metadata "$parsed_payload"; then
 		echo "main:: failed to create metadata" >&2
-		return 1
-	fi
-
-	echo "main:: sending notification"
-	if ! send_notification; then
-		echo "main:: failed to send notification" >&2
 		return 1
 	fi
 

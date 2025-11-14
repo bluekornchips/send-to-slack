@@ -368,3 +368,8 @@ jobs:
                   type: plain_text
                   text: "All Block Types Shown"
                 block_id: "final_header"
+          crosspost:
+            channels:
+              - side-channel
+              - side-channel
+            text: "Check out the full acceptance test message"

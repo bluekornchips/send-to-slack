@@ -164,6 +164,42 @@ The program reads JSON payload from `stdin` and sends messages to Slack. The pay
 - `params.blocks` - Array of block configurations (see [examples/](examples/) for block types)
 - `params.text` - Fallback text for notifications (max 40,000 characters)
 - `params.dry_run` - Set to `true` to validate without sending (default: `false`)
+- `params.crosspost` - Crosspost configuration object (see [Crossposting](#crossposting) section)
+
+## Crossposting
+
+The program supports crossposting messages to additional channels after the initial notification is sent. When crossposting is enabled, the permalink to the original message is automatically appended to each crosspost.
+
+### Crosspost Configuration
+
+Add a `crosspost` object to your `params` section:
+
+```json
+{
+  "params": {
+    "channel": "#main-channel",
+    "blocks": [...],
+    "crosspost": {
+      "channels": ["#channel1", "#channel2"],
+      "text": "See the original message"
+    }
+  }
+}
+```
+
+### Crosspost Parameters
+
+- `crosspost.channels` (required) - Array of channel names or IDs to crosspost to
+- `crosspost.text` (required) - Text to include in the crosspost message
+
+### How It Works
+
+1. The initial notification is sent to the channel specified in `params.channel`
+2. After successful delivery, the permalink to the original message is retrieved
+3. For each channel in `crosspost.channels`, a new message is created with:
+   - A rich-text block containing `crosspost.text` followed by the permalink
+   - The message is sent to the specified channel
+4. If a crosspost fails for a specific channel, the error is logged but processing continues for remaining channels
 
 ## Supported Block Types
 
