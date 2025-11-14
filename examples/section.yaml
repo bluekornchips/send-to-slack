@@ -1,0 +1,117 @@
+resource_types:
+  - name: slack
+    type: docker-image
+    source:
+      repository: sunflowersoftware/send-to-slack
+      tag: latest
+
+resources:
+  - name: slack-notification
+    type: slack
+    source:
+      slack_bot_user_oauth_token: ((SLACK_BOT_USER_OAUTH_TOKEN))
+
+common_slack_params: &common_slack_params
+  channel: notification-testing
+
+jobs:
+  - name: section-plain-text
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - section:
+                type: text
+                text:
+                  type: plain_text
+                  text: "Hello, world! This is a plain text section."
+
+  - name: section-mrkdwn
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "Hello, world! This is a *markdown* section."
+
+  - name: section-with-block-id
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - section:
+                type: text
+                text:
+                  type: plain_text
+                  text: "Section with block ID"
+                block_id: "section_123"
+
+  - name: section-long-text
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - section:
+                type: text
+                text:
+                  type: plain_text
+                  text: "This is a longer section block example. Section blocks can display text of any length up to 3000 characters."
+
+  - name: section-mrkdwn-formatted
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "Build *succeeded* in `2m 34s`. See <https://example.com|logs> for details."
+
+  - name: section-fields
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - section:
+                type: fields
+                fields:
+                  - type: plain_text
+                    text: "Status: Success"
+                  - type: mrkdwn
+                    text: "*Build:* #123"
+                  - type: plain_text
+                    text: "Duration: 2m 34s"
+                  - type: mrkdwn
+                    text: "*Branch:* main"
+
+  - name: section-fields-with-block-id
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - section:
+                type: fields
+                fields:
+                  - type: plain_text
+                    text: "Field 1"
+                  - type: plain_text
+                    text: "Field 2"
+                block_id: "fields_section_123"

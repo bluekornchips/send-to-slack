@@ -1,0 +1,42 @@
+resource_types:
+  - name: slack
+    type: docker-image
+    source:
+      repository: sunflowersoftware/send-to-slack
+      tag: latest
+
+resources:
+  - name: slack-notification
+    type: slack
+    source:
+      slack_bot_user_oauth_token: ((SLACK_BOT_USER_OAUTH_TOKEN))
+
+common_slack_params: &common_slack_params
+  channel: notification-testing
+
+jobs:
+  - name: basic-markdown
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - markdown:
+                text: "**Example markdown text**"
+
+  - name: markdown-with-formatting
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - markdown:
+                text: |
+                  *This text is italicized* and **this is bold**
+
+                  - First item in list
+                  - Second item in list
+
+                  [Link to Google](https://www.google.com)

@@ -1,0 +1,56 @@
+resource_types:
+  - name: slack
+    type: docker-image
+    source:
+      repository: sunflowersoftware/send-to-slack
+      tag: latest
+
+resources:
+  - name: slack-notification
+    type: slack
+    source:
+      slack_bot_user_oauth_token: ((SLACK_BOT_USER_OAUTH_TOKEN))
+
+common_slack_params: &common_slack_params
+  channel: notification-testing
+
+jobs:
+  - name: actions-button-channel
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "Click the button below to send a message to this channel."
+            - actions:
+                elements:
+                  - type: button
+                    text:
+                      type: plain_text
+                      text: "Send to Channel"
+                    action_id: send_channel_message
+
+  - name: actions-button-user
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "Click the button below to receive a direct message."
+            - actions:
+                elements:
+                  - type: button
+                    text:
+                      type: plain_text
+                      text: "Send to Me"
+                    action_id: send_user_message

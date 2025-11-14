@@ -1,0 +1,370 @@
+resource_types:
+  - name: slack
+    type: docker-image
+    source:
+      repository: sunflowersoftware/send-to-slack
+      tag: latest
+
+resources:
+  - name: slack-notification
+    type: slack
+    source:
+      slack_bot_user_oauth_token: ((SLACK_BOT_USER_OAUTH_TOKEN))
+
+jobs:
+  - name: acceptance
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          channel: notification-testing
+          text: "Test of all Slack block types"
+          blocks:
+            # Header block - main title
+            - header:
+                text:
+                  type: plain_text
+                  text: "Feature Examples"
+                block_id: "main_header"
+
+            # Section with rich text
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "*Examples* of all supported Slack Block Kit elements. This shows every block type available."
+                block_id: "intro_section"
+
+            # Divider for visual separation
+            - divider:
+                block_id: "intro_separator"
+
+            # Table block demonstrating tabular data
+            - table:
+                rows:
+                  - - type: raw_text
+                      text: "Feature"
+                    - type: raw_text
+                      text: "Status"
+                    - type: raw_text
+                      text: "Description"
+                  - - type: raw_text
+                      text: "Headers"
+                    - type: raw_text
+                      text: "✅ Working"
+                    - type: raw_text
+                      text: "Bold titles"
+                  - - type: raw_text
+                      text: "Sections"
+                    - type: raw_text
+                      text: "✅ Working"
+                    - type: raw_text
+                      text: "Rich text content"
+                  - - type: raw_text
+                      text: "Tables"
+                    - type: raw_text
+                      text: "✅ Working"
+                    - type: raw_text
+                      text: "Tabular data display"
+                  - - type: raw_text
+                      text: "Context"
+                    - type: raw_text
+                      text: "✅ Working"
+                    - type: raw_text
+                      text: "Footer information"
+                  - - type: raw_text
+                      text: "Dividers"
+                    - type: raw_text
+                      text: "✅ Working"
+                    - type: raw_text
+                      text: "Visual separation"
+                  - - type: raw_text
+                      text: "Rich Text"
+                    - type: raw_text
+                      text: "✅ Working"
+                    - type: raw_text
+                      text: "Formatted text"
+                  - - type: raw_text
+                      text: "Markdown"
+                    - type: raw_text
+                      text: "✅ Working"
+                    - type: raw_text
+                      text: "AI/LLM markdown output"
+                  - - type: raw_text
+                      text: "Files"
+                    - type: raw_text
+                      text: "✅ Working"
+                    - type: raw_text
+                      text: "External file references"
+                  - - type: raw_text
+                      text: "Actions"
+                    - type: raw_text
+                      text: "✅ Working"
+                    - type: raw_text
+                      text: "Interactive buttons"
+                  - - type: raw_text
+                      text: "Image"
+                    - type: raw_text
+                      text: "✅ Working"
+                    - type: raw_text
+                      text: "Standalone image display"
+                  - - type: raw_text
+                      text: "Video"
+                    - type: raw_text
+                      text: "✅ Working"
+                    - type: raw_text
+                      text: "Video embedding"
+                column_settings:
+                  - align: left
+                  - align: center
+                  - align: left
+                block_id: "features_table"
+
+            # Divider before rich text section
+            - divider:
+                block_id: "table_separator"
+
+            # Header for rich text section
+            - header:
+                text:
+                  type: plain_text
+                  text: "Rich Text Examples"
+                block_id: "rich_text_header"
+
+            # Rich text block with various formatting
+            - rich-text:
+                elements:
+                  - type: rich_text_section
+                    elements:
+                      - type: text
+                        text: "Rich text block shows "
+                        style:
+                          bold: true
+                      - type: text
+                        text: "bold"
+                        style:
+                          bold: true
+                      - type: text
+                        text: ", "
+                      - type: text
+                        text: "italic"
+                        style:
+                          italic: true
+                      - type: text
+                        text: ", and "
+                      - type: text
+                        text: "strikethrough"
+                        style:
+                          strike: true
+                      - type: text
+                        text: " text formatting."
+                      - type: text
+                        text: "\n\nLinks: "
+                      - type: link
+                        url: "https://slack.com"
+                        text: "Slack API Documentation"
+                      - type: text
+                        text: "\n\nCode: "
+                      - type: text
+                        text: "console.log('Hello, World!')"
+                        style:
+                          code: true
+                      - type: text
+                        text: "\n\nUser mentions and emojis: "
+                      - type: emoji
+                        name: "rocket"
+                      - type: text
+                        text: " "
+                      - type: emoji
+                        name: "tada"
+                      - type: text
+                        text: " "
+                      - type: emoji
+                        name: "sparkles"
+                block_id: "rich_text_demo"
+
+            # Divider before markdown section
+            - divider:
+                block_id: "rich_text_markdown_separator"
+
+            # Header for markdown section
+            - header:
+                text:
+                  type: plain_text
+                  text: "Markdown Examples"
+                block_id: "markdown_header"
+
+            # Markdown block demonstrating AI/LLM output
+            - markdown:
+                text: |
+                  **Markdown Example**
+
+                  Markdown blocks support:
+
+                  - *Italic* and **bold** text
+                  - `Inline code` and code blocks
+                  - [Links](https://docs.slack.dev/reference/block-kit/blocks/markdown-block/)
+                  - Lists and headers
+                  - Block quotes
+
+                  > Example block quote
+
+                  ```bash
+                  echo "Code blocks work"
+                  ```
+
+                  Markdown blocks support up to 12,000 characters.
+
+            # Divider before image section
+            - divider:
+                block_id: "markdown_image_separator"
+
+            # Header for image section
+            - header:
+                text:
+                  type: plain_text
+                  text: "Image Examples"
+                block_id: "image_header"
+
+            # Section introducing image block
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "*Image Block*\nDisplay images from URLs without file uploads:"
+                block_id: "image_intro"
+
+            # Image block example
+            - image:
+                image_url: "https://sunflowersoftware.ca/wp-content/uploads/2023/05/cropped-sunflower.gif"
+                alt_text: "Sunflower animation example"
+                title:
+                  type: plain_text
+                  text: "Example Image"
+                block_id: "image_demo"
+
+            # Divider before video section
+            - divider:
+                block_id: "image_video_separator"
+
+            # Header for video section
+            - header:
+                text:
+                  type: plain_text
+                  text: "Video Examples"
+                block_id: "video_header"
+
+            # Section introducing video block
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "*Video Block*\nEmbed videos directly into Slack messages:"
+                block_id: "video_intro"
+
+            # Video block example
+            - video:
+                video_url: "https://www.youtube.com/embed/pWTSK5waNs8"
+                thumbnail_url: "https://i.ytimg.com/vi/pWTSK5waNs8/hqdefault.jpg"
+                alt_text: "Example video"
+                title:
+                  type: plain_text
+                  text: "Example Video"
+                title_url: "https://www.youtube.com/watch?v=pWTSK5waNs8"
+                description:
+                  type: plain_text
+                  text: "Video block demonstration showing embedded video playback"
+                provider_name: "YouTube"
+                provider_icon_url: "https://a.slack-edge.com/80588/img/unfurl_icons/youtube.png"
+                block_id: "video_demo"
+
+            # Section with file information
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "*File Attachments*\nFile block example:"
+                block_id: "file_section"
+
+            # Section with fields (side-by-side text)
+            - section:
+                type: fields
+                fields:
+                  - type: plain_text
+                    text: "Status: Success"
+                  - type: mrkdwn
+                    text: "*Build:* #123"
+                  - type: plain_text
+                    text: "Duration: 2m 34s"
+                  - type: mrkdwn
+                    text: "*Branch:* main"
+                block_id: "fields_section"
+
+            # Divider before actions section
+            - divider:
+                block_id: "file_actions_separator"
+
+            # Header for interactive actions
+            - header:
+                text:
+                  type: plain_text
+                  text: "Interactive Actions"
+                block_id: "actions_header"
+
+            # Section introducing actions
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "*Interactive Buttons*\nActions block example:"
+                block_id: "actions_intro"
+
+            # Actions block with interactive buttons
+            - actions:
+                elements:
+                  - type: button
+                    text:
+                      type: plain_text
+                      text: "Send to Channel"
+                    action_id: send_channel_message
+                    style: primary
+                  - type: button
+                    text:
+                      type: plain_text
+                      text: "Send to Me"
+                    action_id: send_user_message
+                block_id: "interactive_actions"
+
+            # Divider before context/footer
+            - divider:
+                block_id: "actions_separator"
+
+            # Context block with metadata and timestamps
+            - context:
+                elements:
+                  - type: plain_text
+                    text: "Generated by: CI/CD Pipeline"
+                  - type: mrkdwn
+                    text: "*Environment:* production"
+                  - type: plain_text
+                    text: "Version: v2.1.0"
+                  - type: mrkdwn
+                    text: "*Build:* #1337"
+                  - type: plain_text
+                    text: "Duration: 3m 42s"
+                  - type: mrkdwn
+                    text: "*Completed:* 2024-01-01 12:00:00 UTC"
+                  - type: mrkdwn
+                    text: "*Status:* ✅ All systems operational"
+                block_id: "footer_context"
+
+            # Final divider
+            - divider:
+                block_id: "final_separator"
+
+            # Final header with call to action
+            - header:
+                text:
+                  type: plain_text
+                  text: "All Block Types Shown"
+                block_id: "final_header"
