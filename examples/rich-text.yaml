@@ -1,0 +1,93 @@
+# Example Concourse CI pipeline for Slack rich text blocks
+
+resource_types:
+  - name: slack
+    type: docker-image
+    source:
+      repository: sunflowersoftware/send-to-slack
+      tag: latest
+
+resources:
+  - name: slack-notification
+    type: slack
+    source:
+      slack_bot_user_oauth_token: ((SLACK_BOT_USER_OAUTH_TOKEN))
+
+# A single rich text block
+jobs:
+  - name: basic
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          channel: notification-testing
+          blocks:
+            - rich-text:
+                elements:
+                  - type: rich_text_section
+                    elements:
+                      - type: text
+                        text: "Example rich text block"
+
+  # A rich text block as an attachment
+  - name: basic-attachment
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          channel: notification-testing
+          blocks:
+            - rich-text:
+                color: "#00FF00"
+                elements:
+                  - type: rich_text_section
+                    elements:
+                      - type: text
+                        text: "Example rich text block as attachment"
+
+  # Two rich text blocks. Each block is output in a different line within the same message.
+  - name: two-rich-text-blocks
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          channel: notification-testing
+          blocks:
+            - rich-text:
+                elements:
+                  - type: rich_text_section
+                    elements:
+                      - type: text
+                        text: "Italic text example"
+                        style:
+                          italic: true
+            - rich-text:
+                elements:
+                  - type: rich_text_section
+                    elements:
+                      - type: text
+                        text: "Bold text example"
+                        style:
+                          bold: true
+
+  # A rich text block and an attachment. The attachment is output in a different line within the same message.
+  - name: rich-text-block-and-attachment
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          channel: notification-testing
+          blocks:
+            - rich-text:
+                elements:
+                  - type: rich_text_section
+                    elements:
+                      - type: text
+                        text: "Rich text block example"
+            - rich-text:
+                color: "#00FF00"
+                elements:
+                  - type: rich_text_section
+                    elements:
+                      - type: text
+                        text: "Attachment text block example"

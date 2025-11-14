@@ -1,0 +1,133 @@
+# Example Concourse CI pipeline for Slack table blocks
+
+resource_types:
+  - name: slack
+    type: docker-image
+    source:
+      repository: sunflowersoftware/send-to-slack
+      tag: latest
+
+resources:
+  - name: slack-notification
+    type: slack
+    source:
+      slack_bot_user_oauth_token: ((SLACK_BOT_USER_OAUTH_TOKEN))
+
+# A basic table block
+jobs:
+  - name: basic
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          channel: notification-testing
+          blocks:
+            - table:
+                rows:
+                  - - type: raw_text
+                      text: "Name"
+                    - type: raw_text
+                      text: "Status"
+                  - - type: raw_text
+                      text: "Item 1"
+                    - type: raw_text
+                      text: "Active"
+  - name: basic-colored
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          channel: notification-testing
+          blocks:
+            - table:
+                color: "#f2c744"
+                rows:
+                  - - type: raw_text
+                      text: "Name"
+                    - type: raw_text
+                      text: "Status"
+                  - - type: raw_text
+                      text: "Item 1"
+                    - type: raw_text
+                      text: "Active"
+
+  # A table block with block_id
+  - name: with-block-id
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          channel: notification-testing
+          blocks:
+            - table:
+                block_id: "test_table_id"
+                rows:
+                  - - type: raw_text
+                      text: "Name"
+                    - type: raw_text
+                      text: "Status"
+                  - - type: raw_text
+                      text: "Item 1"
+                    - type: raw_text
+                      text: "Active"
+
+  # A table block with column settings
+  - name: with-column-settings
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          channel: notification-testing
+          blocks:
+            - table:
+                column_settings:
+                  - align: left
+                  - align: center
+                  - align: right
+                rows:
+                  - - type: raw_text
+                      text: "Left"
+                    - type: raw_text
+                      text: "Center"
+                    - type: raw_text
+                      text: "Right"
+                  - - type: raw_text
+                      text: "Data L"
+                    - type: raw_text
+                      text: "Data C"
+                    - type: raw_text
+                      text: "Data R"
+
+  # A table block with rich text cells
+  - name: with-rich-text-cells
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          channel: notification-testing
+          blocks:
+            - table:
+                rows:
+                  - - type: raw_text
+                      text: "Link"
+                    - type: raw_text
+                      text: "Style"
+                  - - type: rich_text
+                      elements:
+                        - type: rich_text_section
+                          elements:
+                            - type: text
+                              text: "Visit "
+                            - type: link
+                              url: "https://api.slack.com"
+                              text: "Slack API"
+                            - type: text
+                              text: " docs"
+                    - type: rich_text
+                      elements:
+                        - type: rich_text_section
+                          elements:
+                            - type: text
+                              text: "Bold text"
+                              style:
+                                bold: true

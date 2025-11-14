@@ -1,0 +1,149 @@
+resource_types:
+  - name: slack
+    type: docker-image
+    source:
+      repository: sunflowersoftware/send-to-slack
+      tag: latest
+
+resources:
+  - name: slack-notification
+    type: slack
+    source:
+      slack_bot_user_oauth_token: ((SLACK_BOT_USER_OAUTH_TOKEN))
+
+common_slack_params: &common_slack_params
+  channel: notification-testing
+
+jobs:
+  - name: basic-context
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - context:
+                elements:
+                  - type: plain_text
+                    text: "Example context text"
+
+  - name: context-with-block-id
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - context:
+                elements:
+                  - type: plain_text
+                    text: "Context example"
+                block_id: "footer_context"
+
+  - name: context-multiple-elements
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          text: "Multiple context elements example"
+          blocks:
+            - context:
+                elements:
+                  - type: plain_text
+                    text: "Status: Success"
+                  - type: mrkdwn
+                    text: "*Build:* #123"
+                  - type: plain_text
+                    text: "Duration: 2m 34s"
+
+  - name: context-with-timestamps
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          text: "Deployment complete"
+          blocks:
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "*Deployment completed successfully*"
+            - context:
+                elements:
+                  - type: plain_text
+                    text: "Environment: production"
+                  - type: plain_text
+                    text: "Version: v1.2.3"
+                  - type: mrkdwn
+                    text: "*Time:* $(date '+%Y-%m-%d %H:%M UTC')"
+
+  - name: context-footer-pattern
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          text: "Build status"
+          blocks:
+            - header:
+                text:
+                  type: plain_text
+                  text: "Build Report"
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "Tests passed\nDeployment in progress"
+            - divider: {}
+            - context:
+                elements:
+                  - type: plain_text
+                    text: "Pipeline: CI/CD"
+                  - type: mrkdwn
+                    text: "*Branch:* main"
+                  - type: plain_text
+                    text: "Commit: abc123def"
+                  - type: mrkdwn
+                    text: "*Time:* $(date '+%Y-%m-%d %H:%M UTC')"
+
+  - name: context-with-emojis
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - context:
+                elements:
+                  - type: plain_text
+                    text: "Deployment"
+                  - type: plain_text
+                    text: "Duration: 45s"
+                  - type: plain_text
+                    text: "Deployed by: CI/CD"
+
+  - name: context-mixed-content
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          text: "System status"
+          blocks:
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "*System Status*\nAll services running normally."
+            - context:
+                elements:
+                  - type: mrkdwn
+                    text: "*CPU Usage:* 45%"
+                  - type: mrkdwn
+                    text: "*Memory:* 2.1GB/8GB"
+                  - type: plain_text
+                    text: "Last checked: 2 minutes ago"
+                  - type: mrkdwn
+                    text: "*Next check:* $(date -d '+5 minutes' '+%H:%M')"

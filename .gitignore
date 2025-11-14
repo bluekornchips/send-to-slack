@@ -1,0 +1,26 @@
+# Temporary files
+/tmp/
+*.tmp
+*.temp
+
+# Python
+.venv
+venv
+*.egg-info
+__pycache__
+.ruff_cache
+build
+
+# Test artifacts
+.bats/
+
+# IDE and editor files
+.vscode/
+.cursor/
+
+# Sensitive test data
+*-payload.json
+test-payload.*
+
+# Resource output
+resource-out.json

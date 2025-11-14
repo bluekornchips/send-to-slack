@@ -1,0 +1,141 @@
+resource_types:
+  - name: slack
+    type: docker-image
+    source:
+      repository: sunflowersoftware/send-to-slack
+      tag: latest
+
+resources:
+  - name: slack-notification
+    type: slack
+    source:
+      slack_bot_user_oauth_token: ((SLACK_BOT_USER_OAUTH_TOKEN))
+
+common_slack_params: &common_slack_params
+  channel: notification-testing
+
+jobs:
+  - name: basic-video
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - video:
+                video_url: "https://www.youtube.com/pWTSK5waNs8"
+                thumbnail_url: "https://i.ytimg.com/vi/pWTSK5waNs8/hqdefault.jpg"
+                alt_text: "Example video"
+                title:
+                  type: plain_text
+                  text: "Example Video"
+
+  - name: video-with-description
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - video:
+                video_url: "https://www.youtube.com/pWTSK5waNs8"
+                thumbnail_url: "https://i.ytimg.com/vi/pWTSK5waNs8/hqdefault.jpg"
+                alt_text: "Tutorial video"
+                title:
+                  type: plain_text
+                  text: "How to Use Slack"
+                description:
+                  type: plain_text
+                  text: "A comprehensive tutorial on using Slack for team communication"
+
+  - name: video-with-provider-info
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - video:
+                video_url: "https://www.youtube.com/pWTSK5waNs8"
+                thumbnail_url: "https://i.ytimg.com/vi/pWTSK5waNs8/hqdefault.jpg"
+                alt_text: "YouTube video"
+                title:
+                  type: plain_text
+                  text: "Example YouTube Video"
+                title_url: "https://www.youtube.com/watch?v=pWTSK5waNs8"
+                provider_name: "YouTube"
+                provider_icon_url: "https://a.slack-edge.com/80588/img/unfurl_icons/youtube.png"
+
+  - name: video-with-author-info
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - video:
+                video_url: "https://www.youtube.com/pWTSK5waNs8"
+                thumbnail_url: "https://i.ytimg.com/vi/pWTSK5waNs8/hqdefault.jpg"
+                alt_text: "Video by author"
+                title:
+                  type: plain_text
+                  text: "Author's Video"
+                author_name: "John Doe"
+                description:
+                  type: plain_text
+                  text: "A video created by John Doe"
+
+  - name: video-with-all-fields
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - video:
+                video_url: "https://www.youtube.com/pWTSK5waNs8"
+                thumbnail_url: "https://i.ytimg.com/vi/pWTSK5waNs8/hqdefault.jpg"
+                alt_text: "Complete video example"
+                title:
+                  type: plain_text
+                  text: "Complete Video Example"
+                title_url: "https://www.youtube.com/watch?v=pWTSK5waNs8"
+                description:
+                  type: plain_text
+                  text: "This video demonstrates all available fields in a video block"
+                author_name: "Jane Smith"
+                provider_name: "YouTube"
+                provider_icon_url: "https://a.slack-edge.com/80588/img/unfurl_icons/youtube.png"
+                block_id: "video_example_123"
+
+  - name: video-with-other-blocks
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - header:
+                text:
+                  type: plain_text
+                  text: "Training Video"
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "Watch this video to learn about our deployment process."
+            - video:
+                video_url: "https://www.youtube.com/pWTSK5waNs8"
+                thumbnail_url: "https://i.ytimg.com/vi/pWTSK5waNs8/hqdefault.jpg"
+                alt_text: "Deployment tutorial"
+                title:
+                  type: plain_text
+                  text: "Deployment Process Tutorial"
+                description:
+                  type: plain_text
+                  text: "Learn how to deploy applications safely"
+                provider_name: "YouTube"
+            - context:
+                elements:
+                  - type: plain_text
+                    text: "Video duration: 5 minutes"

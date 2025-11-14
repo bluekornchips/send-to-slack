@@ -1,0 +1,179 @@
+---
+# Example Concourse CI pipeline for Slack file uploads
+
+resource_types:
+  - name: slack-notification
+    type: registry-image
+    source:
+      repository: bluekornchips/send-to-slack
+      tag: latest
+
+resources:
+  - name: slack-notification
+    type: slack-notification
+
+jobs:
+  # Upload single file
+  - name: upload-single-file
+    public: true
+    plan:
+      - task: create-test-file
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: alpine
+          run:
+            path: sh
+            args:
+              - -c
+              - |
+                set +x
+                set -eo pipefail
+                mkdir -p output
+                echo "Test report generated at $(date)" > output/report.txt
+          outputs:
+            - name: output
+
+      - put: slack-notification
+        params:
+          channel: ((slack_channel))
+          files:
+            - path: output/report.txt
+              title: "Daily Report"
+              comment: "Today's report"
+
+  # Upload multiple files
+  - name: upload-multiple-files
+    public: true
+    plan:
+      - task: create-multiple-files
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: alpine
+          run:
+            path: sh
+            args:
+              - -c
+              - |
+                set +x
+                set -eo pipefail
+                mkdir -p output
+                echo "Dataset 1" > output/data1.csv
+                echo "Dataset 2" > output/data2.csv
+                echo "Summary report" > output/summary.txt
+          outputs:
+            - name: output
+
+      - put: slack-notification
+        params:
+          channel: ((slack_data_channel))
+          files:
+            - path: output/data1.csv
+              title: "Q1 Data"
+            - path: output/data2.csv
+              title: "Q2 Data"
+            - path: output/summary.txt
+              title: "Summary"
+
+  # Upload file without channel
+  - name: upload-private-file
+    public: true
+    plan:
+      - task: create-archive
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: alpine
+          run:
+            path: sh
+            args:
+              - -c
+              - |
+                set +x
+                set -eo pipefail
+                mkdir -p output
+                echo "Archive contents" > output/archive.tar.gz
+          outputs:
+            - name: output
+
+      - put: slack-notification
+        params:
+          files:
+            - path: output/archive.tar.gz
+              title: "Build Artifacts"
+
+  # Upload with message
+  - name: upload-with-message
+    public: true
+    plan:
+      - task: create-log
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: alpine
+          run:
+            path: sh
+            args:
+              - -c
+              - |
+                set +x
+                set -eo pipefail
+                mkdir -p output
+                echo "Build log output" > output/build.log
+          outputs:
+            - name: output
+
+      - put: slack-notification
+        params:
+          channel: ((slack_notifications_channel))
+          files:
+            - path: output/build.log
+              title: "Build Log - $(date +%Y-%m-%d)"
+              comment: |
+                Build completed successfully
+
+                Files attached:
+                - Build logs
+
+                Status: Success
+
+  # Upload with timestamp
+  - name: upload-from-env
+    public: true
+    plan:
+      - task: create-timestamped-file
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: alpine
+          run:
+            path: sh
+            args:
+              - -c
+              - |
+                set +x
+                set -eo pipefail
+                mkdir -p output
+                TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+                echo "Report generated at: $TIMESTAMP" > output/report_$TIMESTAMP.txt
+          outputs:
+            - name: output
+
+      - put: slack-notification
+        params:
+          channel: ((slack_channel))
+          files:
+            - path: output/report_*.txt
+              title: "Timestamped Report"
+              comment: "Timestamped report"
