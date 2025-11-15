@@ -15,20 +15,7 @@ common_slack_params: &common_slack_params
   channel: notification-testing
 
 jobs:
-  - name: section-plain-text
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          <<: *common_slack_params
-          blocks:
-            - section:
-                type: text
-                text:
-                  type: plain_text
-                  text: "Hello, world! This is a plain text section."
-
-  - name: section-mrkdwn
+  - name: section-text-with-markdown-formatting
     plan:
       - put: slack-notification
         no_get: true
@@ -39,49 +26,9 @@ jobs:
                 type: text
                 text:
                   type: mrkdwn
-                  text: "Hello, world! This is a *markdown* section."
+                  text: "Build *succeeded* in `2m 34s`. See <https://example.com/build/123|logs> for details."
 
-  - name: section-with-block-id
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          <<: *common_slack_params
-          blocks:
-            - section:
-                type: text
-                text:
-                  type: plain_text
-                  text: "Section with block ID"
-                block_id: "section_123"
-
-  - name: section-long-text
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          <<: *common_slack_params
-          blocks:
-            - section:
-                type: text
-                text:
-                  type: plain_text
-                  text: "This is a longer section block example. Section blocks can display text of any length up to 3000 characters."
-
-  - name: section-mrkdwn-formatted
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          <<: *common_slack_params
-          blocks:
-            - section:
-                type: text
-                text:
-                  type: mrkdwn
-                  text: "Build *succeeded* in `2m 34s`. See <https://example.com|logs> for details."
-
-  - name: section-fields
+  - name: section-fields-with-status-information
     plan:
       - put: slack-notification
         no_get: true
@@ -91,14 +38,58 @@ jobs:
             - section:
                 type: fields
                 fields:
-                  - type: plain_text
-                    text: "Status: Success"
                   - type: mrkdwn
-                    text: "*Build:* #123"
-                  - type: plain_text
-                    text: "Duration: 2m 34s"
+                    text: "*Priority*"
                   - type: mrkdwn
-                    text: "*Branch:* main"
+                    text: "*Type*"
+                  - type: plain_text
+                    text: "High"
+                  - type: plain_text
+                    text: "Deployment"
+                  - type: mrkdwn
+                    text: "*Status*"
+                  - type: mrkdwn
+                    text: "*Duration*"
+                  - type: plain_text
+                    text: "Success"
+                  - type: plain_text
+                    text: "2m 34s"
+
+  - name: section-text-with-block-id-and-expand
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - section:
+                type: text
+                text:
+                  type: plain_text
+                  text: "This is a long message that demonstrates the expand field. When expand is set to true, the full text will always be displayed without requiring users to click 'see more'. This is particularly useful for AI Assistant apps that need to post comprehensive messages."
+                block_id: "expanded_message_001"
+                expand: true
+
+  - name: section-text-with-accessory-button
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "*Deployment* ready for review. Click the button to approve."
+                block_id: "deployment_review"
+                accessory:
+                  type: button
+                  text:
+                    type: plain_text
+                    text: "Approve"
+                  action_id: "approve_deployment"
+                  style: "primary"
 
   - name: section-fields-with-block-id
     plan:
@@ -109,9 +100,21 @@ jobs:
           blocks:
             - section:
                 type: fields
+                block_id: "build_summary_001"
                 fields:
+                  - type: mrkdwn
+                    text: "*Build Number*"
+                  - type: mrkdwn
+                    text: "*Branch*"
                   - type: plain_text
-                    text: "Field 1"
+                    text: "#1234"
                   - type: plain_text
-                    text: "Field 2"
-                block_id: "fields_section_123"
+                    text: "main"
+                  - type: mrkdwn
+                    text: "*Commit*"
+                  - type: mrkdwn
+                    text: "*Author*"
+                  - type: plain_text
+                    text: "abc123def"
+                  - type: plain_text
+                    text: "John Doe"

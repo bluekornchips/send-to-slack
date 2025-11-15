@@ -252,6 +252,30 @@ create_section() {
 		fi
 	fi
 
+	# Add optional accessory if present
+	if jq -e '.accessory' <<<"$input" >/dev/null 2>&1; then
+		local accessory
+		if ! accessory=$(jq -r '.accessory' <<<"$input"); then
+			echo "create_section:: invalid JSON format" >&2
+			return 1
+		fi
+		if [[ -n "$accessory" && "$accessory" != "null" ]]; then
+			section_block=$(jq --argjson accessory "$accessory" '. + {accessory: $accessory}' <<<"$section_block")
+		fi
+	fi
+
+	# Add optional expand if present
+	if jq -e '.expand' <<<"$input" >/dev/null 2>&1; then
+		local expand
+		if ! expand=$(jq '.expand' <<<"$input"); then
+			echo "create_section:: invalid JSON format" >&2
+			return 1
+		fi
+		if jq -e 'type == "boolean"' <<<"$expand" >/dev/null 2>&1; then
+			section_block=$(jq --argjson expand "$expand" '. + {expand: $expand}' <<<"$section_block")
+		fi
+	fi
+
 	echo "$section_block"
 
 	return 0

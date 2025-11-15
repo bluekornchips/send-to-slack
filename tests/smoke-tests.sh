@@ -337,7 +337,7 @@ smoke_test_setup() {
 @test "smoke test, section block" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/section.yaml"
 	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "section-plain-text") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "section-text-with-markdown-formatting") | .plan[0].params.blocks' "$EXAMPLES_FILE")
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
@@ -358,7 +358,7 @@ smoke_test_setup() {
 @test "smoke test, section block with fields" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/section.yaml"
 	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "section-fields") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "section-fields-with-status-information") | .plan[0].params.blocks' "$EXAMPLES_FILE")
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload

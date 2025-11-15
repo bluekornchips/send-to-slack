@@ -143,16 +143,16 @@ EOF
 	echo "$output" | grep -q "Hello, world!"
 }
 
-@test "create_text_section:: from example" {
+@test "create_text_section:: from example with markdown" {
 	local section_json
-	section_json=$(yq -o json -r '.jobs[] | select(.name == "section-plain-text") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
+	section_json=$(yq -o json -r '.jobs[] | select(.name == "section-text-with-markdown-formatting") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
 	local test_text
 	test_text=$(echo "$section_json" | jq -r '.text')
 
 	run create_text_section "$test_text"
 	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "Hello, world!"
-	echo "$output" | grep -q "plain text section"
+	echo "$output" | grep -q "Build"
+	echo "$output" | grep -q "succeeded"
 }
 
 @test "create_text_section:: mrkdwn" {
@@ -258,22 +258,59 @@ EOF
 	[[ "$status" -eq 0 ]]
 }
 
-@test "create_section:: text section from example" {
-	TEST_INPUT=$(yq -o json -r '.jobs[] | select(.name == "section-plain-text") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
-
-	run create_section <<<"$TEST_INPUT"
-	[[ "$status" -eq 0 ]]
-	echo "$output" | jq -e '.type == "section"' >/dev/null
-	send_request_to_slack "$output"
-}
-
-@test "create_section:: mrkdwn section from example" {
-	TEST_INPUT=$(yq -o json -r '.jobs[] | select(.name == "section-mrkdwn") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
+@test "create_section:: text section with markdown from example" {
+	TEST_INPUT=$(yq -o json -r '.jobs[] | select(.name == "section-text-with-markdown-formatting") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
 
 	run create_section <<<"$TEST_INPUT"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.type == "section"' >/dev/null
 	echo "$output" | jq -e '.text.type == "mrkdwn"' >/dev/null
+	echo "$output" | jq -e '.text.text | contains("Build")' >/dev/null
+	send_request_to_slack "$output"
+}
+
+@test "create_section:: fields section from example" {
+	TEST_INPUT=$(yq -o json -r '.jobs[] | select(.name == "section-fields-with-status-information") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
+
+	run create_section <<<"$TEST_INPUT"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.type == "section"' >/dev/null
+	echo "$output" | jq -e '.fields != null' >/dev/null
+	echo "$output" | jq -e '.fields | length == 8' >/dev/null
+	send_request_to_slack "$output"
+}
+
+@test "create_section:: text section with block_id and expand" {
+	TEST_INPUT=$(yq -o json -r '.jobs[] | select(.name == "section-text-with-block-id-and-expand") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
+
+	run create_section <<<"$TEST_INPUT"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.type == "section"' >/dev/null
+	echo "$output" | jq -e '.block_id == "expanded_message_001"' >/dev/null
+	echo "$output" | jq -e '.expand == true' >/dev/null
+	send_request_to_slack "$output"
+}
+
+@test "create_section:: text section with accessory" {
+	TEST_INPUT=$(yq -o json -r '.jobs[] | select(.name == "section-text-with-accessory-button") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
+
+	run create_section <<<"$TEST_INPUT"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.type == "section"' >/dev/null
+	echo "$output" | jq -e '.accessory != null' >/dev/null
+	echo "$output" | jq -e '.accessory.type == "button"' >/dev/null
+	echo "$output" | jq -e '.block_id == "deployment_review"' >/dev/null
+	send_request_to_slack "$output"
+}
+
+@test "create_section:: fields section with block_id from example" {
+	TEST_INPUT=$(yq -o json -r '.jobs[] | select(.name == "section-fields-with-block-id") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
+
+	run create_section <<<"$TEST_INPUT"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.type == "section"' >/dev/null
+	echo "$output" | jq -e '.block_id == "build_summary_001"' >/dev/null
+	echo "$output" | jq -e '.fields | length == 8' >/dev/null
 	send_request_to_slack "$output"
 }
 
@@ -409,4 +446,48 @@ EOF
 	run create_section <<<"$test_input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "section cannot have both text and fields"
+}
+
+@test "create_section:: text section with expand false" {
+	local test_yaml
+	test_yaml=$(
+		cat <<EOF
+type: text
+text:
+  type: plain_text
+  text: "Test message"
+expand: false
+EOF
+	)
+
+	local test_input
+	test_input=$(yq -o json <<<"$test_yaml")
+
+	run create_section <<<"$test_input"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.expand == false' >/dev/null
+}
+
+@test "create_section:: text section with accessory image" {
+	local test_yaml
+	test_yaml=$(
+		cat <<EOF
+type: text
+text:
+  type: plain_text
+  text: "Check out this image"
+accessory:
+  type: image
+  image_url: "https://example.com/image.png"
+  alt_text: "Example image"
+EOF
+	)
+
+	local test_input
+	test_input=$(yq -o json <<<"$test_yaml")
+
+	run create_section <<<"$test_input"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.accessory.type == "image"' >/dev/null
+	echo "$output" | jq -e '.accessory.image_url == "https://example.com/image.png"' >/dev/null
 }
