@@ -108,37 +108,46 @@ create_test_payload() {
 	echo "$output" | grep -q "unsupported block type"
 }
 
-@test "create_block:: basic" {
+@test "create_block:: rich-text-section-with-all-elements" {
 	local block_type block_value
-	block_type=$(yq -r '.jobs[] | select(.name == "basic") | .plan[0].params.blocks[0] | keys[0]' "$RICH_TEXT_EXAMPLES_FILE")
-	block_value=$(yq -o json -r '.jobs[] | select(.name == "basic") | .plan[0].params.blocks[0].'"$block_type" "$RICH_TEXT_EXAMPLES_FILE")
+	block_type=$(yq -r '.jobs[] | select(.name == "rich-text-section-with-all-elements") | .plan[0].params.blocks[0] | keys[0]' "$RICH_TEXT_EXAMPLES_FILE")
+	block_value=$(yq -o json -r '.jobs[] | select(.name == "rich-text-section-with-all-elements") | .plan[0].params.blocks[0].'"$block_type" "$RICH_TEXT_EXAMPLES_FILE")
 
 	run create_block "$block_value" "$block_type"
 	[[ "$status" -eq 0 ]]
 }
 
-@test "create_block:: basic-attachment" {
+@test "create_block:: rich-text-attachment-with-color" {
 	local block_type block_value
-	block_type=$(yq -r '.jobs[] | select(.name == "basic-attachment") | .plan[0].params.blocks[0] | keys[0]' "$RICH_TEXT_EXAMPLES_FILE")
-	block_value=$(yq -o json -r '.jobs[] | select(.name == "basic-attachment") | .plan[0].params.blocks[0].'"$block_type" "$RICH_TEXT_EXAMPLES_FILE")
+	block_type=$(yq -r '.jobs[] | select(.name == "rich-text-attachment-with-color") | .plan[0].params.blocks[0] | keys[0]' "$RICH_TEXT_EXAMPLES_FILE")
+	block_value=$(yq -o json -r '.jobs[] | select(.name == "rich-text-attachment-with-color") | .plan[0].params.blocks[0].'"$block_type" "$RICH_TEXT_EXAMPLES_FILE")
 
 	run create_block "$block_value" "$block_type"
 	[[ "$status" -eq 0 ]]
 }
 
-@test "create_block:: two-rich-text-blocks" {
+@test "create_block:: rich-text-lists-with-all-options" {
 	local block_type block_value
-	block_type=$(yq -r '.jobs[] | select(.name == "two-rich-text-blocks") | .plan[0].params.blocks[0] | keys[0]' "$RICH_TEXT_EXAMPLES_FILE")
-	block_value=$(yq -o json -r '.jobs[] | select(.name == "two-rich-text-blocks") | .plan[0].params.blocks[0].'"$block_type" "$RICH_TEXT_EXAMPLES_FILE")
+	block_type=$(yq -r '.jobs[] | select(.name == "rich-text-lists-with-all-options") | .plan[0].params.blocks[0] | keys[0]' "$RICH_TEXT_EXAMPLES_FILE")
+	block_value=$(yq -o json -r '.jobs[] | select(.name == "rich-text-lists-with-all-options") | .plan[0].params.blocks[0].'"$block_type" "$RICH_TEXT_EXAMPLES_FILE")
 
 	run create_block "$block_value" "$block_type"
 	[[ "$status" -eq 0 ]]
 }
 
-@test "create_block:: rich-text-block-and-attachment" {
+@test "create_block:: multiple-rich-text-blocks" {
 	local block_type block_value
-	block_type=$(yq -r '.jobs[] | select(.name == "rich-text-block-and-attachment") | .plan[0].params.blocks[0] | keys[0]' "$RICH_TEXT_EXAMPLES_FILE")
-	block_value=$(yq -o json -r '.jobs[] | select(.name == "rich-text-block-and-attachment") | .plan[0].params.blocks[0].'"$block_type" "$RICH_TEXT_EXAMPLES_FILE")
+	block_type=$(yq -r '.jobs[] | select(.name == "multiple-rich-text-blocks") | .plan[0].params.blocks[0] | keys[0]' "$RICH_TEXT_EXAMPLES_FILE")
+	block_value=$(yq -o json -r '.jobs[] | select(.name == "multiple-rich-text-blocks") | .plan[0].params.blocks[0].'"$block_type" "$RICH_TEXT_EXAMPLES_FILE")
+
+	run create_block "$block_value" "$block_type"
+	[[ "$status" -eq 0 ]]
+}
+
+@test "create_block:: rich-text-preformatted-and-quote" {
+	local block_type block_value
+	block_type=$(yq -r '.jobs[] | select(.name == "rich-text-preformatted-and-quote") | .plan[0].params.blocks[0] | keys[0]' "$RICH_TEXT_EXAMPLES_FILE")
+	block_value=$(yq -o json -r '.jobs[] | select(.name == "rich-text-preformatted-and-quote") | .plan[0].params.blocks[0].'"$block_type" "$RICH_TEXT_EXAMPLES_FILE")
 
 	run create_block "$block_value" "$block_type"
 	[[ "$status" -eq 0 ]]

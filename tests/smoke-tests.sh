@@ -451,10 +451,10 @@ smoke_test_setup() {
 # Rich text block smoke tests
 ########################################################
 
-@test "smoke test, rich-text sends basic" {
+@test "smoke test, rich-text sends rich-text-section-with-all-elements" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/rich-text.yaml"
 	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "basic") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "rich-text-section-with-all-elements") | .plan[0].params.blocks' "$EXAMPLES_FILE")
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
@@ -472,10 +472,10 @@ smoke_test_setup() {
 	[[ "$status" -eq 0 ]]
 }
 
-@test "smoke test, rich-text sends basic-attachment" {
+@test "smoke test, rich-text sends rich-text-attachment-with-color" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/rich-text.yaml"
 	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "basic-attachment") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "rich-text-attachment-with-color") | .plan[0].params.blocks' "$EXAMPLES_FILE")
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
@@ -493,10 +493,10 @@ smoke_test_setup() {
 	[[ "$status" -eq 0 ]]
 }
 
-@test "smoke test, rich-text sends two-rich-text-blocks" {
+@test "smoke test, rich-text sends rich-text-lists-with-all-options" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/rich-text.yaml"
 	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "two-rich-text-blocks") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "rich-text-lists-with-all-options") | .plan[0].params.blocks' "$EXAMPLES_FILE")
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
@@ -514,10 +514,31 @@ smoke_test_setup() {
 	[[ "$status" -eq 0 ]]
 }
 
-@test "smoke test, rich-text sends rich-text-block-and-attachment" {
+@test "smoke test, rich-text sends multiple-rich-text-blocks" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/rich-text.yaml"
 	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "rich-text-block-and-attachment") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "multiple-rich-text-blocks") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+
+	smoke_test_setup "$blocks_json"
+	local parsed_payload
+	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+		echo "parse_payload failed" >&2
+		return 1
+	fi
+
+	if [[ -z "$parsed_payload" ]]; then
+		echo "parsed_payload is empty" >&2
+		return 1
+	fi
+
+	run send_notification "$parsed_payload"
+	[[ "$status" -eq 0 ]]
+}
+
+@test "smoke test, rich-text sends rich-text-preformatted-and-quote" {
+	local EXAMPLES_FILE="$GIT_ROOT/examples/rich-text.yaml"
+	local blocks_json
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "rich-text-preformatted-and-quote") | .plan[0].params.blocks' "$EXAMPLES_FILE")
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
