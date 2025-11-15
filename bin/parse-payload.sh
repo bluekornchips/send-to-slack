@@ -125,6 +125,43 @@ create_block() {
 	return 0
 }
 
+# Convert Slack permalink to thread_ts format if needed
+#
+# Arguments:
+#   $1 - input: thread_ts value (may be permalink URL or timestamp)
+#
+# Returns:
+#   Outputs converted thread_ts to stdout
+#   Returns original value if no 16-digit number found
+#   0 on success
+convert_thread_ts() {
+	local input="$1"
+
+	# Check if already in correct format (10 digits . 6 digits)
+	if echo "$input" | grep -qE '^[0-9]{10}\.[0-9]{6}$'; then
+		echo "$input"
+		return 0
+	fi
+
+	# Extract 16-digit number and convert
+	local timestamp
+	timestamp=$(echo "$input" | grep -oE '[0-9]{16}' | head -n1)
+
+	if [[ -n "$timestamp" ]]; then
+		# Convert format to insert decimal after 10 digits
+		local seconds="${timestamp:0:10}"
+		local microseconds="${timestamp:10}"
+
+		echo "${seconds}.${microseconds}"
+
+		return 0
+	fi
+
+	echo "$input"
+
+	return 0
+}
+
 # Validate that input payload file contains valid JSON
 #
 # Uses global variable: INPUT_PAYLOAD
@@ -381,6 +418,17 @@ process_blocks() {
 	local create_thread
 	thread_ts=$(jq -r '.params.thread_ts // ""' "$INPUT_PAYLOAD")
 	create_thread=$(jq -r '.params.create_thread // false' "$INPUT_PAYLOAD")
+
+	# Convert thread_ts if it's a permalink
+	if [[ -n "$thread_ts" && "$thread_ts" != "null" && "$thread_ts" != "empty" ]]; then
+		local converted_ts
+		converted_ts=$(convert_thread_ts "$thread_ts")
+		if [[ $? -ne 0 ]]; then
+			echo "parse_payload:: failed to convert thread_ts from permalink" >&2
+			return 1
+		fi
+		thread_ts="$converted_ts"
+	fi
 
 	# Validate mutually exclusive parameters
 	if [[ "$create_thread" == "true" ]] && [[ -n "$thread_ts" && "$thread_ts" != "null" && "$thread_ts" != "empty" ]]; then

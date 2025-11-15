@@ -902,6 +902,134 @@ create_test_payload() {
 	echo "$payload_output" | jq -e 'has("thread_ts") == false' >/dev/null
 }
 
+@test "parse_payload:: thread_ts converts Slack permalink to timestamp format" {
+	local test_payload
+	test_payload=$(jq -n \
+		--arg channel "$CHANNEL" \
+		--arg thread_ts "https://tktestglobal.slack.com/archives/C06J34MSEPK/p1763178444659849" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "test-token"
+			},
+			params: {
+				channel: $channel,
+				thread_ts: $thread_ts,
+				blocks: [{
+					section: {
+						type: "text",
+						text: { type: "plain_text", text: "Test" }
+					}
+				}]
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+
+	local payload_output
+	payload_output=$(parse_payload "$TEST_PAYLOAD_FILE")
+	# Permalink should be converted to timestamp format: 1763178444.659849
+	echo "$payload_output" | jq -e '.thread_ts == "1763178444.659849"' >/dev/null
+}
+
+@test "parse_payload:: thread_ts permalink with http (not https) is supported" {
+	local test_payload
+	test_payload=$(jq -n \
+		--arg channel "$CHANNEL" \
+		--arg thread_ts "http://workspace.slack.com/archives/C123456/p1763178444659849" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "test-token"
+			},
+			params: {
+				channel: $channel,
+				thread_ts: $thread_ts,
+				blocks: [{
+					section: {
+						type: "text",
+						text: { type: "plain_text", text: "Test" }
+					}
+				}]
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+
+	local payload_output
+	payload_output=$(parse_payload "$TEST_PAYLOAD_FILE")
+	# Permalink should be converted to timestamp format
+	echo "$payload_output" | jq -e '.thread_ts == "1763178444.659849"' >/dev/null
+}
+
+@test "parse_payload:: thread_ts converts 16-digit standalone number to timestamp format" {
+	local test_payload
+	test_payload=$(jq -n \
+		--arg channel "$CHANNEL" \
+		--arg thread_ts "1763178414211229" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "test-token"
+			},
+			params: {
+				channel: $channel,
+				thread_ts: $thread_ts,
+				blocks: [{
+					section: {
+						type: "text",
+						text: { type: "plain_text", text: "Test" }
+					}
+				}]
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+
+	local payload_output
+	payload_output=$(parse_payload "$TEST_PAYLOAD_FILE")
+	# 16-digit number should be converted to timestamp format: 1763178414.211229
+	echo "$payload_output" | jq -e '.thread_ts == "1763178414.211229"' >/dev/null
+}
+
+@test "parse_payload:: thread_ts returns already-formatted timestamp as-is" {
+	local test_payload
+	test_payload=$(jq -n \
+		--arg channel "$CHANNEL" \
+		--arg thread_ts "1763178414.211229" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "test-token"
+			},
+			params: {
+				channel: $channel,
+				thread_ts: $thread_ts,
+				blocks: [{
+					section: {
+						type: "text",
+						text: { type: "plain_text", text: "Test" }
+					}
+				}]
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+
+	local payload_output
+	payload_output=$(parse_payload "$TEST_PAYLOAD_FILE")
+	# Already formatted timestamp should be returned as-is
+	echo "$payload_output" | jq -e '.thread_ts == "1763178414.211229"' >/dev/null
+}
+
 ########################################################
 # Smoke Tests
 ########################################################
