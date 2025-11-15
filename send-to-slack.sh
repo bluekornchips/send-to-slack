@@ -558,6 +558,42 @@ main() {
 	parsed_payload=$(cat "${parsed_payload_file}")
 	rm -f "${parsed_payload_file}"
 
+	# Handle create_thread: send first block as regular message, then remaining blocks in thread
+	local create_thread
+	create_thread=$(jq -r '.params.create_thread // false' "${input_payload}")
+	if [[ "$create_thread" == "true" ]]; then
+		local block_count
+		block_count=$(echo "$parsed_payload" | jq '.blocks | length')
+
+		if ((block_count > 1)); then
+			echo "main:: create_thread is true, sending first block as regular message"
+
+			# Extract first block
+			local first_block_payload
+			first_block_payload=$(echo "$parsed_payload" | jq '{channel: .channel, blocks: [.blocks[0]]}')
+
+			# Send first block as regular message
+			if ! send_notification "$first_block_payload"; then
+				echo "main:: failed to send first block message" >&2
+				return 1
+			fi
+
+			# Get thread_ts from the response
+			local thread_ts
+			thread_ts=$(echo "$RESPONSE" | jq -r '.ts // empty')
+
+			if [[ -z "$thread_ts" || "$thread_ts" == "null" ]]; then
+				echo "main:: failed to get thread_ts from first message response" >&2
+				return 1
+			fi
+
+			# Modify parsed_payload to include thread_ts and exclude first block (send remaining blocks)
+			parsed_payload=$(echo "$parsed_payload" | jq --arg thread_ts "$thread_ts" '. + {thread_ts: $thread_ts} | .blocks = .blocks[1:]')
+
+			echo "main:: sending remaining blocks as thread reply with thread_ts: ${thread_ts}"
+		fi
+	fi
+
 	echo "main:: sending notification"
 	if ! send_notification "$parsed_payload"; then
 		echo "main:: failed to send notification" >&2

@@ -571,9 +571,6 @@ mock_curl_permalink_failure() {
 		return 1
 	fi
 
-	# Filter out video blocks as they require special scopes that may not be available
-	blocks_json=$(echo "$blocks_json" | jq 'map(select(.video == null))')
-
 	# Create a temporary test file for file upload testing
 	ACCEPTANCE_TEST_FILE=$(mktemp /tmp/test-upload.XXXXXX)
 	echo "Test file content for upload testing" >"$ACCEPTANCE_TEST_FILE"
@@ -623,14 +620,7 @@ mock_curl_permalink_failure() {
 	echo "$output" | grep -q "main:: parsing payload"
 	echo "$output" | grep -q "main:: creating Concourse metadata"
 	echo "$output" | grep -q "main:: sending notification"
-
-	if [[ "$DRY_RUN" == "true" ]]; then
-		echo "$output" | grep -q "DRY_RUN enabled"
-		echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
-	else
-		# When actually sending, we expect success without dry run messages
-		echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
-	fi
+	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
 
 	# Clean up test file
 	[[ -f "$ACCEPTANCE_TEST_FILE" ]] && rm -f "$ACCEPTANCE_TEST_FILE"
@@ -727,13 +717,7 @@ mock_curl_permalink_failure() {
 	echo "$output" | grep -q "using raw payload"
 	echo "$output" | grep -q "main:: creating Concourse metadata"
 	echo "$output" | grep -q "main:: sending notification"
-
-	if [[ "$DRY_RUN" == "true" ]]; then
-		echo "$output" | grep -q "DRY_RUN enabled"
-		echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
-	else
-		echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
-	fi
+	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
 }
 
 @test "acceptance:: params.from_file" {
@@ -818,13 +802,7 @@ mock_curl_permalink_failure() {
 	echo "$output" | grep -q "using payload from file"
 	echo "$output" | grep -q "main:: creating Concourse metadata"
 	echo "$output" | grep -q "main:: sending notification"
-
-	if [[ "$DRY_RUN" == "true" ]]; then
-		echo "$output" | grep -q "DRY_RUN enabled"
-		echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
-	else
-		echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
-	fi
+	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
 
 	# Clean up test file
 	[[ -f "$ACCEPTANCE_PAYLOAD_FILE" ]] && rm -f "$ACCEPTANCE_PAYLOAD_FILE"
@@ -891,13 +869,172 @@ mock_curl_permalink_failure() {
 	echo "$output" | grep -q "main:: sending notification"
 	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
 
-	if [[ "$DRY_RUN" == "true" ]]; then
-		echo "$output" | grep -q "DRY_RUN enabled"
-	else
-		# When actually sending, verify crosspost was processed by checking for multiple send notifications
-		# (one for original channel, one for each crosspost channel)
-		local send_count
-		send_count=$(echo "$output" | grep -c "send_notification:: message delivered to Slack successfully" || echo "0")
-		[[ "$send_count" -ge 2 ]]
+	# Verify crosspost was processed by checking for multiple send notifications
+	# (one for original channel, one for each crosspost channel)
+	local send_count
+	send_count=$(echo "$output" | grep -c "send_notification:: message delivered to Slack successfully" || echo "0")
+	[[ "$send_count" -ge 2 ]]
+}
+
+@test "acceptance:: thread reply with thread_ts" {
+	if [[ "$ACCEPTANCE_TEST" != "true" ]]; then
+		skip "ACCEPTANCE_TEST is not set"
 	fi
+
+	if [[ -z "$REAL_TOKEN" ]]; then
+		skip "REAL_TOKEN is required for acceptance tests"
+	fi
+
+	local token="$REAL_TOKEN"
+	CHANNEL="threads"
+	DRY_RUN="false"
+
+	# Convert permalink timestamp to Slack API format, I'm using a real one from my test workspace
+	# Needs to insert decimal after 10 digits
+	local permalink_ts="1763161862880069"
+	local thread_ts="${permalink_ts:0:10}.${permalink_ts:10}"
+
+	# Use the acceptance.yaml example again but with our thread_ts added
+	local blocks_json
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "acceptance") | .plan[0].params.blocks' "$GIT_ROOT/examples/acceptance.yaml")
+
+	if ! echo "$blocks_json" | jq . >/dev/null 2>&1; then
+		echo "Invalid blocks_json from acceptance.yaml" >&2
+		echo "$blocks_json" >&2
+		return 1
+	fi
+
+	ACCEPTANCE_TEST_FILE=$(mktemp /tmp/test-upload.XXXXXX)
+	echo "Test file content for upload testing" >"$ACCEPTANCE_TEST_FILE"
+
+	local file_block
+	file_block=$(jq -n --arg path "$ACCEPTANCE_TEST_FILE" '{ "file": { "path": $path } }')
+	blocks_json=$(echo "$blocks_json" | jq --argjson file_block "$file_block" '. + [$file_block]')
+
+	if ! echo "$blocks_json" | jq . >/dev/null 2>&1; then
+		echo "Invalid blocks_json after adding file block" >&2
+		echo "$blocks_json" >&2
+		return 1
+	fi
+
+	jq -n \
+		--arg token "$token" \
+		--argjson blocks "$blocks_json" \
+		--arg channel "$CHANNEL" \
+		--arg dry_run "$DRY_RUN" \
+		--arg thread_ts "$thread_ts" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: $token
+			},
+			params: {
+				channel: $channel,
+				dry_run: $dry_run,
+				thread_ts: $thread_ts,
+				blocks: $blocks
+			}
+		}' >"$TEST_PAYLOAD_FILE"
+
+	if ! jq . "$TEST_PAYLOAD_FILE" >/dev/null 2>&1; then
+		echo "Invalid JSON in test payload file" >&2
+		cat "$TEST_PAYLOAD_FILE" >&2
+		return 1
+	fi
+
+	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
+	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "version"
+	echo "$output" | grep -q "timestamp"
+	echo "$output" | grep -q "main:: parsing payload"
+	echo "$output" | grep -q "main:: creating Concourse metadata"
+	echo "$output" | grep -q "main:: sending notification"
+
+	local parsed_payload_file
+	parsed_payload_file=$(mktemp /tmp/parsed-payload.XXXXXX)
+	if ! parse_payload "$TEST_PAYLOAD_FILE" >"$parsed_payload_file"; then
+		echo "parse_payload failed" >&2
+		rm -f "$parsed_payload_file"
+		return 1
+	fi
+
+	local parsed_payload
+	parsed_payload=$(cat "$parsed_payload_file")
+	rm -f "$parsed_payload_file"
+
+	echo "$parsed_payload" | jq -e --arg thread_ts "$thread_ts" '.thread_ts == $thread_ts' >/dev/null
+	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
+
+	[[ -f "$ACCEPTANCE_TEST_FILE" ]] && rm -f "$ACCEPTANCE_TEST_FILE"
+}
+
+@test "acceptance:: create_thread" {
+	if [[ "$ACCEPTANCE_TEST" != "true" ]]; then
+		skip "ACCEPTANCE_TEST is not set"
+	fi
+
+	if [[ -z "$REAL_TOKEN" ]]; then
+		skip "REAL_TOKEN is required for acceptance tests"
+	fi
+
+	local token="$REAL_TOKEN"
+	CHANNEL="notification-testing"
+	DRY_RUN="false"
+
+	local blocks_json
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "acceptance") | .plan[0].params.blocks' "$GIT_ROOT/examples/acceptance.yaml")
+
+	if ! echo "$blocks_json" | jq . >/dev/null 2>&1; then
+		echo "Invalid blocks_json from acceptance.yaml" >&2
+		echo "$blocks_json" >&2
+		return 1
+	fi
+
+	ACCEPTANCE_TEST_FILE=$(mktemp /tmp/test-upload.XXXXXX)
+	echo "Test file content for upload testing" >"$ACCEPTANCE_TEST_FILE"
+
+	local file_block
+	file_block=$(jq -n --arg path "$ACCEPTANCE_TEST_FILE" '{ "file": { "path": $path } }')
+	blocks_json=$(echo "$blocks_json" | jq --argjson file_block "$file_block" '. + [$file_block]')
+
+	if ! echo "$blocks_json" | jq . >/dev/null 2>&1; then
+		echo "Invalid blocks_json after adding file block" >&2
+		echo "$blocks_json" >&2
+		return 1
+	fi
+
+	jq -n \
+		--arg token "$token" \
+		--argjson blocks "$blocks_json" \
+		--arg channel "$CHANNEL" \
+		--arg dry_run "$DRY_RUN" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: $token
+			},
+			params: {
+				channel: $channel,
+				dry_run: $dry_run,
+				create_thread: true,
+				blocks: $blocks
+			}
+		}' >"$TEST_PAYLOAD_FILE"
+
+	if ! jq . "$TEST_PAYLOAD_FILE" >/dev/null 2>&1; then
+		echo "Invalid JSON in test payload file" >&2
+		cat "$TEST_PAYLOAD_FILE" >&2
+		return 1
+	fi
+
+	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
+	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "version"
+	echo "$output" | grep -q "timestamp"
+	echo "$output" | grep -q "main:: parsing payload"
+	echo "$output" | grep -q "main:: creating Concourse metadata"
+	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
+
+	[[ -f "$ACCEPTANCE_TEST_FILE" ]] && rm -f "$ACCEPTANCE_TEST_FILE"
 }

@@ -102,6 +102,8 @@ If running from the repository without installation, use `./send-to-slack.sh` in
 - Multiple input methods: JSON payload, raw JSON string, or file-based configuration
 - Comprehensive error handling and validation
 - Dry-run mode for testing configurations
+- Thread reply support for organizing conversations
+- Thread creation for multi-block messages
 - Interactive button components with Python server integration
 - Concourse CI resource type support
 
@@ -164,7 +166,39 @@ The program reads JSON payload from `stdin` and sends messages to Slack. The pay
 - `params.blocks` - Array of block configurations (see [examples/](examples/) for block types)
 - `params.text` - Fallback text for notifications (max 40,000 characters)
 - `params.dry_run` - Set to `true` to validate without sending (default: `false`)
+- `params.thread_ts` - Thread timestamp for replying to existing threads (see [Threading](#threading) section)
+- `params.create_thread` - Set to `true` to create a new thread (see [Threading](#threading) section)
 - `params.crosspost` - Crosspost configuration object (see [Crossposting](#crossposting) section)
+
+## Threading
+
+### Replying to Existing Threads
+
+Provide `thread_ts` with the parent message timestamp. Extract from the permalink (the shareable url): `p1763161862880069` becomes `1763161862.880069` with the decimal inserted after 10 digits.
+
+```json
+{
+  "params": {
+    "channel": "notifications",
+    "thread_ts": "1763161862.880069",
+    "blocks": [...]
+  }
+}
+```
+
+### Creating New Threads
+
+Set `create_thread: true` with multiple blocks. First block sent as regular message, remaining blocks sent as thread reply.
+
+```json
+{
+  "params": {
+    "channel": "notifications",
+    "create_thread": true,
+    "blocks": [...]
+  }
+}
+```
 
 ## Crossposting
 

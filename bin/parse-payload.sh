@@ -376,12 +376,36 @@ process_blocks() {
 		return 1
 	fi
 
+	# Read thread_ts and create_thread from params
+	local thread_ts
+	local create_thread
+	thread_ts=$(jq -r '.params.thread_ts // ""' "$INPUT_PAYLOAD")
+	create_thread=$(jq -r '.params.create_thread // false' "$INPUT_PAYLOAD")
+
+	# Validate mutually exclusive parameters
+	if [[ "$create_thread" == "true" ]] && [[ -n "$thread_ts" && "$thread_ts" != "null" && "$thread_ts" != "empty" ]]; then
+		echo "parse_payload:: create_thread and thread_ts cannot both be set. Use create_thread to create a new thread or thread_ts to reply to an existing thread." >&2
+		return 1
+	fi
+
+	# Handle create_thread logic
+	if [[ "$create_thread" == "true" ]]; then
+		if ((total_block_count <= 1)); then
+			echo "parse_payload:: create_thread is true but only one block provided, continuing as normal" >&2
+		fi
+	fi
+
 	local payload
 	payload=$(jq -n \
 		--arg channel "$CHANNEL" \
 		--argjson blocks "$blocks" \
 		--argjson attachments "$attachments" \
 		'{ "channel": $channel, "blocks": $blocks, "attachments": $attachments }')
+
+	# Add thread_ts to payload if provided and not empty
+	if [[ -n "$thread_ts" && "$thread_ts" != "null" && "$thread_ts" != "empty" ]]; then
+		payload=$(jq --arg thread_ts "$thread_ts" '. + {thread_ts: $thread_ts}' <<<"$payload")
+	fi
 
 	# Validate message text field if present, max 40,000 characters
 	# Ref: https://api.slack.com/changelog/2018-04-truncating-really-long-messages
