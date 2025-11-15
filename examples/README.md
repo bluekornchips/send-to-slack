@@ -36,20 +36,25 @@ Large title blocks for message headers.
 
 ### Image Block
 
-Display images from URLs without requiring file uploads. Supports optional title and block_id fields.
+Display images from URLs or Slack files. Supports optional title and block_id fields.
 
 - Reference: [Slack Image Block Documentation](https://docs.slack.dev/reference/block-kit/blocks/image-block/)
 - Example: [image.yaml](image.yaml)
 
-Required Fields:
+Required Fields (one of the following):
 
-- `image_url` - Publicly accessible image URL
+- `image_url` - Publicly accessible image URL, OR
+- `slack_file` - Slack file object with either:
+  - `url` - Slack file URL (e.g., `https://files.slack.com/files-pri/...`)
+  - `id` - Slack file ID (e.g., `F012345678`)
 - `alt_text` - Plain text description for accessibility (max 2000 characters)
 
 Optional Fields:
 
 - `title` - Plain text title object (max 2000 characters)
 - `block_id` - Unique identifier (max 255 characters)
+
+Note: You cannot use both `image_url` and `slack_file` in the same image block.
 
 ### Divider Block
 

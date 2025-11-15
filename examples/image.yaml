@@ -15,87 +15,52 @@ common_slack_params: &common_slack_params
   channel: notification-testing
 
 jobs:
-  - name: basic-image
+  - name: image-with-url-title-and-block-id
     plan:
       - put: slack-notification
         no_get: true
         params:
           <<: *common_slack_params
+          text: "Testing image block with image_url, title, and block_id"
           blocks:
             - image:
-                image_url: "https://sunflowersoftware.ca/wp-content/uploads/2023/05/cropped-sunflower.gif"
-                alt_text: "A test image placeholder"
-
-  - name: image-with-title
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          <<: *common_slack_params
-          blocks:
-            - image:
-                image_url: "https://sunflowersoftware.ca/wp-content/uploads/2023/05/cropped-sunflower.gif"
-                alt_text: "Success indicator image"
                 title:
                   type: plain_text
-                  text: "Build Success"
+                  text: "Please enjoy this sunflower animation"
+                block_id: "image4"
+                image_url: "https://sunflowersoftware.ca/wp-content/uploads/2023/05/cropped-sunflower.gif"
+                alt_text: "Animated sunflower"
 
-  - name: image-with-block-id
+  - name: image-with-slack-file-url
     plan:
       - put: slack-notification
         no_get: true
         params:
           <<: *common_slack_params
+          text: "Testing image block with slack_file using url"
           blocks:
             - image:
-                image_url: "https://sunflowersoftware.ca/wp-content/uploads/2023/05/cropped-sunflower.gif"
-                alt_text: "Warning indicator image"
-                block_id: "warning_image_123"
-
-  - name: image-multiple-images
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          <<: *common_slack_params
-          blocks:
-            - header:
-                text:
-                  type: plain_text
-                  text: "Image Gallery"
-            - image:
-                image_url: "https://sunflowersoftware.ca/wp-content/uploads/2023/05/cropped-sunflower.gif"
-                alt_text: "First image in gallery"
-            - image:
-                image_url: "https://sunflowersoftware.ca/wp-content/uploads/2023/05/cropped-sunflower.gif"
-                alt_text: "Second image in gallery"
-            - image:
-                image_url: "https://sunflowersoftware.ca/wp-content/uploads/2023/05/cropped-sunflower.gif"
-                alt_text: "Third image in gallery"
-
-  - name: image-with-other-blocks
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          <<: *common_slack_params
-          blocks:
-            - header:
-                text:
-                  type: plain_text
-                  text: "Build Status Report"
-            - section:
-                type: text
-                text:
-                  type: mrkdwn
-                  text: "Build completed successfully. See the build artifacts below."
-            - image:
-                image_url: "https://sunflowersoftware.ca/wp-content/uploads/2023/05/cropped-sunflower.gif"
-                alt_text: "Build artifacts visualization"
                 title:
                   type: plain_text
-                  text: "Build Artifacts"
-            - context:
-                elements:
-                  - type: plain_text
-                    text: "Generated at $(date)"
+                  text: "Please enjoy this sunflower animation"
+                block_id: "image4"
+                slack_file:
+                  url: "https://files.slack.com/files-pri/T0123456-F0123456/xyz.png"
+                alt_text: "Animated sunflower"
+
+  - name: image-with-slack-file-id
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          text: "Testing image block with slack_file using id"
+          blocks:
+            - image:
+                title:
+                  type: plain_text
+                  text: "Please enjoy this sunflower animation"
+                block_id: "image4"
+                slack_file:
+                  id: "F012345678"
+                alt_text: "Animated sunflower"

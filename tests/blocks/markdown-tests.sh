@@ -3,8 +3,6 @@
 # Test file for blocks/markdown.sh
 #
 
-SMOKE_TEST=${SMOKE_TEST:-false}
-
 setup_file() {
 	GIT_ROOT="$(git rev-parse --show-toplevel || echo "")"
 	if [[ -z "$GIT_ROOT" ]]; then
@@ -25,11 +23,6 @@ setup_file() {
 		exit 1
 	fi
 
-	if [[ -n "$SLACK_BOT_USER_OAUTH_TOKEN" ]]; then
-		REAL_TOKEN="$SLACK_BOT_USER_OAUTH_TOKEN"
-		export REAL_TOKEN
-	fi
-
 	export GIT_ROOT
 	export SCRIPT
 	export EXAMPLES_FILE
@@ -47,43 +40,6 @@ setup() {
 }
 
 teardown() {
-	return 0
-}
-
-########################################################
-# Helpers
-########################################################
-
-send_request_to_slack() {
-	[[ "$SMOKE_TEST" != "true" ]] && return 0
-
-	if [[ -z "$REAL_TOKEN" ]]; then
-		skip "SLACK_BOT_USER_OAUTH_TOKEN not set"
-	fi
-
-	local input="$1"
-	local message
-	message=$(jq -c -n --argjson block "$input" '{
-		channel: "notification-testing",
-		blocks: [$block]
-	}')
-
-	local response
-	if ! response=$(curl -s -X POST \
-		-H "Authorization: Bearer $REAL_TOKEN" \
-		-H "Content-Type: application/json; charset=utf-8" \
-		-d "$message" \
-		"https://slack.com/api/chat.postMessage"); then
-
-		echo "Failed to send request to Slack: curl error" >&2
-		return 1
-	fi
-
-	if ! echo "$response" | jq -e '.ok' >/dev/null 2>&1; then
-		echo "Slack API error: $(echo "$response" | jq -r '.error // "unknown"')" >&2
-		return 1
-	fi
-
 	return 0
 }
 
@@ -165,94 +121,4 @@ send_request_to_slack() {
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.type == "markdown"' >/dev/null
 	echo "$output" | jq -e '.text | contains("google.com")' >/dev/null
-}
-
-########################################################
-# smoke tests
-########################################################
-
-smoke_test_setup() {
-	local blocks_json="$1"
-
-	if [[ "$SMOKE_TEST" != "true" ]]; then
-		skip "SMOKE_TEST is not set"
-	fi
-
-	if [[ -z "$REAL_TOKEN" ]]; then
-		skip "SLACK_BOT_USER_OAUTH_TOKEN not set"
-	fi
-
-	local dry_run="false"
-	local channel="notification-testing"
-
-	# Source required scripts
-	source "$GIT_ROOT/bin/parse-payload.sh"
-	SEND_TO_SLACK_SCRIPT="$GIT_ROOT/send-to-slack.sh"
-	source "$SEND_TO_SLACK_SCRIPT"
-
-	SMOKE_TEST_PAYLOAD_FILE=$(mktemp)
-	chmod 0600 "${SMOKE_TEST_PAYLOAD_FILE}"
-
-	jq -n \
-		--argjson blocks "$blocks_json" \
-		--arg channel "$channel" \
-		--arg dry_run "$dry_run" \
-		--arg token "$REAL_TOKEN" \
-		'{
-			source: {
-				slack_bot_user_oauth_token: $token
-			},
-			params: {
-				channel: $channel,
-				blocks: $blocks,
-				dry_run: $dry_run
-			}
-		}' >"$SMOKE_TEST_PAYLOAD_FILE"
-
-	export SMOKE_TEST_PAYLOAD_FILE
-}
-
-smoke_test_teardown() {
-	[[ -n "$SMOKE_TEST_PAYLOAD_FILE" ]] && rm -f "$SMOKE_TEST_PAYLOAD_FILE"
-	return 0
-}
-
-@test "smoke test, markdown block" {
-	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "basic-markdown") | .plan[0].params.blocks' "$EXAMPLES_FILE")
-
-	smoke_test_setup "$blocks_json"
-	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
-		echo "parse_payload failed" >&2
-		return 1
-	fi
-
-	if [[ -z "$parsed_payload" ]]; then
-		echo "parsed_payload is empty" >&2
-		return 1
-	fi
-
-	run send_notification "$parsed_payload"
-	[[ "$status" -eq 0 ]]
-}
-
-@test "smoke test, markdown-with-formatting" {
-	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "markdown-with-formatting") | .plan[0].params.blocks' "$EXAMPLES_FILE")
-
-	smoke_test_setup "$blocks_json"
-	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
-		echo "parse_payload failed" >&2
-		return 1
-	fi
-
-	if [[ -z "$parsed_payload" ]]; then
-		echo "parsed_payload is empty" >&2
-		return 1
-	fi
-
-	run send_notification "$parsed_payload"
-	[[ "$status" -eq 0 ]]
 }

@@ -38,7 +38,7 @@ jobs:
 
       - put: slack-notification
         params:
-          channel: ((slack_channel))
+          channel: notification-testing
           files:
             - path: output/report.txt
               title: "Daily Report"
@@ -172,7 +172,7 @@ jobs:
 
       - put: slack-notification
         params:
-          channel: ((slack_channel))
+          channel: notification-testing
           files:
             - path: output/report_*.txt
               title: "Timestamped Report"

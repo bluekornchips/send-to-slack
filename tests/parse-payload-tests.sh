@@ -108,37 +108,46 @@ create_test_payload() {
 	echo "$output" | grep -q "unsupported block type"
 }
 
-@test "create_block:: basic" {
+@test "create_block:: rich-text-section-with-all-elements" {
 	local block_type block_value
-	block_type=$(yq -r '.jobs[] | select(.name == "basic") | .plan[0].params.blocks[0] | keys[0]' "$RICH_TEXT_EXAMPLES_FILE")
-	block_value=$(yq -o json -r '.jobs[] | select(.name == "basic") | .plan[0].params.blocks[0].'"$block_type" "$RICH_TEXT_EXAMPLES_FILE")
+	block_type=$(yq -r '.jobs[] | select(.name == "rich-text-section-with-all-elements") | .plan[0].params.blocks[0] | keys[0]' "$RICH_TEXT_EXAMPLES_FILE")
+	block_value=$(yq -o json -r '.jobs[] | select(.name == "rich-text-section-with-all-elements") | .plan[0].params.blocks[0].'"$block_type" "$RICH_TEXT_EXAMPLES_FILE")
 
 	run create_block "$block_value" "$block_type"
 	[[ "$status" -eq 0 ]]
 }
 
-@test "create_block:: basic-attachment" {
+@test "create_block:: rich-text-attachment-with-color" {
 	local block_type block_value
-	block_type=$(yq -r '.jobs[] | select(.name == "basic-attachment") | .plan[0].params.blocks[0] | keys[0]' "$RICH_TEXT_EXAMPLES_FILE")
-	block_value=$(yq -o json -r '.jobs[] | select(.name == "basic-attachment") | .plan[0].params.blocks[0].'"$block_type" "$RICH_TEXT_EXAMPLES_FILE")
+	block_type=$(yq -r '.jobs[] | select(.name == "rich-text-attachment-with-color") | .plan[0].params.blocks[0] | keys[0]' "$RICH_TEXT_EXAMPLES_FILE")
+	block_value=$(yq -o json -r '.jobs[] | select(.name == "rich-text-attachment-with-color") | .plan[0].params.blocks[0].'"$block_type" "$RICH_TEXT_EXAMPLES_FILE")
 
 	run create_block "$block_value" "$block_type"
 	[[ "$status" -eq 0 ]]
 }
 
-@test "create_block:: two-rich-text-blocks" {
+@test "create_block:: rich-text-lists-with-all-options" {
 	local block_type block_value
-	block_type=$(yq -r '.jobs[] | select(.name == "two-rich-text-blocks") | .plan[0].params.blocks[0] | keys[0]' "$RICH_TEXT_EXAMPLES_FILE")
-	block_value=$(yq -o json -r '.jobs[] | select(.name == "two-rich-text-blocks") | .plan[0].params.blocks[0].'"$block_type" "$RICH_TEXT_EXAMPLES_FILE")
+	block_type=$(yq -r '.jobs[] | select(.name == "rich-text-lists-with-all-options") | .plan[0].params.blocks[0] | keys[0]' "$RICH_TEXT_EXAMPLES_FILE")
+	block_value=$(yq -o json -r '.jobs[] | select(.name == "rich-text-lists-with-all-options") | .plan[0].params.blocks[0].'"$block_type" "$RICH_TEXT_EXAMPLES_FILE")
 
 	run create_block "$block_value" "$block_type"
 	[[ "$status" -eq 0 ]]
 }
 
-@test "create_block:: rich-text-block-and-attachment" {
+@test "create_block:: multiple-rich-text-blocks" {
 	local block_type block_value
-	block_type=$(yq -r '.jobs[] | select(.name == "rich-text-block-and-attachment") | .plan[0].params.blocks[0] | keys[0]' "$RICH_TEXT_EXAMPLES_FILE")
-	block_value=$(yq -o json -r '.jobs[] | select(.name == "rich-text-block-and-attachment") | .plan[0].params.blocks[0].'"$block_type" "$RICH_TEXT_EXAMPLES_FILE")
+	block_type=$(yq -r '.jobs[] | select(.name == "multiple-rich-text-blocks") | .plan[0].params.blocks[0] | keys[0]' "$RICH_TEXT_EXAMPLES_FILE")
+	block_value=$(yq -o json -r '.jobs[] | select(.name == "multiple-rich-text-blocks") | .plan[0].params.blocks[0].'"$block_type" "$RICH_TEXT_EXAMPLES_FILE")
+
+	run create_block "$block_value" "$block_type"
+	[[ "$status" -eq 0 ]]
+}
+
+@test "create_block:: rich-text-preformatted-and-quote" {
+	local block_type block_value
+	block_type=$(yq -r '.jobs[] | select(.name == "rich-text-preformatted-and-quote") | .plan[0].params.blocks[0] | keys[0]' "$RICH_TEXT_EXAMPLES_FILE")
+	block_value=$(yq -o json -r '.jobs[] | select(.name == "rich-text-preformatted-and-quote") | .plan[0].params.blocks[0].'"$block_type" "$RICH_TEXT_EXAMPLES_FILE")
 
 	run create_block "$block_value" "$block_type"
 	[[ "$status" -eq 0 ]]
@@ -1028,107 +1037,4 @@ create_test_payload() {
 	payload_output=$(parse_payload "$TEST_PAYLOAD_FILE")
 	# Already formatted timestamp should be returned as-is
 	echo "$payload_output" | jq -e '.thread_ts == "1763178414.211229"' >/dev/null
-}
-
-########################################################
-# Smoke Tests
-########################################################
-
-smoke_test_setup() {
-	local params_json="$1"
-
-	if [[ "$SMOKE_TEST" != "true" ]]; then
-		skip "SMOKE_TEST is not set"
-	fi
-
-	if [[ -z "$REAL_TOKEN" ]]; then
-		skip "SLACK_BOT_USER_OAUTH_TOKEN not set"
-	fi
-
-	local dry_run="false"
-	local channel="notification-testing"
-
-	SMOKE_TEST_PAYLOAD_FILE=$(mktemp)
-	chmod 0600 "${SMOKE_TEST_PAYLOAD_FILE}"
-
-	jq -n \
-		--arg token "$REAL_TOKEN" \
-		--arg channel "$channel" \
-		--arg dry_run "$dry_run" \
-		--argjson params "$params_json" \
-		'{
-			source: {
-				slack_bot_user_oauth_token: $token
-			},
-			params: $params
-		}' >"$SMOKE_TEST_PAYLOAD_FILE"
-
-	export SMOKE_TEST_PAYLOAD_FILE
-}
-
-@test "smoke test, params.raw" {
-	local raw_params
-	raw_params='{"channel": "notification-testing", "dry_run": "false", "blocks": [{"section": {"type": "text", "text": {"type": "plain_text", "text": "Smoke test for params.raw"}}}] }'
-
-	local params_json
-	params_json=$(jq -n --arg raw "$raw_params" '{ raw: $raw }')
-
-	smoke_test_setup "$params_json"
-	local payload_output
-	if ! payload_output=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
-		echo "parse_payload failed" >&2
-		return 1
-	fi
-
-	if [[ -z "$payload_output" ]]; then
-		echo "payload output is empty" >&2
-		return 1
-	fi
-
-	echo "$payload_output" | jq -e '.channel == "notification-testing"' >/dev/null
-	echo "$payload_output" | jq -e '.blocks[0].type == "section"' >/dev/null
-	echo "$payload_output" | jq -e '.blocks[0].text.type == "plain_text"' >/dev/null
-	echo "$payload_output" | jq -e '.blocks[0].text.text == "Smoke test for params.raw"' >/dev/null
-}
-
-@test "smoke test, params.from_file" {
-	local payload_file
-	payload_file=$(mktemp)
-
-	jq -n \
-		'{
-			channel: "notification-testing",
-			dry_run: "false",
-			blocks: [{
-				section: {
-					type: "text",
-					text: {
-						type: "plain_text",
-						text: "Smoke test for params.from_file"
-					}
-				}
-			}]
-		}' >"$payload_file"
-
-	local params_json
-	params_json=$(jq -n --arg file "$payload_file" '{ from_file: $file }')
-
-	smoke_test_setup "$params_json"
-	local payload_output
-	if ! payload_output=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
-		echo "parse_payload failed" >&2
-		return 1
-	fi
-
-	if [[ -z "$payload_output" ]]; then
-		echo "payload output is empty" >&2
-		return 1
-	fi
-
-	echo "$payload_output" | jq -e '.channel == "notification-testing"' >/dev/null
-	echo "$payload_output" | jq -e '.blocks[0].type == "section"' >/dev/null
-	echo "$payload_output" | jq -e '.blocks[0].text.type == "plain_text"' >/dev/null
-	echo "$payload_output" | jq -e '.blocks[0].text.text == "Smoke test for params.from_file"' >/dev/null
-
-	rm -f "$payload_file"
 }

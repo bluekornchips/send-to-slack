@@ -15,101 +15,55 @@ common_slack_params: &common_slack_params
   channel: notification-testing
 
 jobs:
-  - name: basic-divider
+  - name: divider-basic-separator
     plan:
       - put: slack-notification
         no_get: true
         params:
           <<: *common_slack_params
-          blocks:
-            - divider: {}
-
-  - name: divider-with-block-id
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          <<: *common_slack_params
-          blocks:
-            - divider:
-                block_id: "section_separator"
-
-  - name: divider-with-sections
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          <<: *common_slack_params
-          text: "Report sections"
+          text: "Testing divider block as basic content separator"
           blocks:
             - section:
                 type: text
                 text:
                   type: mrkdwn
-                  text: "*Summary*"
+                  text: "Content above the divider"
             - divider: {}
             - section:
                 type: text
                 text:
                   type: mrkdwn
-                  text: "*Details*"
-            - divider: {}
-            - section:
-                type: text
-                text:
-                  type: mrkdwn
-                  text: "*Conclusion*"
+                  text: "Content below the divider"
 
-  - name: divider-multiple
+  - name: divider-with-block-id-separating-sections
     plan:
       - put: slack-notification
         no_get: true
         params:
           <<: *common_slack_params
-          text: "Multiple sections example"
+          text: "Testing divider block with block_id separating multiple sections"
           blocks:
             - header:
                 text:
                   type: plain_text
-                  text: "Report"
+                  text: "Report Sections"
             - divider:
-                block_id: "header_separator"
+                block_id: "header_section_divider"
             - section:
                 type: text
                 text:
                   type: mrkdwn
-                  text: "Section 1"
+                  text: "*Summary*\nFirst section content"
             - divider:
-                block_id: "first_section_separator"
+                block_id: "summary_details_divider"
             - section:
                 type: text
                 text:
                   type: mrkdwn
-                  text: "Section 2"
+                  text: "*Details*\nSecond section content"
             - divider:
-                block_id: "second_section_separator"
+                block_id: "details_footer_divider"
             - context:
                 elements:
                   - type: plain_text
-                    text: "Auto-generated report"
-
-  - name: divider-in-context
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          <<: *common_slack_params
-          text: "Divider example"
-          blocks:
-            - section:
-                type: text
-                text:
-                  type: mrkdwn
-                  text: "Content before divider"
-            - divider: {}
-            - context:
-                elements:
-                  - type: plain_text
-                    text: "Context after divider"
-                  - type: mrkdwn
-                    text: "*Time:* $(date)"
+                    text: "Report footer information"

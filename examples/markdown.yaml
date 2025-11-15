@@ -15,17 +15,7 @@ common_slack_params: &common_slack_params
   channel: notification-testing
 
 jobs:
-  - name: basic-markdown
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          <<: *common_slack_params
-          blocks:
-            - markdown:
-                text: "**Example markdown text**"
-
-  - name: markdown-with-formatting
+  - name: markdown-build-notification
     plan:
       - put: slack-notification
         no_get: true
@@ -34,9 +24,18 @@ jobs:
           blocks:
             - markdown:
                 text: |
-                  *This text is italicized* and **this is bold**
+                  **Build Status Report**
 
-                  - First item in list
-                  - Second item in list
+                  Build *#1234* completed *successfully* in `2m 34s`
 
-                  [Link to Google](https://www.google.com)
+                  **Test Results:**
+                  - Unit tests: 245 passed
+                  - Integration tests: 18 passed
+                  - E2E tests: 12 passed
+
+                  **Deployment:**
+                  - Environment: production
+                  - Version: v1.2.3
+                  - Commit: [abc123def](https://github.com/org/repo/commit/abc123def)
+
+                  See [full build logs](https://ci.example.com/builds/1234) for details.

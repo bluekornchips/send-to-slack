@@ -15,103 +15,65 @@ common_slack_params: &common_slack_params
   channel: notification-testing
 
 jobs:
-  - name: section-plain-text
+  - name: section-with-mrkdwn-text-and-button-accessory
     plan:
       - put: slack-notification
         no_get: true
         params:
           <<: *common_slack_params
-          blocks:
-            - section:
-                type: text
-                text:
-                  type: plain_text
-                  text: "Hello, world! This is a plain text section."
-
-  - name: section-mrkdwn
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          <<: *common_slack_params
+          text: "Testing section block with mrkdwn text and button accessory"
           blocks:
             - section:
                 type: text
                 text:
                   type: mrkdwn
-                  text: "Hello, world! This is a *markdown* section."
+                  text: "A message *with some bold text* and _some italicized text_."
+                block_id: "section_mrkdwn_text_001"
+                accessory:
+                  type: button
+                  text:
+                    type: plain_text
+                    text: "Approve"
+                  action_id: "approve_action"
+                  style: "primary"
 
-  - name: section-with-block-id
+  - name: section-with-fields-array-and-block-id
     plan:
       - put: slack-notification
         no_get: true
         params:
           <<: *common_slack_params
+          text: "Testing section block with fields array (side-by-side text) and block_id"
+          blocks:
+            - section:
+                type: fields
+                block_id: "section_fields_001"
+                fields:
+                  - type: mrkdwn
+                    text: "*Priority*"
+                  - type: mrkdwn
+                    text: "*Type*"
+                  - type: plain_text
+                    text: "High"
+                  - type: plain_text
+                    text: "String"
+
+  - name: section-with-plain-text-expand-and-image-accessory
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          text: "Testing section block with plain_text, expand field, and image accessory"
           blocks:
             - section:
                 type: text
                 text:
                   type: plain_text
-                  text: "Section with block ID"
-                block_id: "section_123"
-
-  - name: section-long-text
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          <<: *common_slack_params
-          blocks:
-            - section:
-                type: text
-                text:
-                  type: plain_text
-                  text: "This is a longer section block example. Section blocks can display text of any length up to 3000 characters."
-
-  - name: section-mrkdwn-formatted
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          <<: *common_slack_params
-          blocks:
-            - section:
-                type: text
-                text:
-                  type: mrkdwn
-                  text: "Build *succeeded* in `2m 34s`. See <https://example.com|logs> for details."
-
-  - name: section-fields
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          <<: *common_slack_params
-          blocks:
-            - section:
-                type: fields
-                fields:
-                  - type: plain_text
-                    text: "Status: Success"
-                  - type: mrkdwn
-                    text: "*Build:* #123"
-                  - type: plain_text
-                    text: "Duration: 2m 34s"
-                  - type: mrkdwn
-                    text: "*Branch:* main"
-
-  - name: section-fields-with-block-id
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          <<: *common_slack_params
-          blocks:
-            - section:
-                type: fields
-                fields:
-                  - type: plain_text
-                    text: "Field 1"
-                  - type: plain_text
-                    text: "Field 2"
-                block_id: "fields_section_123"
+                  text: "This section demonstrates the expand field. When expand is set to true, the full text will always be displayed without requiring users to click 'see more'. This is particularly useful for AI Assistant apps that need to post detailed information, error logs, or comprehensive status reports that should be immediately visible to users."
+                block_id: "section_expand_001"
+                expand: true
+                accessory:
+                  type: image
+                  image_url: "https://sunflowersoftware.ca/wp-content/uploads/2023/05/cropped-sunflower.gif"
+                  alt_text: "Sunflower"

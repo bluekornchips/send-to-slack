@@ -15,76 +15,34 @@ common_slack_params: &common_slack_params
   channel: notification-testing
 
 jobs:
-  - name: basic-header
+  - name: header-with-plain-text-only
     plan:
       - put: slack-notification
         no_get: true
         params:
           <<: *common_slack_params
+          text: "Testing header block with plain_text only"
           blocks:
             - header:
                 text:
                   type: plain_text
-                  text: "Build Report"
+                  text: "A Heartfelt Header"
 
-  - name: header-with-block-id
+  - name: header-with-block-id-and-maximum-text
     plan:
       - put: slack-notification
         no_get: true
         params:
           <<: *common_slack_params
+          text: "Testing header block with block_id and maximum length text (150 characters)"
           blocks:
             - header:
                 text:
                   type: plain_text
-                  text: "Deployment Report"
-                block_id: "deployment_header"
-
-  - name: header-long-text
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          <<: *common_slack_params
-          blocks:
-            - header:
-                text:
-                  type: plain_text
-                  text: "System Health Check"
-
-  - name: header-with-sections
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          <<: *common_slack_params
-          blocks:
-            - header:
-                text:
-                  type: plain_text
-                  text: "Weekly Report"
+                  text: "This header demonstrates the maximum allowed length of exactly 150 characters for header text blocks in Slack Block Kit format which is the limit here"
+                block_id: "header_with_block_id_001"
             - section:
                 type: text
                 text:
-                  type: plain_text
-                  text: "Weekly report summary"
-
-  - name: header-multiple-headers
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          <<: *common_slack_params
-          blocks:
-            - header:
-                text:
-                  type: plain_text
-                  text: "Performance"
-            - header:
-                text:
-                  type: plain_text
-                  text: "Security"
-            - header:
-                text:
-                  type: plain_text
-                  text: "Compliance"
+                  type: mrkdwn
+                  text: "Header block with `block_id` allows you to identify and reference this block in interaction payloads."

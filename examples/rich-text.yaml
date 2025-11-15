@@ -1,5 +1,3 @@
-# Example Concourse CI pipeline for Slack rich text blocks
-
 resource_types:
   - name: slack
     type: docker-image
@@ -13,9 +11,8 @@ resources:
     source:
       slack_bot_user_oauth_token: ((SLACK_BOT_USER_OAUTH_TOKEN))
 
-# A single rich text block
 jobs:
-  - name: basic
+  - name: rich-text-section-with-all-elements
     plan:
       - put: slack-notification
         no_get: true
@@ -23,55 +20,97 @@ jobs:
           channel: notification-testing
           blocks:
             - rich-text:
+                block_id: "comprehensive_section_example"
                 elements:
                   - type: rich_text_section
                     elements:
                       - type: text
-                        text: "Example rich text block"
-
-  # A rich text block as an attachment
-  - name: basic-attachment
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          channel: notification-testing
-          blocks:
-            - rich-text:
-                color: "#00FF00"
-                elements:
-                  - type: rich_text_section
-                    elements:
+                        text: "Testing rich text section with all element types: "
                       - type: text
-                        text: "Example rich text block as attachment"
-
-  # Two rich text blocks. Each block is output in a different line within the same message.
-  - name: two-rich-text-blocks
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          channel: notification-testing
-          blocks:
-            - rich-text:
-                elements:
-                  - type: rich_text_section
-                    elements:
-                      - type: text
-                        text: "Italic text example"
-                        style:
-                          italic: true
-            - rich-text:
-                elements:
-                  - type: rich_text_section
-                    elements:
-                      - type: text
-                        text: "Bold text example"
+                        text: "bold"
                         style:
                           bold: true
+                      - type: text
+                        text: ", "
+                      - type: text
+                        text: "italic"
+                        style:
+                          italic: true
+                      - type: text
+                        text: ", "
+                      - type: text
+                        text: "strikethrough"
+                        style:
+                          strike: true
+                      - type: text
+                        text: ", and "
+                      - type: text
+                        text: "code"
+                        style:
+                          code: true
+                      - type: text
+                        text: " styles. Links: "
+                      - type: link
+                        url: "https://slack.com"
+                        text: "Slack Documentation"
+                        style:
+                          bold: true
+                      - type: text
+                        text: " and "
+                      - type: link
+                        url: "https://example.com"
+                      - type: text
+                        text: ". Emojis: "
+                      - type: emoji
+                        name: "rocket"
+                      - type: text
+                        text: " "
+                      - type: emoji
+                        name: "tada"
+                        unicode: "1f389"
+                      - type: text
+                        text: " "
+                      - type: emoji
+                        name: "wave"
+                      - type: text
+                        text: ". User mentions: "
+                      - type: user
+                        user_id: "U12345678"
+                      - type: text
+                        text: " and "
+                      - type: user
+                        user_id: "U87654321"
+                        style:
+                          bold: true
+                          italic: true
+                      - type: text
+                        text: ". Broadcast: "
+                      - type: broadcast
+                        range: "channel"
+                      - type: text
+                        text: ". Color: "
+                      - type: color
+                        value: "#FF0000"
+                      - type: text
+                        text: ". Channel: "
+                      - type: channel
+                        channel_id: "C12345678"
+                      - type: text
+                        text: " and "
+                      - type: channel
+                        channel_id: "C87654321"
+                        style:
+                          bold: true
+                          highlight: true
+                      - type: text
+                        text: ". Date: "
+                      - type: date
+                        timestamp: 1704067200
+                        format: "{date_long}"
+                        url: "https://example.com/date"
+                        fallback: "December 1, 2023"
 
-  # A rich text block and an attachment. The attachment is output in a different line within the same message.
-  - name: rich-text-block-and-attachment
+  - name: rich-text-lists-with-all-options
     plan:
       - put: slack-notification
         no_get: true
@@ -79,15 +118,183 @@ jobs:
           channel: notification-testing
           blocks:
             - rich-text:
+                block_id: "lists_example"
                 elements:
                   - type: rich_text_section
                     elements:
                       - type: text
-                        text: "Rich text block example"
+                        text: "Testing rich text lists with all options"
+                  - type: rich_text_list
+                    style: bullet
+                    indent: 0
+                    border: 1
+                    elements:
+                      - type: rich_text_section
+                        elements:
+                          - type: text
+                            text: "Bullet list item with "
+                          - type: text
+                            text: "bold"
+                            style:
+                              bold: true
+                          - type: text
+                            text: " text"
+                      - type: rich_text_section
+                        elements:
+                          - type: text
+                            text: "Nested formatting with "
+                          - type: link
+                            url: "https://example.com"
+                            text: "link"
+                          - type: text
+                            text: " and "
+                          - type: emoji
+                            name: "check"
+                      - type: rich_text_section
+                        elements:
+                          - type: text
+                            text: "Third item with "
+                          - type: user
+                            user_id: "U12345678"
+                  - type: rich_text_list
+                    style: ordered
+                    indent: 7
+                    offset: 5
+                    border: 1
+                    elements:
+                      - type: rich_text_section
+                        elements:
+                          - type: text
+                            text: "Ordered list starting at 5"
+                      - type: rich_text_section
+                        elements:
+                          - type: text
+                            text: "With indent and border"
+                      - type: rich_text_section
+                        elements:
+                          - type: text
+                            text: "Third numbered item"
+
+  - name: rich-text-preformatted-and-quote
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          channel: notification-testing
+          blocks:
             - rich-text:
-                color: "#00FF00"
+                block_id: "preformatted_quote_example"
                 elements:
                   - type: rich_text_section
                     elements:
                       - type: text
-                        text: "Attachment text block example"
+                        text: "Testing rich text preformatted and quote blocks"
+                  - type: rich_text_preformatted
+                    border: 1
+                    elements:
+                      - type: text
+                        text: "npm install --save-dev"
+                      - type: text
+                        text: "\n"
+                      - type: text
+                        text: "npm run build"
+                        style:
+                          code: true
+                      - type: text
+                        text: "\n"
+                      - type: text
+                        text: "npm test"
+                  - type: rich_text_quote
+                    border: 1
+                    elements:
+                      - type: text
+                        text: "This is a quoted message with "
+                      - type: text
+                        text: "formatting"
+                        style:
+                          italic: true
+                      - type: text
+                        text: " and "
+                      - type: link
+                        url: "https://example.com"
+                        text: "links"
+                      - type: text
+                        text: "."
+
+  - name: rich-text-attachment-with-color
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          channel: notification-testing
+          blocks:
+            - rich-text:
+                color: "#36a64f"
+                block_id: "attachment_example"
+                elements:
+                  - type: rich_text_section
+                    elements:
+                      - type: text
+                        text: "Testing rich text block as attachment with color"
+                      - type: text
+                        text: "\n\n"
+                      - type: text
+                        text: "Status: "
+                      - type: text
+                        text: "SUCCESS"
+                        style:
+                          bold: true
+                      - type: text
+                        text: "\n"
+                      - type: text
+                        text: "Build: "
+                      - type: link
+                        url: "https://ci.example.com/builds/123"
+                        text: "#123"
+                      - type: text
+                        text: "\n"
+                      - type: text
+                        text: "Duration: "
+                      - type: text
+                        text: "2m 34s"
+                        style:
+                          italic: true
+
+  - name: multiple-rich-text-blocks
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          channel: notification-testing
+          blocks:
+            - rich-text:
+                block_id: "first_block"
+                elements:
+                  - type: rich_text_section
+                    elements:
+                      - type: text
+                        text: "Testing multiple rich text blocks in one message"
+                        style:
+                          bold: true
+            - rich-text:
+                block_id: "second_block"
+                elements:
+                  - type: rich_text_section
+                    elements:
+                      - type: text
+                        text: "Second block with "
+                      - type: emoji
+                        name: "rocket"
+                      - type: text
+                        text: " and "
+                      - type: link
+                        url: "https://example.com"
+                        text: "link"
+            - rich-text:
+                color: "#FF0000"
+                block_id: "third_block_attachment"
+                elements:
+                  - type: rich_text_section
+                    elements:
+                      - type: text
+                        text: "Third block as colored attachment"

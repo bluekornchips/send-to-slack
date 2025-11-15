@@ -3,8 +3,6 @@
 # Test file for blocks/section.sh
 #
 
-SMOKE_TEST=${SMOKE_TEST:-false}
-
 setup_file() {
 	GIT_ROOT="$(git rev-parse --show-toplevel || echo "")"
 	if [[ -z "$GIT_ROOT" ]]; then
@@ -25,17 +23,9 @@ setup_file() {
 		exit 1
 	fi
 
-	if [[ -n "$SLACK_BOT_USER_OAUTH_TOKEN" ]]; then
-		REAL_TOKEN="$SLACK_BOT_USER_OAUTH_TOKEN"
-		export REAL_TOKEN
-	fi
-
-	SEND_TO_SLACK_SCRIPT="$GIT_ROOT/send-to-slack.sh"
-
 	export GIT_ROOT
 	export SCRIPT
 	export EXAMPLES_FILE
-	export SEND_TO_SLACK_SCRIPT
 
 	return 0
 }
@@ -50,7 +40,6 @@ setup() {
 }
 
 teardown() {
-	smoke_test_teardown
 	return 0
 }
 
@@ -73,44 +62,6 @@ mock_create_fields_section() {
 		return 0
 	}
 	export -f create_fields_section
-}
-
-########################################################
-# Helpers
-########################################################
-
-send_request_to_slack() {
-	[[ "$SMOKE_TEST" != "true" ]] && return 0
-
-	if [[ -z "$REAL_TOKEN" ]]; then
-		skip "SLACK_BOT_USER_OAUTH_TOKEN not set"
-	fi
-
-	local input="$1"
-	# Create proper Slack message structure with the section block in blocks array
-	local message
-	message=$(jq -c -n --argjson block "$input" '{
-		channel: "notification-testing",
-		blocks: [$block]
-	}')
-
-	local response
-	if ! response=$(curl -s -X POST \
-		-H "Authorization: Bearer $REAL_TOKEN" \
-		-H "Content-Type: application/json; charset=utf-8" \
-		-d "$message" \
-		"https://slack.com/api/chat.postMessage"); then
-
-		echo "Failed to send request to Slack: curl error" >&2
-		return 1
-	fi
-
-	if ! echo "$response" | jq -e '.ok' >/dev/null 2>&1; then
-		echo "Slack API error: $(echo "$response" | jq -r '.error // "unknown"')" >&2
-		return 1
-	fi
-
-	return 0
 }
 
 ########################################################
@@ -144,16 +95,16 @@ EOF
 	echo "$output" | grep -q "Hello, world!"
 }
 
-@test "create_text_section:: from example" {
+@test "create_text_section:: from example with markdown" {
 	local section_json
-	section_json=$(yq -o json -r '.jobs[] | select(.name == "section-plain-text") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
+	section_json=$(yq -o json -r '.jobs[] | select(.name == "section-with-mrkdwn-text-and-button-accessory") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
 	local test_text
 	test_text=$(echo "$section_json" | jq -r '.text')
 
 	run create_text_section "$test_text"
 	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "Hello, world!"
-	echo "$output" | grep -q "plain text section"
+	echo "$output" | grep -q "bold text"
+	echo "$output" | grep -q "italicized text"
 }
 
 @test "create_text_section:: mrkdwn" {
@@ -259,23 +210,39 @@ EOF
 	[[ "$status" -eq 0 ]]
 }
 
-@test "create_section:: text section from example" {
-	TEST_INPUT=$(yq -o json -r '.jobs[] | select(.name == "section-plain-text") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
-
-	run create_section <<<"$TEST_INPUT"
-	[[ "$status" -eq 0 ]]
-	echo "$output" | jq -e '.type == "section"' >/dev/null
-	send_request_to_slack "$output"
-}
-
-@test "create_section:: mrkdwn section from example" {
-	TEST_INPUT=$(yq -o json -r '.jobs[] | select(.name == "section-mrkdwn") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
+@test "create_section:: text section with markdown and button accessory from example" {
+	TEST_INPUT=$(yq -o json -r '.jobs[] | select(.name == "section-with-mrkdwn-text-and-button-accessory") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
 
 	run create_section <<<"$TEST_INPUT"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.type == "section"' >/dev/null
 	echo "$output" | jq -e '.text.type == "mrkdwn"' >/dev/null
-	send_request_to_slack "$output"
+	echo "$output" | jq -e '.text.text | contains("bold text")' >/dev/null
+	echo "$output" | jq -e '.accessory.type == "button"' >/dev/null
+	echo "$output" | jq -e '.block_id == "section_mrkdwn_text_001"' >/dev/null
+}
+
+@test "create_section:: fields section with block_id from example" {
+	TEST_INPUT=$(yq -o json -r '.jobs[] | select(.name == "section-with-fields-array-and-block-id") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
+
+	run create_section <<<"$TEST_INPUT"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.type == "section"' >/dev/null
+	echo "$output" | jq -e '.fields != null' >/dev/null
+	echo "$output" | jq -e '.fields | length == 4' >/dev/null
+	echo "$output" | jq -e '.block_id == "section_fields_001"' >/dev/null
+}
+
+@test "create_section:: text section with expand and image accessory from example" {
+	TEST_INPUT=$(yq -o json -r '.jobs[] | select(.name == "section-with-plain-text-expand-and-image-accessory") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
+
+	run create_section <<<"$TEST_INPUT"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.type == "section"' >/dev/null
+	echo "$output" | jq -e '.text.type == "plain_text"' >/dev/null
+	echo "$output" | jq -e '.block_id == "section_expand_001"' >/dev/null
+	echo "$output" | jq -e '.expand == true' >/dev/null
+	echo "$output" | jq -e '.accessory.type == "image"' >/dev/null
 }
 
 @test "create_fields_section:: handles no input" {
@@ -367,7 +334,6 @@ EOF
 	echo "$output" | jq -e '.type == "section"' >/dev/null
 	echo "$output" | jq -e '.fields != null' >/dev/null
 	echo "$output" | jq -e '.fields | length == 2' >/dev/null
-	send_request_to_slack "$output"
 }
 
 @test "create_section:: fields section with block_id" {
@@ -412,91 +378,46 @@ EOF
 	echo "$output" | grep -q "section cannot have both text and fields"
 }
 
-########################################################
-# smoke tests
-########################################################
+@test "create_section:: text section with expand false" {
+	local test_yaml
+	test_yaml=$(
+		cat <<EOF
+type: text
+text:
+  type: plain_text
+  text: "Test message"
+expand: false
+EOF
+	)
 
-smoke_test_setup() {
-	local blocks_json="$1"
+	local test_input
+	test_input=$(yq -o json <<<"$test_yaml")
 
-	if [[ "$SMOKE_TEST" != "true" ]]; then
-		skip "SMOKE_TEST is not set"
-	fi
-
-	if [[ -z "$REAL_TOKEN" ]]; then
-		skip "SLACK_BOT_USER_OAUTH_TOKEN not set"
-	fi
-
-	local dry_run="false"
-	local channel="notification-testing"
-
-	# Source required scripts
-	source "$GIT_ROOT/bin/parse-payload.sh"
-	source "$SEND_TO_SLACK_SCRIPT"
-
-	SMOKE_TEST_PAYLOAD_FILE=$(mktemp)
-	chmod 0600 "${SMOKE_TEST_PAYLOAD_FILE}"
-
-	jq -n \
-		--argjson blocks "$blocks_json" \
-		--arg channel "$channel" \
-		--arg dry_run "$dry_run" \
-		--arg token "$REAL_TOKEN" \
-		'{
-			source: {
-				slack_bot_user_oauth_token: $token
-			},
-			params: {
-				channel: $channel,
-				blocks: $blocks,
-				dry_run: $dry_run
-			}
-		}' >"$SMOKE_TEST_PAYLOAD_FILE"
-
-	export SMOKE_TEST_PAYLOAD_FILE
-}
-
-smoke_test_teardown() {
-	[[ -n "$SMOKE_TEST_PAYLOAD_FILE" ]] && rm -f "$SMOKE_TEST_PAYLOAD_FILE"
-	return 0
-}
-
-@test "smoke test, section block" {
-	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "section-plain-text") | .plan[0].params.blocks' "$EXAMPLES_FILE")
-
-	smoke_test_setup "$blocks_json"
-	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
-		echo "parse_payload failed" >&2
-		return 1
-	fi
-
-	if [[ -z "$parsed_payload" ]]; then
-		echo "parsed_payload is empty" >&2
-		return 1
-	fi
-
-	run send_notification "$parsed_payload"
+	run create_section <<<"$test_input"
 	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.expand == false' >/dev/null
 }
 
-@test "smoke test, section block with fields" {
-	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "section-fields") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+@test "create_section:: text section with accessory image" {
+	local test_yaml
+	test_yaml=$(
+		cat <<EOF
+type: text
+text:
+  type: plain_text
+  text: "Check out this image"
+accessory:
+  type: image
+  image_url: "https://example.com/image.png"
+  alt_text: "Example image"
+EOF
+	)
 
-	smoke_test_setup "$blocks_json"
-	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
-		echo "parse_payload failed" >&2
-		return 1
-	fi
+	local test_input
+	test_input=$(yq -o json <<<"$test_yaml")
 
-	if [[ -z "$parsed_payload" ]]; then
-		echo "parsed_payload is empty" >&2
-		return 1
-	fi
-
-	run send_notification "$parsed_payload"
+	run create_section <<<"$test_input"
 	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.accessory.type == "image"' >/dev/null
+	echo "$output" | jq -e '.accessory.image_url == "https://example.com/image.png"' >/dev/null
 }
