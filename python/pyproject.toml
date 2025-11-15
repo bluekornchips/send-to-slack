@@ -4,4 +4,6 @@ requires-python = ">=3.9"
 dependencies = [
     "flask>=3.0.0",
     "requests>=2.31.0",
+    "boto3>=1.28.0",
+    "botocore>=1.31.0",
 ]

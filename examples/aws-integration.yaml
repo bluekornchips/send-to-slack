@@ -1,0 +1,183 @@
+---
+# Example: AWS Integration with Slack Block Kit
+# Demonstrates actions that trigger K8s APIs and S3 content sharing
+
+resource_types:
+  - name: slack
+    type: docker-image
+    source:
+      repository: sunflowersoftware/send-to-slack
+      tag: latest
+
+resources:
+  - name: slack-notification
+    type: slack
+    source:
+      slack_bot_user_oauth_token: ((SLACK_BOT_USER_OAUTH_TOKEN))
+
+common_slack_params: &common_slack_params
+  channel: notification-testing
+
+jobs:
+  # Example 1: K8s Deployment Action
+  - name: k8s-deploy-action
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: |
+                    🚀 *Deploy New Version*
+                    
+                    Ready to deploy v2.1.0 to production?
+            - actions:
+                elements:
+                  - type: button
+                    text:
+                      type: plain_text
+                      text: "Deploy to Production"
+                    action_id: k8s_deploy
+                    value: '{"namespace":"production","deployment":"app-v2","version":"2.1.0"}'
+                    style: primary
+                  - type: button
+                    text:
+                      type: plain_text
+                      text: "Cancel"
+                    action_id: cancel
+                    style: danger
+
+  # Example 2: K8s Scale Action
+  - name: k8s-scale-action
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "Scale deployment replicas"
+            - actions:
+                elements:
+                  - type: button
+                    text:
+                      type: plain_text
+                      text: "Scale Up (+2)"
+                    action_id: k8s_scale
+                    value: '{"namespace":"production","deployment":"app","replicas":5}'
+                    style: primary
+                  - type: button
+                    text:
+                      type: plain_text
+                      text: "Scale Down (-2)"
+                    action_id: k8s_scale
+                    value: '{"namespace":"production","deployment":"app","replicas":1}'
+                    style: danger
+
+  # Example 3: S3 File Link
+  - name: s3-file-link
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "📊 Report Available"
+            - actions:
+                elements:
+                  - type: button
+                    text:
+                      type: plain_text
+                      text: "View Report"
+                    action_id: s3_share_link
+                    value: '{"key":"reports/daily-report-2024-01-15.pdf","title":"Daily Report"}'
+                    style: primary
+
+  # Example 4: S3 Image Display
+  - name: s3-image-display
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "📈 Performance Dashboard"
+            - actions:
+                elements:
+                  - type: button
+                    text:
+                      type: plain_text
+                      text: "Show Dashboard"
+                    action_id: s3_share_image
+                    value: '{"key":"dashboards/performance-2024-01-15.png","alt_text":"Performance Dashboard"}'
+                    style: primary
+
+  # Example 5: S3 File Upload to Slack
+  - name: s3-upload-to-slack
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "📎 Archive Available"
+            - actions:
+                elements:
+                  - type: button
+                    text:
+                      type: plain_text
+                      text: "Upload to Slack"
+                    action_id: s3_upload
+                    value: '{"key":"archives/build-artifacts-2024-01-15.tar.gz","title":"Build Artifacts"}'
+                    style: primary
+
+  # Example 6: Combined K8s Status and S3 Logs
+  - name: k8s-status-with-logs
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: |
+                    🔍 *Check Deployment Status*
+                    
+                    Get current status and view logs
+            - actions:
+                elements:
+                  - type: button
+                    text:
+                      type: plain_text
+                      text: "Get Status"
+                    action_id: k8s_status
+                    value: '{"namespace":"production","deployment":"app"}'
+                    style: primary
+                  - type: button
+                    text:
+                      type: plain_text
+                      text: "View Logs"
+                    action_id: s3_share_link
+                    value: '{"key":"logs/app-production-2024-01-15.log","title":"Application Logs"}'
