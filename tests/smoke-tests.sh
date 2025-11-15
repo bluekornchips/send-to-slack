@@ -80,10 +80,10 @@ smoke_test_setup() {
 # Table block smoke tests
 ########################################################
 
-@test "smoke test, table basic" {
+@test "smoke test, table basic with raw_text cells" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/table.yaml"
 	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "basic") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "table-basic-with-raw-text-cells") | .plan[0].params.blocks' "$EXAMPLES_FILE")
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
@@ -101,73 +101,10 @@ smoke_test_setup() {
 	[[ "$status" -eq 0 ]]
 }
 
-@test "smoke test, table basic-colored" {
+@test "smoke test, table with all features column settings block_id and rich_text" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/table.yaml"
 	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "basic-colored") | .plan[0].params.blocks' "$EXAMPLES_FILE")
-
-	smoke_test_setup "$blocks_json"
-	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
-		echo "parse_payload failed" >&2
-		return 1
-	fi
-
-	if [[ -z "$parsed_payload" ]]; then
-		echo "parsed_payload is empty" >&2
-		return 1
-	fi
-
-	run send_notification "$parsed_payload"
-	[[ "$status" -eq 0 ]]
-}
-
-@test "smoke test, table with-block-id" {
-	local EXAMPLES_FILE="$GIT_ROOT/examples/table.yaml"
-	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "with-block-id") | .plan[0].params.blocks' "$EXAMPLES_FILE")
-
-	smoke_test_setup "$blocks_json"
-	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
-		echo "parse_payload failed" >&2
-		return 1
-	fi
-
-	if [[ -z "$parsed_payload" ]]; then
-		echo "parsed_payload is empty" >&2
-		return 1
-	fi
-
-	run send_notification "$parsed_payload"
-	[[ "$status" -eq 0 ]]
-}
-
-@test "smoke test, table with-column-settings" {
-	local EXAMPLES_FILE="$GIT_ROOT/examples/table.yaml"
-	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "with-column-settings") | .plan[0].params.blocks' "$EXAMPLES_FILE")
-
-	smoke_test_setup "$blocks_json"
-	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
-		echo "parse_payload failed" >&2
-		return 1
-	fi
-
-	if [[ -z "$parsed_payload" ]]; then
-		echo "parsed_payload is empty" >&2
-		return 1
-	fi
-
-	run send_notification "$parsed_payload"
-	[[ "$status" -eq 0 ]]
-}
-
-@test "smoke test, table with-rich-text-cells" {
-	local EXAMPLES_FILE="$GIT_ROOT/examples/table.yaml"
-	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "with-rich-text-cells") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "table-with-all-features-column-settings-block-id-and-rich-text") | .plan[0].params.blocks' "$EXAMPLES_FILE")
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload

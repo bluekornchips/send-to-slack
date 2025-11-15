@@ -13,28 +13,14 @@ setup_file() {
 	fi
 
 	SCRIPT="$GIT_ROOT/bin/blocks/table.sh"
-	EXAMPLES_FILE="$GIT_ROOT/examples/table.yaml"
-	SEND_TO_SLACK_SCRIPT="$GIT_ROOT/send-to-slack.sh"
 
 	if [[ ! -f "$SCRIPT" ]]; then
 		echo "Script not found: $SCRIPT" >&2
 		exit 1
 	fi
 
-	if [[ ! -f "$EXAMPLES_FILE" ]]; then
-		echo "Examples file not found: $EXAMPLES_FILE" >&2
-		exit 1
-	fi
-
-	if [[ -n "$SLACK_BOT_USER_OAUTH_TOKEN" ]]; then
-		REAL_TOKEN="$SLACK_BOT_USER_OAUTH_TOKEN"
-		export REAL_TOKEN
-	fi
-
 	export GIT_ROOT
 	export SCRIPT
-	export EXAMPLES_FILE
-	export SEND_TO_SLACK_SCRIPT
 }
 
 setup() {
@@ -121,4 +107,166 @@ setup() {
 	run create_table <<<'{"column_settings": [{"is_wrapped": "not boolean"}], "rows": [[{"type": "raw_text", "text": "test"}]]}'
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "is_wrapped must be a boolean"
+}
+
+@test "create_table:: column_settings with left alignment" {
+	local test_input
+	test_input=$(jq -n '{
+		column_settings: [{align: "left"}],
+		rows: [[{type: "raw_text", text: "Left aligned"}]]
+	}')
+
+	run create_table <<<"$test_input"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.column_settings[0].align == "left"' >/dev/null
+}
+
+@test "create_table:: column_settings with center alignment" {
+	local test_input
+	test_input=$(jq -n '{
+		column_settings: [{align: "center"}],
+		rows: [[{type: "raw_text", text: "Center aligned"}]]
+	}')
+
+	run create_table <<<"$test_input"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.column_settings[0].align == "center"' >/dev/null
+}
+
+@test "create_table:: column_settings with right alignment" {
+	local test_input
+	test_input=$(jq -n '{
+		column_settings: [{align: "right"}],
+		rows: [[{type: "raw_text", text: "Right aligned"}]]
+	}')
+
+	run create_table <<<"$test_input"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.column_settings[0].align == "right"' >/dev/null
+}
+
+@test "create_table:: column_settings with is_wrapped true" {
+	local test_input
+	test_input=$(jq -n '{
+		column_settings: [{is_wrapped: true}],
+		rows: [[{type: "raw_text", text: "Wrapped text"}]]
+	}')
+
+	run create_table <<<"$test_input"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.column_settings[0].is_wrapped == true' >/dev/null
+}
+
+@test "create_table:: column_settings with is_wrapped false" {
+	local test_input
+	test_input=$(jq -n '{
+		column_settings: [{is_wrapped: false}],
+		rows: [[{type: "raw_text", text: "Not wrapped"}]]
+	}')
+
+	run create_table <<<"$test_input"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.column_settings[0].is_wrapped == false' >/dev/null
+}
+
+@test "create_table:: rich_text cell with link" {
+	local test_input
+	test_input=$(jq -n '{
+		rows: [[{
+			type: "rich_text",
+			elements: [{
+				type: "rich_text_section",
+				elements: [{
+					type: "link",
+					url: "https://slack.com",
+					text: "Slack"
+				}]
+			}]
+		}]]
+	}')
+
+	run create_table <<<"$test_input"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.rows[0][0].type == "rich_text"' >/dev/null
+	echo "$output" | jq -e '.rows[0][0].elements[0].elements[0].type == "link"' >/dev/null
+	echo "$output" | jq -e '.rows[0][0].elements[0].elements[0].url == "https://slack.com"' >/dev/null
+}
+
+@test "create_table:: rich_text cell with styled text" {
+	local test_input
+	test_input=$(jq -n '{
+		rows: [[{
+			type: "rich_text",
+			elements: [{
+				type: "rich_text_section",
+				elements: [{
+					type: "text",
+					text: "Bold text",
+					style: {bold: true}
+				}]
+			}]
+		}]]
+	}')
+
+	run create_table <<<"$test_input"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.rows[0][0].type == "rich_text"' >/dev/null
+	echo "$output" | jq -e '.rows[0][0].elements[0].elements[0].style.bold == true' >/dev/null
+}
+
+@test "create_table:: multiple rows with mixed cell types" {
+	local test_input
+	test_input=$(jq -n '{
+		rows: [
+			[
+				{type: "raw_text", text: "Header 1"},
+				{type: "raw_text", text: "Header 2"}
+			],
+			[
+				{type: "raw_text", text: "Data 1"},
+				{
+					type: "rich_text",
+					elements: [{
+						type: "rich_text_section",
+						elements: [{type: "text", text: "Rich data"}]
+					}]
+				}
+			]
+		]
+	}')
+
+	run create_table <<<"$test_input"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.rows | length == 2' >/dev/null
+	echo "$output" | jq -e '.rows[0][0].type == "raw_text"' >/dev/null
+	echo "$output" | jq -e '.rows[1][1].type == "rich_text"' >/dev/null
+}
+
+@test "create_table:: validates max rows limit" {
+	local many_rows
+	many_rows=$(jq -n '[range(101) | [{type: "raw_text", text: "Row"}]]')
+
+	run create_table <<<"$(jq -n --argjson rows "$many_rows" '{rows: $rows}')"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "rows cannot exceed 100 entries"
+}
+
+@test "create_table:: validates max columns limit" {
+	local many_cols
+	many_cols=$(jq -n '[range(21) | {type: "raw_text", text: "Col"}]')
+
+	run create_table <<<"$(jq -n --argjson cols "$many_cols" '{rows: [$cols]}')"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "row 0 cannot exceed 20 cells"
+}
+
+@test "create_table:: validates max column_settings limit" {
+	local many_settings
+	many_settings=$(jq -n '[range(21) | {align: "left"}]')
+	local rows_json
+	rows_json=$(jq -n '[[{type: "raw_text", text: "test"}]]')
+
+	run create_table <<<"$(jq -n --argjson settings "$many_settings" --argjson rows "$rows_json" '{column_settings: $settings, rows: $rows}')"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "column_settings cannot exceed 20 entries"
 }
