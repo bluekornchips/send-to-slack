@@ -156,9 +156,9 @@ send_request_to_slack() {
 	[[ "$status" -ne 0 ]]
 }
 
-@test "create_divider:: from example" {
+@test "create_divider:: basic separator from example" {
 	local divider_json
-	divider_json=$(yq -o json -r '.jobs[] | select(.name == "basic-divider") | .plan[0].params.blocks[0].divider' "$EXAMPLES_FILE")
+	divider_json=$(yq -o json -r '.jobs[] | select(.name == "divider-basic-separator") | .plan[0].params.blocks[1].divider' "$EXAMPLES_FILE")
 
 	run create_divider <<<"$divider_json"
 	[[ "$status" -eq 0 ]]
@@ -166,12 +166,13 @@ send_request_to_slack() {
 	send_request_to_slack "$output"
 }
 
-@test "create_divider:: with block id from example" {
+@test "create_divider:: with block_id from example" {
 	local divider_json
-	divider_json=$(yq -o json -r '.jobs[] | select(.name == "divider-with-block-id") | .plan[0].params.blocks[0].divider' "$EXAMPLES_FILE")
+	divider_json=$(yq -o json -r '.jobs[] | select(.name == "divider-with-block-id-separating-sections") | .plan[0].params.blocks[1].divider' "$EXAMPLES_FILE")
 
 	run create_divider <<<"$divider_json"
 	[[ "$status" -eq 0 ]]
-	echo "$output" | jq -e '.block_id' >/dev/null
+	echo "$output" | jq -e '.type == "divider"' >/dev/null
+	echo "$output" | jq -e '.block_id == "header_section_divider"' >/dev/null
 	send_request_to_slack "$output"
 }

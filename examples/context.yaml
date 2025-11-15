@@ -15,55 +15,29 @@ common_slack_params: &common_slack_params
   channel: notification-testing
 
 jobs:
-  - name: basic-context
+  - name: context-with-image-and-text-elements
     plan:
       - put: slack-notification
         no_get: true
         params:
           <<: *common_slack_params
+          text: "Testing context block with image element and mrkdwn text element"
           blocks:
             - context:
                 elements:
-                  - type: plain_text
-                    text: "Example context text"
-
-  - name: context-with-block-id
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          <<: *common_slack_params
-          blocks:
-            - context:
-                elements:
-                  - type: plain_text
-                    text: "Context example"
-                block_id: "footer_context"
-
-  - name: context-multiple-elements
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          <<: *common_slack_params
-          text: "Multiple context elements example"
-          blocks:
-            - context:
-                elements:
-                  - type: plain_text
-                    text: "Status: Success"
+                  - type: image
+                    image_url: "https://image.freepik.com/free-photo/red-drawing-pin_1156-445.jpg"
+                    alt_text: "images"
                   - type: mrkdwn
-                    text: "*Build:* #123"
-                  - type: plain_text
-                    text: "Duration: 2m 34s"
+                    text: "Location: **Dogpatch**"
 
-  - name: context-with-timestamps
+  - name: context-with-multiple-text-elements-and-block-id
     plan:
       - put: slack-notification
         no_get: true
         params:
           <<: *common_slack_params
-          text: "Deployment complete"
+          text: "Testing context block with multiple text elements (plain_text and mrkdwn) and block_id"
           blocks:
             - section:
                 type: text
@@ -74,76 +48,10 @@ jobs:
                 elements:
                   - type: plain_text
                     text: "Environment: production"
-                  - type: plain_text
-                    text: "Version: v1.2.3"
                   - type: mrkdwn
-                    text: "*Time:* $(date '+%Y-%m-%d %H:%M UTC')"
-
-  - name: context-footer-pattern
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          <<: *common_slack_params
-          text: "Build status"
-          blocks:
-            - header:
-                text:
-                  type: plain_text
-                  text: "Build Report"
-            - section:
-                type: text
-                text:
-                  type: mrkdwn
-                  text: "Tests passed\nDeployment in progress"
-            - divider: {}
-            - context:
-                elements:
+                    text: "*Version:* v1.2.3"
                   - type: plain_text
-                    text: "Pipeline: CI/CD"
+                    text: "Status: Success"
                   - type: mrkdwn
-                    text: "*Branch:* main"
-                  - type: plain_text
-                    text: "Commit: abc123def"
-                  - type: mrkdwn
-                    text: "*Time:* $(date '+%Y-%m-%d %H:%M UTC')"
-
-  - name: context-with-emojis
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          <<: *common_slack_params
-          blocks:
-            - context:
-                elements:
-                  - type: plain_text
-                    text: "Deployment"
-                  - type: plain_text
-                    text: "Duration: 45s"
-                  - type: plain_text
-                    text: "Deployed by: CI/CD"
-
-  - name: context-mixed-content
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          <<: *common_slack_params
-          text: "System status"
-          blocks:
-            - section:
-                type: text
-                text:
-                  type: mrkdwn
-                  text: "*System Status*\nAll services running normally."
-            - context:
-                elements:
-                  - type: mrkdwn
-                    text: "*CPU Usage:* 45%"
-                  - type: mrkdwn
-                    text: "*Memory:* 2.1GB/8GB"
-                  - type: plain_text
-                    text: "Last checked: 2 minutes ago"
-                  - type: mrkdwn
-                    text: "*Next check:* $(date -d '+5 minutes' '+%H:%M')"
+                    text: "*Build:* #1234"
+                block_id: "deployment_context_001"

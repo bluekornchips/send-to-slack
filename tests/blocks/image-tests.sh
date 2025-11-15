@@ -239,22 +239,41 @@ send_request_to_slack() {
 	echo "$output" | jq -e '.alt_text | length == 2000' >/dev/null
 }
 
-@test "create_image:: from example" {
+@test "create_image:: with image_url title and block_id from example" {
 	local image_json
-	image_json=$(yq -o json -r '.jobs[] | select(.name == "basic-image") | .plan[0].params.blocks[0].image' "$EXAMPLES_FILE")
+	image_json=$(yq -o json -r '.jobs[] | select(.name == "image-with-url-title-and-block-id") | .plan[0].params.blocks[0].image' "$EXAMPLES_FILE")
 
 	run create_image <<<"$image_json"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.type == "image"' >/dev/null
+	echo "$output" | jq -e '.image_url == "http://placekitten.com/500/500"' >/dev/null
+	echo "$output" | jq -e '.alt_text == "An incredibly cute kitten."' >/dev/null
+	echo "$output" | jq -e '.title.type == "plain_text"' >/dev/null
+	echo "$output" | jq -e '.title.text == "Please enjoy this photo of a kitten"' >/dev/null
+	echo "$output" | jq -e '.block_id == "image4"' >/dev/null
 	send_request_to_slack "$output"
 }
 
-@test "create_image:: with title from example" {
+@test "create_image:: with slack_file url from example" {
 	local image_json
-	image_json=$(yq -o json -r '.jobs[] | select(.name == "image-with-title") | .plan[0].params.blocks[0].image' "$EXAMPLES_FILE")
+	image_json=$(yq -o json -r '.jobs[] | select(.name == "image-with-slack-file-url") | .plan[0].params.blocks[0].image' "$EXAMPLES_FILE")
 
 	run create_image <<<"$image_json"
 	[[ "$status" -eq 0 ]]
-	echo "$output" | jq -e '.title' >/dev/null
+	echo "$output" | jq -e '.type == "image"' >/dev/null
+	echo "$output" | jq -e '.slack_file.url == "https://files.slack.com/files-pri/T0123456-F0123456/xyz.png"' >/dev/null
+	echo "$output" | jq -e '.alt_text == "An incredibly cute kitten."' >/dev/null
+	send_request_to_slack "$output"
+}
+
+@test "create_image:: with slack_file id from example" {
+	local image_json
+	image_json=$(yq -o json -r '.jobs[] | select(.name == "image-with-slack-file-id") | .plan[0].params.blocks[0].image' "$EXAMPLES_FILE")
+
+	run create_image <<<"$image_json"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.type == "image"' >/dev/null
+	echo "$output" | jq -e '.slack_file.id == "F0123456"' >/dev/null
+	echo "$output" | jq -e '.alt_text == "An incredibly cute kitten."' >/dev/null
 	send_request_to_slack "$output"
 }

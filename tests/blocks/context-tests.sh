@@ -188,22 +188,27 @@ send_request_to_slack() {
 	[[ "$status" -ne 0 ]]
 }
 
-@test "create_context:: from example" {
+@test "create_context:: with image and text elements from example" {
 	local context_json
-	context_json=$(yq -o json -r '.jobs[] | select(.name == "basic-context") | .plan[0].params.blocks[0].context' "$EXAMPLES_FILE")
+	context_json=$(yq -o json -r '.jobs[] | select(.name == "context-with-image-and-text-elements") | .plan[0].params.blocks[0].context' "$EXAMPLES_FILE")
 
 	run create_context <<<"$context_json"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.type == "context"' >/dev/null
+	echo "$output" | jq -e '.elements | length == 2' >/dev/null
+	echo "$output" | jq -e '.elements[0].type == "image"' >/dev/null
+	echo "$output" | jq -e '.elements[1].type == "mrkdwn"' >/dev/null
 	send_request_to_slack "$output"
 }
 
-@test "create_context:: with block id from example" {
+@test "create_context:: with multiple text elements and block_id from example" {
 	local context_json
-	context_json=$(yq -o json -r '.jobs[] | select(.name == "context-with-block-id") | .plan[0].params.blocks[0].context' "$EXAMPLES_FILE")
+	context_json=$(yq -o json -r '.jobs[] | select(.name == "context-with-multiple-text-elements-and-block-id") | .plan[0].params.blocks[1].context' "$EXAMPLES_FILE")
 
 	run create_context <<<"$context_json"
 	[[ "$status" -eq 0 ]]
-	echo "$output" | jq -e '.block_id' >/dev/null
+	echo "$output" | jq -e '.type == "context"' >/dev/null
+	echo "$output" | jq -e '.elements | length == 4' >/dev/null
+	echo "$output" | jq -e '.block_id == "deployment_context_001"' >/dev/null
 	send_request_to_slack "$output"
 }
