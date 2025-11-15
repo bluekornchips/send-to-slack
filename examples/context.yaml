@@ -26,8 +26,8 @@ jobs:
             - context:
                 elements:
                   - type: image
-                    image_url: "https://image.freepik.com/free-photo/red-drawing-pin_1156-445.jpg"
-                    alt_text: "images"
+                    image_url: "https://sunflowersoftware.ca/wp-content/uploads/2023/05/cropped-sunflower.gif"
+                    alt_text: "Sunflower"
                   - type: mrkdwn
                     text: "Location: **Dogpatch**"
 

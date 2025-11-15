@@ -3,8 +3,6 @@
 # Test file for blocks/rich_text.sh
 #
 
-SMOKE_TEST=${SMOKE_TEST:-false}
-
 setup_file() {
 
 	GIT_ROOT="$(git rev-parse --show-toplevel || echo "")"
@@ -27,15 +25,9 @@ setup_file() {
 		exit 1
 	fi
 
-	if [[ -n "$SLACK_BOT_USER_OAUTH_TOKEN" ]]; then
-		REAL_TOKEN="$SLACK_BOT_USER_OAUTH_TOKEN"
-		export REAL_TOKEN
-	fi
-
 	export GIT_ROOT
 	export SCRIPT
 	export EXAMPLES_FILE
-	export SEND_TO_SLACK_SCRIPT
 
 }
 

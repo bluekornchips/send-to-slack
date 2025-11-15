@@ -3,8 +3,6 @@
 # Test file for blocks/section.sh
 #
 
-SMOKE_TEST=${SMOKE_TEST:-false}
-
 setup_file() {
 	GIT_ROOT="$(git rev-parse --show-toplevel || echo "")"
 	if [[ -z "$GIT_ROOT" ]]; then
@@ -25,17 +23,9 @@ setup_file() {
 		exit 1
 	fi
 
-	if [[ -n "$SLACK_BOT_USER_OAUTH_TOKEN" ]]; then
-		REAL_TOKEN="$SLACK_BOT_USER_OAUTH_TOKEN"
-		export REAL_TOKEN
-	fi
-
-	SEND_TO_SLACK_SCRIPT="$GIT_ROOT/send-to-slack.sh"
-
 	export GIT_ROOT
 	export SCRIPT
 	export EXAMPLES_FILE
-	export SEND_TO_SLACK_SCRIPT
 
 	return 0
 }
@@ -72,44 +62,6 @@ mock_create_fields_section() {
 		return 0
 	}
 	export -f create_fields_section
-}
-
-########################################################
-# Helpers
-########################################################
-
-send_request_to_slack() {
-	[[ "$SMOKE_TEST" != "true" ]] && return 0
-
-	if [[ -z "$REAL_TOKEN" ]]; then
-		skip "SLACK_BOT_USER_OAUTH_TOKEN not set"
-	fi
-
-	local input="$1"
-	# Create proper Slack message structure with the section block in blocks array
-	local message
-	message=$(jq -c -n --argjson block "$input" '{
-		channel: "notification-testing",
-		blocks: [$block]
-	}')
-
-	local response
-	if ! response=$(curl -s -X POST \
-		-H "Authorization: Bearer $REAL_TOKEN" \
-		-H "Content-Type: application/json; charset=utf-8" \
-		-d "$message" \
-		"https://slack.com/api/chat.postMessage"); then
-
-		echo "Failed to send request to Slack: curl error" >&2
-		return 1
-	fi
-
-	if ! echo "$response" | jq -e '.ok' >/dev/null 2>&1; then
-		echo "Slack API error: $(echo "$response" | jq -r '.error // "unknown"')" >&2
-		return 1
-	fi
-
-	return 0
 }
 
 ########################################################
@@ -268,7 +220,6 @@ EOF
 	echo "$output" | jq -e '.text.text | contains("bold text")' >/dev/null
 	echo "$output" | jq -e '.accessory.type == "button"' >/dev/null
 	echo "$output" | jq -e '.block_id == "section_mrkdwn_text_001"' >/dev/null
-	send_request_to_slack "$output"
 }
 
 @test "create_section:: fields section with block_id from example" {
@@ -280,7 +231,6 @@ EOF
 	echo "$output" | jq -e '.fields != null' >/dev/null
 	echo "$output" | jq -e '.fields | length == 4' >/dev/null
 	echo "$output" | jq -e '.block_id == "section_fields_001"' >/dev/null
-	send_request_to_slack "$output"
 }
 
 @test "create_section:: text section with expand and image accessory from example" {
@@ -293,7 +243,6 @@ EOF
 	echo "$output" | jq -e '.block_id == "section_expand_001"' >/dev/null
 	echo "$output" | jq -e '.expand == true' >/dev/null
 	echo "$output" | jq -e '.accessory.type == "image"' >/dev/null
-	send_request_to_slack "$output"
 }
 
 @test "create_fields_section:: handles no input" {
@@ -385,7 +334,6 @@ EOF
 	echo "$output" | jq -e '.type == "section"' >/dev/null
 	echo "$output" | jq -e '.fields != null' >/dev/null
 	echo "$output" | jq -e '.fields | length == 2' >/dev/null
-	send_request_to_slack "$output"
 }
 
 @test "create_section:: fields section with block_id" {

@@ -3,8 +3,6 @@
 # Test file for blocks/video.sh
 #
 
-SMOKE_TEST=${SMOKE_TEST:-false}
-
 setup_file() {
 	GIT_ROOT="$(git rev-parse --show-toplevel || echo "")"
 	if [[ -z "$GIT_ROOT" ]]; then
@@ -25,17 +23,9 @@ setup_file() {
 		exit 1
 	fi
 
-	if [[ -n "$SLACK_BOT_USER_OAUTH_TOKEN" ]]; then
-		REAL_TOKEN="$SLACK_BOT_USER_OAUTH_TOKEN"
-		export REAL_TOKEN
-	fi
-
-	SEND_TO_SLACK_SCRIPT="$GIT_ROOT/send-to-slack.sh"
-
 	export GIT_ROOT
 	export SCRIPT
 	export EXAMPLES_FILE
-	export SEND_TO_SLACK_SCRIPT
 
 	return 0
 }
@@ -50,61 +40,6 @@ setup() {
 }
 
 teardown() {
-	return 0
-}
-
-########################################################
-# Helpers
-########################################################
-
-send_request_to_slack() {
-	[[ "$SMOKE_TEST" != "true" ]] && return 0
-
-	if [[ -z "$REAL_TOKEN" ]]; then
-		skip "SLACK_BOT_USER_OAUTH_TOKEN not set"
-	fi
-
-	local input="$1"
-	local message
-	message=$(jq -c -n --argjson block "$input" '{
-		channel: "notification-testing",
-		blocks: [$block]
-	}')
-
-	local response
-	if ! response=$(curl -s -X POST \
-		-H "Authorization: Bearer $REAL_TOKEN" \
-		-H "Content-Type: application/json; charset=utf-8" \
-		-d "$message" \
-		"https://slack.com/api/chat.postMessage"); then
-
-		echo "Failed to send request to Slack: curl error" >&2
-		return 1
-	fi
-
-	if ! echo "$response" | jq -e '.ok' >/dev/null 2>&1; then
-		local error
-		error=$(echo "$response" | jq -r '.error // "unknown"')
-		local error_msg
-		error_msg=$(echo "$response" | jq -r '.errors[]? // empty' | head -1)
-
-		if echo "$error_msg" | grep -q "Domain is not a valid unfurl domain"; then
-			echo "Skipping test: Video domain not configured in Slack app unfurl domains" >&2
-			return 0
-		fi
-
-		if echo "$error_msg" | grep -q "video_http_failure"; then
-			echo "Skipping test: Video URL not accessible or invalid (Slack API error)" >&2
-			return 0
-		fi
-
-		echo "Slack API error: $error" >&2
-		if [[ -n "$error_msg" ]]; then
-			echo "Error details: $error_msg" >&2
-		fi
-		return 1
-	fi
-
 	return 0
 }
 
@@ -369,7 +304,6 @@ send_request_to_slack() {
 	run create_video <<<"$video_json"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.type == "video"' >/dev/null
-	send_request_to_slack "$output"
 }
 
 @test "create_video:: with description from example" {
@@ -379,5 +313,4 @@ send_request_to_slack() {
 	run create_video <<<"$video_json"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.description' >/dev/null
-	send_request_to_slack "$output"
 }

@@ -2,7 +2,6 @@
 #
 # Test file for file-upload.sh
 #
-SMOKE_TEST=${SMOKE_TEST:-false}
 
 setup_file() {
 	GIT_ROOT="$(git rev-parse --show-toplevel || echo "")"

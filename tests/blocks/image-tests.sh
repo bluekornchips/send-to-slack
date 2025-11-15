@@ -3,8 +3,6 @@
 # Test file for blocks/image.sh
 #
 
-SMOKE_TEST=${SMOKE_TEST:-false}
-
 setup_file() {
 	GIT_ROOT="$(git rev-parse --show-toplevel || echo "")"
 	if [[ -z "$GIT_ROOT" ]]; then
@@ -25,17 +23,9 @@ setup_file() {
 		exit 1
 	fi
 
-	if [[ -n "$SLACK_BOT_USER_OAUTH_TOKEN" ]]; then
-		REAL_TOKEN="$SLACK_BOT_USER_OAUTH_TOKEN"
-		export REAL_TOKEN
-	fi
-
-	SEND_TO_SLACK_SCRIPT="$GIT_ROOT/send-to-slack.sh"
-
 	export GIT_ROOT
 	export SCRIPT
 	export EXAMPLES_FILE
-	export SEND_TO_SLACK_SCRIPT
 
 	return 0
 }
@@ -50,43 +40,6 @@ setup() {
 }
 
 teardown() {
-	return 0
-}
-
-########################################################
-# Helpers
-########################################################
-
-send_request_to_slack() {
-	[[ "$SMOKE_TEST" != "true" ]] && return 0
-
-	if [[ -z "$REAL_TOKEN" ]]; then
-		skip "SLACK_BOT_USER_OAUTH_TOKEN not set"
-	fi
-
-	local input="$1"
-	local message
-	message=$(jq -c -n --argjson block "$input" '{
-		channel: "notification-testing",
-		blocks: [$block]
-	}')
-
-	local response
-	if ! response=$(curl -s -X POST \
-		-H "Authorization: Bearer $REAL_TOKEN" \
-		-H "Content-Type: application/json; charset=utf-8" \
-		-d "$message" \
-		"https://slack.com/api/chat.postMessage"); then
-
-		echo "Failed to send request to Slack: curl error" >&2
-		return 1
-	fi
-
-	if ! echo "$response" | jq -e '.ok' >/dev/null 2>&1; then
-		echo "Slack API error: $(echo "$response" | jq -r '.error // "unknown"')" >&2
-		return 1
-	fi
-
 	return 0
 }
 
@@ -106,12 +59,12 @@ send_request_to_slack() {
 	echo "$output" | grep -q "input must be valid JSON"
 }
 
-@test "create_image:: missing image_url field" {
+@test "create_image:: missing image_url and slack_file fields" {
 	local test_input
 	test_input='{"alt_text": "Test image"}'
 	run create_image <<<"$test_input"
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "image_url field is required"
+	echo "$output" | grep -q "either image_url or slack_file field is required"
 }
 
 @test "create_image:: missing alt_text field" {
@@ -127,7 +80,7 @@ send_request_to_slack() {
 	test_input='{"image_url": "", "alt_text": "Test image"}'
 	run create_image <<<"$test_input"
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "image_url field is required"
+	echo "$output" | grep -q "either image_url or slack_file field is required"
 }
 
 @test "create_image:: empty alt_text" {
@@ -136,6 +89,14 @@ send_request_to_slack() {
 	run create_image <<<"$test_input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "alt_text field is required"
+}
+
+@test "create_image:: both image_url and slack_file provided" {
+	local test_input
+	test_input='{"image_url": "https://example.com/image.png", "slack_file": {"url": "https://files.slack.com/files-pri/T0123456-F0123456/xyz.png"}, "alt_text": "Test image"}'
+	run create_image <<<"$test_input"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "cannot have both image_url and slack_file"
 }
 
 @test "create_image:: alt_text too long" {
@@ -246,12 +207,11 @@ send_request_to_slack() {
 	run create_image <<<"$image_json"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.type == "image"' >/dev/null
-	echo "$output" | jq -e '.image_url == "http://placekitten.com/500/500"' >/dev/null
-	echo "$output" | jq -e '.alt_text == "An incredibly cute kitten."' >/dev/null
+	echo "$output" | jq -e '.image_url == "https://sunflowersoftware.ca/wp-content/uploads/2023/05/cropped-sunflower.gif"' >/dev/null
+	echo "$output" | jq -e '.alt_text == "Animated sunflower"' >/dev/null
 	echo "$output" | jq -e '.title.type == "plain_text"' >/dev/null
-	echo "$output" | jq -e '.title.text == "Please enjoy this photo of a kitten"' >/dev/null
+	echo "$output" | jq -e '.title.text == "Please enjoy this sunflower animation"' >/dev/null
 	echo "$output" | jq -e '.block_id == "image4"' >/dev/null
-	send_request_to_slack "$output"
 }
 
 @test "create_image:: with slack_file url from example" {
@@ -262,8 +222,7 @@ send_request_to_slack() {
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.type == "image"' >/dev/null
 	echo "$output" | jq -e '.slack_file.url == "https://files.slack.com/files-pri/T0123456-F0123456/xyz.png"' >/dev/null
-	echo "$output" | jq -e '.alt_text == "An incredibly cute kitten."' >/dev/null
-	send_request_to_slack "$output"
+	echo "$output" | jq -e '.alt_text == "Animated sunflower"' >/dev/null
 }
 
 @test "create_image:: with slack_file id from example" {
@@ -273,7 +232,6 @@ send_request_to_slack() {
 	run create_image <<<"$image_json"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.type == "image"' >/dev/null
-	echo "$output" | jq -e '.slack_file.id == "F0123456"' >/dev/null
-	echo "$output" | jq -e '.alt_text == "An incredibly cute kitten."' >/dev/null
-	send_request_to_slack "$output"
+	echo "$output" | jq -e '.slack_file.id == "F012345678"' >/dev/null
+	echo "$output" | jq -e '.alt_text == "Animated sunflower"' >/dev/null
 }

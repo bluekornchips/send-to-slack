@@ -38,19 +38,53 @@ create_image() {
 		return 1
 	fi
 
-	if ! jq -e '.image_url' <<<"$input" >/dev/null 2>&1; then
-		echo "create_image:: image_url field is required" >&2
+	local has_image_url=false
+	local has_slack_file=false
+
+	if jq -e 'has("image_url")' <<<"$input" >/dev/null 2>&1; then
+		local image_url_check
+		image_url_check=$(jq -r '.image_url // empty' <<<"$input")
+		if [[ -n "$image_url_check" ]] && [[ "$image_url_check" != "null" ]]; then
+			has_image_url=true
+		fi
+	fi
+
+	if jq -e 'has("slack_file")' <<<"$input" >/dev/null 2>&1; then
+		local slack_file_check
+		slack_file_check=$(jq -r '.slack_file // empty' <<<"$input")
+		if [[ -n "$slack_file_check" ]] && [[ "$slack_file_check" != "null" ]]; then
+			has_slack_file=true
+		fi
+	fi
+
+	if [[ "$has_image_url" == false ]] && [[ "$has_slack_file" == false ]]; then
+		echo "create_image:: either image_url or slack_file field is required" >&2
 		return 1
 	fi
 
-	local image_url
-	if ! image_url=$(jq -r '.image_url // empty' <<<"$input"); then
-		echo "create_image:: invalid JSON format" >&2
+	if [[ "$has_image_url" == true ]] && [[ "$has_slack_file" == true ]]; then
+		echo "create_image:: cannot have both image_url and slack_file" >&2
 		return 1
 	fi
-	if [[ -z "$image_url" ]] || [[ "$image_url" == "null" ]]; then
-		echo "create_image:: image_url field is required" >&2
-		return 1
+
+	local image_url=""
+	if [[ "$has_image_url" == true ]]; then
+		if ! image_url=$(jq -r '.image_url' <<<"$input"); then
+			echo "create_image:: invalid JSON format" >&2
+			return 1
+		fi
+	fi
+
+	local slack_file_json=""
+	if [[ "$has_slack_file" == true ]]; then
+		if ! slack_file_json=$(jq -r '.slack_file' <<<"$input"); then
+			echo "create_image:: invalid JSON format" >&2
+			return 1
+		fi
+		if [[ -z "$slack_file_json" ]] || [[ "$slack_file_json" == "null" ]]; then
+			echo "create_image:: slack_file field is required" >&2
+			return 1
+		fi
 	fi
 
 	if ! jq -e '.alt_text' <<<"$input" >/dev/null 2>&1; then
@@ -125,11 +159,19 @@ create_image() {
 	fi
 
 	local block
-	block=$(jq -n \
-		--arg block_type "$BLOCK_TYPE" \
-		--arg image_url "$image_url" \
-		--arg alt_text "$alt_text" \
-		'{ type: $block_type, image_url: $image_url, alt_text: $alt_text }')
+	if [[ "$has_image_url" == true ]]; then
+		block=$(jq -n \
+			--arg block_type "$BLOCK_TYPE" \
+			--arg image_url "$image_url" \
+			--arg alt_text "$alt_text" \
+			'{ type: $block_type, image_url: $image_url, alt_text: $alt_text }')
+	else
+		block=$(jq -n \
+			--arg block_type "$BLOCK_TYPE" \
+			--arg alt_text "$alt_text" \
+			--argjson slack_file "$slack_file_json" \
+			'{ type: $block_type, slack_file: $slack_file, alt_text: $alt_text }')
+	fi
 
 	if [[ -n "$title_json" ]] && [[ "$title_json" != "null" ]]; then
 		block=$(jq --argjson title "$title_json" '. + {title: $title}' <<<"$block")

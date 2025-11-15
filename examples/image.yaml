@@ -26,10 +26,10 @@ jobs:
             - image:
                 title:
                   type: plain_text
-                  text: "Please enjoy this photo of a kitten"
+                  text: "Please enjoy this sunflower animation"
                 block_id: "image4"
-                image_url: "http://placekitten.com/500/500"
-                alt_text: "An incredibly cute kitten."
+                image_url: "https://sunflowersoftware.ca/wp-content/uploads/2023/05/cropped-sunflower.gif"
+                alt_text: "Animated sunflower"
 
   - name: image-with-slack-file-url
     plan:
@@ -42,11 +42,11 @@ jobs:
             - image:
                 title:
                   type: plain_text
-                  text: "Please enjoy this photo of a kitten"
+                  text: "Please enjoy this sunflower animation"
                 block_id: "image4"
                 slack_file:
                   url: "https://files.slack.com/files-pri/T0123456-F0123456/xyz.png"
-                alt_text: "An incredibly cute kitten."
+                alt_text: "Animated sunflower"
 
   - name: image-with-slack-file-id
     plan:
@@ -59,8 +59,8 @@ jobs:
             - image:
                 title:
                   type: plain_text
-                  text: "Please enjoy this photo of a kitten"
+                  text: "Please enjoy this sunflower animation"
                 block_id: "image4"
                 slack_file:
-                  id: "F0123456"
-                alt_text: "An incredibly cute kitten."
+                  id: "F012345678"
+                alt_text: "Animated sunflower"

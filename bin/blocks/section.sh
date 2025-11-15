@@ -265,7 +265,7 @@ create_section() {
 	fi
 
 	# Add optional expand if present
-	if jq -e '.expand' <<<"$input" >/dev/null 2>&1; then
+	if jq -e 'has("expand")' <<<"$input" >/dev/null 2>&1; then
 		local expand
 		if ! expand=$(jq '.expand' <<<"$input"); then
 			echo "create_section:: invalid JSON format" >&2

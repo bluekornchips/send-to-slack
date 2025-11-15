@@ -3,8 +3,6 @@
 # Test file for blocks/context.sh
 #
 
-SMOKE_TEST=${SMOKE_TEST:-false}
-
 setup_file() {
 	GIT_ROOT="$(git rev-parse --show-toplevel || echo "")"
 	if [[ -z "$GIT_ROOT" ]]; then
@@ -25,17 +23,9 @@ setup_file() {
 		exit 1
 	fi
 
-	if [[ -n "$SLACK_BOT_USER_OAUTH_TOKEN" ]]; then
-		REAL_TOKEN="$SLACK_BOT_USER_OAUTH_TOKEN"
-		export REAL_TOKEN
-	fi
-
-	SEND_TO_SLACK_SCRIPT="$GIT_ROOT/send-to-slack.sh"
-
 	export GIT_ROOT
 	export SCRIPT
 	export EXAMPLES_FILE
-	export SEND_TO_SLACK_SCRIPT
 
 	return 0
 }
@@ -50,44 +40,6 @@ setup() {
 }
 
 teardown() {
-	return 0
-}
-
-########################################################
-# Helpers
-########################################################
-
-send_request_to_slack() {
-	[[ "$SMOKE_TEST" != "true" ]] && return 0
-
-	if [[ -z "$REAL_TOKEN" ]]; then
-		skip "SLACK_BOT_USER_OAUTH_TOKEN not set"
-	fi
-
-	local input="$1"
-	# Create proper Slack message structure with the context block in blocks array
-	local message
-	message=$(jq -c -n --argjson block "$input" '{
-		channel: "notification-testing",
-		blocks: [$block]
-	}')
-
-	local response
-	if ! response=$(curl -s -X POST \
-		-H "Authorization: Bearer $REAL_TOKEN" \
-		-H "Content-Type: application/json; charset=utf-8" \
-		-d "$message" \
-		"https://slack.com/api/chat.postMessage"); then
-
-		echo "Failed to send request to Slack: curl error" >&2
-		return 1
-	fi
-
-	if ! echo "$response" | jq -e '.ok' >/dev/null 2>&1; then
-		echo "Slack API error: $(echo "$response" | jq -r '.error // "unknown"')" >&2
-		return 1
-	fi
-
 	return 0
 }
 
@@ -198,7 +150,6 @@ send_request_to_slack() {
 	echo "$output" | jq -e '.elements | length == 2' >/dev/null
 	echo "$output" | jq -e '.elements[0].type == "image"' >/dev/null
 	echo "$output" | jq -e '.elements[1].type == "mrkdwn"' >/dev/null
-	send_request_to_slack "$output"
 }
 
 @test "create_context:: with multiple text elements and block_id from example" {
@@ -210,5 +161,4 @@ send_request_to_slack() {
 	echo "$output" | jq -e '.type == "context"' >/dev/null
 	echo "$output" | jq -e '.elements | length == 4' >/dev/null
 	echo "$output" | jq -e '.block_id == "deployment_context_001"' >/dev/null
-	send_request_to_slack "$output"
 }

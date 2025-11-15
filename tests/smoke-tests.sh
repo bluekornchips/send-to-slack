@@ -126,10 +126,10 @@ smoke_test_setup() {
 # Image block smoke tests
 ########################################################
 
-@test "smoke test, image block" {
+@test "smoke test, image block with url title and block_id" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/image.yaml"
 	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "basic-image") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "image-with-url-title-and-block-id") | .plan[0].params.blocks' "$EXAMPLES_FILE")
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
@@ -147,16 +147,50 @@ smoke_test_setup() {
 	[[ "$status" -eq 0 ]]
 }
 
-@test "smoke test, image-multiple-images" {
+@test "smoke test, image block with slack_file url" {
+	skip "Requires real Slack file URL from actual file upload"
+
 	local EXAMPLES_FILE="$GIT_ROOT/examples/image.yaml"
 	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "image-multiple-images") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "image-with-slack-file-url") | .plan[0].params.blocks' "$EXAMPLES_FILE")
 
 	smoke_test_setup "$blocks_json"
-	if ! parse_payload "$SMOKE_TEST_PAYLOAD_FILE"; then
+	local parsed_payload
+	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
+
+	if [[ -z "$parsed_payload" ]]; then
+		echo "parsed_payload is empty" >&2
+		return 1
+	fi
+
+	run send_notification "$parsed_payload"
+	[[ "$status" -eq 0 ]]
+}
+
+@test "smoke test, image block with slack_file id" {
+	skip "Requires real Slack file ID from actual file upload"
+
+	local EXAMPLES_FILE="$GIT_ROOT/examples/image.yaml"
+	local blocks_json
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "image-with-slack-file-id") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+
+	smoke_test_setup "$blocks_json"
+	local parsed_payload
+	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+		echo "parse_payload failed" >&2
+		return 1
+	fi
+
+	if [[ -z "$parsed_payload" ]]; then
+		echo "parsed_payload is empty" >&2
+		return 1
+	fi
+
+	run send_notification "$parsed_payload"
+	[[ "$status" -eq 0 ]]
 }
 
 ########################################################
@@ -188,10 +222,10 @@ smoke_test_setup() {
 # Header block smoke tests
 ########################################################
 
-@test "smoke test, header block" {
+@test "smoke test, header block with plain_text only" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/header.yaml"
 	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "basic-header") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "header-with-plain-text-only") | .plan[0].params.blocks' "$EXAMPLES_FILE")
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
@@ -209,26 +243,56 @@ smoke_test_setup() {
 	[[ "$status" -eq 0 ]]
 }
 
-@test "smoke test, header-multiple-headers" {
+@test "smoke test, header block with block_id and maximum text" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/header.yaml"
 	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "header-multiple-headers") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "header-with-block-id-and-maximum-text") | .plan[0].params.blocks' "$EXAMPLES_FILE")
 
 	smoke_test_setup "$blocks_json"
-	if ! parse_payload "$SMOKE_TEST_PAYLOAD_FILE"; then
+	local parsed_payload
+	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
+
+	if [[ -z "$parsed_payload" ]]; then
+		echo "parsed_payload is empty" >&2
+		return 1
+	fi
+
+	run send_notification "$parsed_payload"
+	[[ "$status" -eq 0 ]]
 }
 
 ########################################################
 # Context block smoke tests
 ########################################################
 
-@test "smoke test, context block" {
+@test "smoke test, context block with image and text elements" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/context.yaml"
 	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "basic-context") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "context-with-image-and-text-elements") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+
+	smoke_test_setup "$blocks_json"
+	local parsed_payload
+	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+		echo "parse_payload failed" >&2
+		return 1
+	fi
+
+	if [[ -z "$parsed_payload" ]]; then
+		echo "parsed_payload is empty" >&2
+		return 1
+	fi
+
+	run send_notification "$parsed_payload"
+	[[ "$status" -eq 0 ]]
+}
+
+@test "smoke test, context block with multiple text elements and block_id" {
+	local EXAMPLES_FILE="$GIT_ROOT/examples/context.yaml"
+	local blocks_json
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "context-with-multiple-text-elements-and-block-id") | .plan[0].params.blocks' "$EXAMPLES_FILE")
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
@@ -250,10 +314,10 @@ smoke_test_setup() {
 # Section block smoke tests
 ########################################################
 
-@test "smoke test, section block" {
+@test "smoke test, section block with mrkdwn text and button accessory" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/section.yaml"
 	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "section-deployment-status-with-button") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "section-with-mrkdwn-text-and-button-accessory") | .plan[0].params.blocks' "$EXAMPLES_FILE")
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
@@ -271,10 +335,31 @@ smoke_test_setup() {
 	[[ "$status" -eq 0 ]]
 }
 
-@test "smoke test, section block with fields" {
+@test "smoke test, section block with fields array and block_id" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/section.yaml"
 	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "section-build-summary-with-fields") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "section-with-fields-array-and-block-id") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+
+	smoke_test_setup "$blocks_json"
+	local parsed_payload
+	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+		echo "parse_payload failed" >&2
+		return 1
+	fi
+
+	if [[ -z "$parsed_payload" ]]; then
+		echo "parsed_payload is empty" >&2
+		return 1
+	fi
+
+	run send_notification "$parsed_payload"
+	[[ "$status" -eq 0 ]]
+}
+
+@test "smoke test, section block with plain_text expand and image accessory" {
+	local EXAMPLES_FILE="$GIT_ROOT/examples/section.yaml"
+	local blocks_json
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "section-with-plain-text-expand-and-image-accessory") | .plan[0].params.blocks' "$EXAMPLES_FILE")
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
@@ -296,10 +381,31 @@ smoke_test_setup() {
 # Divider block smoke tests
 ########################################################
 
-@test "smoke test, divider block" {
+@test "smoke test, divider block basic separator" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/divider.yaml"
 	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "basic-divider") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "divider-basic-separator") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+
+	smoke_test_setup "$blocks_json"
+	local parsed_payload
+	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+		echo "parse_payload failed" >&2
+		return 1
+	fi
+
+	if [[ -z "$parsed_payload" ]]; then
+		echo "parsed_payload is empty" >&2
+		return 1
+	fi
+
+	run send_notification "$parsed_payload"
+	[[ "$status" -eq 0 ]]
+}
+
+@test "smoke test, divider block with block_id separating sections" {
+	local EXAMPLES_FILE="$GIT_ROOT/examples/divider.yaml"
+	local blocks_json
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "divider-with-block-id-separating-sections") | .plan[0].params.blocks' "$EXAMPLES_FILE")
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
@@ -509,73 +615,6 @@ smoke_test_setup() {
 	[[ "$test_result" -eq 0 ]]
 }
 
-########################################################
-# Actions block smoke tests
-########################################################
-
-@test "smoke test: actions block button sends hello world to channel" {
-	skip "Requires manual verification - post message and click button"
-
-	local EXAMPLES_FILE="$GIT_ROOT/examples/actions.yaml"
-	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "actions-button-channel") | .plan[0].params.blocks' "$EXAMPLES_FILE")
-
-	smoke_test_setup "$blocks_json"
-	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
-		echo "parse_payload failed" >&2
-		return 1
-	fi
-
-	if [[ -z "$parsed_payload" ]]; then
-		echo "parsed_payload is empty" >&2
-		return 1
-	fi
-
-	run send_notification "$parsed_payload"
-	[[ "$status" -eq 0 ]]
-
-	echo ""
-	echo "=========================================="
-	echo "Smoke Test 1: Channel Message Button"
-	echo "=========================================="
-	echo "1. Check Slack channel: ${SLACK_TEST_CHANNEL:-notification-testing}"
-	echo "2. Click the 'Send to Channel' button"
-	echo "3. Verify 'Hello, world!' message appears in the same channel"
-	echo "=========================================="
-}
-
-@test "smoke test: actions block button sends hello world to user" {
-	skip "Requires manual verification - post message and click button"
-
-	local EXAMPLES_FILE="$GIT_ROOT/examples/actions.yaml"
-	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "actions-button-user") | .plan[0].params.blocks' "$EXAMPLES_FILE")
-
-	smoke_test_setup "$blocks_json"
-	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
-		echo "parse_payload failed" >&2
-		return 1
-	fi
-
-	if [[ -z "$parsed_payload" ]]; then
-		echo "parsed_payload is empty" >&2
-		return 1
-	fi
-
-	run send_notification "$parsed_payload"
-	[[ "$status" -eq 0 ]]
-
-	echo ""
-	echo "=========================================="
-	echo "Smoke Test 2: User DM Button"
-	echo "=========================================="
-	echo "1. Check Slack channel: ${SLACK_TEST_CHANNEL:-notification-testing}"
-	echo "2. Click the 'Send to Me' button"
-	echo "3. Verify 'Hello, world!' message appears in your DMs"
-	echo "=========================================="
-}
 
 ########################################################
 # File upload smoke tests

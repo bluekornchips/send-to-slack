@@ -75,5 +75,5 @@ jobs:
                 expand: true
                 accessory:
                   type: image
-                  image_url: "https://api.slack.com/img/blocks/bkb_template_images/approvalsNewDevice.png"
-                  alt_text: "Example image"
+                  image_url: "https://sunflowersoftware.ca/wp-content/uploads/2023/05/cropped-sunflower.gif"
+                  alt_text: "Sunflower"

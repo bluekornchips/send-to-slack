@@ -542,3 +542,131 @@ teardown() {
 
 	[[ -f "$ACCEPTANCE_TEST_FILE" ]] && rm -f "$ACCEPTANCE_TEST_FILE"
 }
+
+@test "acceptance:: actions block button sends hello world to channel" {
+	if [[ "$ACCEPTANCE_TEST" != "true" ]]; then
+		skip "ACCEPTANCE_TEST is not set"
+	fi
+
+	if [[ -z "$REAL_TOKEN" ]]; then
+		skip "REAL_TOKEN is required for acceptance tests"
+	fi
+
+	local token="$REAL_TOKEN"
+	CHANNEL="notification-testing"
+	DRY_RUN="false"
+
+	local blocks_json
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "actions-button-channel") | .plan[0].params.blocks' "$GIT_ROOT/examples/actions.yaml")
+
+	if ! echo "$blocks_json" | jq . >/dev/null 2>&1; then
+		echo "Invalid blocks_json from actions.yaml" >&2
+		echo "$blocks_json" >&2
+		return 1
+	fi
+
+	jq -n \
+		--arg token "$token" \
+		--argjson blocks "$blocks_json" \
+		--arg channel "$CHANNEL" \
+		--arg dry_run "$DRY_RUN" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: $token
+			},
+			params: {
+				channel: $channel,
+				dry_run: $dry_run,
+				blocks: $blocks
+			}
+		}' >"$TEST_PAYLOAD_FILE"
+
+	if ! jq . "$TEST_PAYLOAD_FILE" >/dev/null 2>&1; then
+		echo "Invalid JSON in test payload file" >&2
+		cat "$TEST_PAYLOAD_FILE" >&2
+		return 1
+	fi
+
+	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
+	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "version"
+	echo "$output" | grep -q "timestamp"
+	echo "$output" | grep -q "main:: parsing payload"
+	echo "$output" | grep -q "main:: creating Concourse metadata"
+	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
+
+	echo ""
+	echo "=========================================="
+	echo "Acceptance Test: Channel Message Button"
+	echo "=========================================="
+	echo "1. Check Slack channel: ${CHANNEL}"
+	echo "2. Click the 'Send to Channel' button"
+	echo "3. Verify 'Hello, world!' message appears in the same channel"
+	echo "=========================================="
+}
+
+@test "acceptance:: actions block button sends hello world to user" {
+	if [[ "$ACCEPTANCE_TEST" != "true" ]]; then
+		skip "ACCEPTANCE_TEST is not set"
+	fi
+
+	if [[ -z "$REAL_TOKEN" ]]; then
+		skip "REAL_TOKEN is required for acceptance tests"
+	fi
+
+	local token="$REAL_TOKEN"
+	CHANNEL="notification-testing"
+	DRY_RUN="false"
+
+	local blocks_json
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "actions-button-user") | .plan[0].params.blocks' "$GIT_ROOT/examples/actions.yaml")
+
+	if ! echo "$blocks_json" | jq . >/dev/null 2>&1; then
+		echo "Invalid blocks_json from actions.yaml" >&2
+		echo "$blocks_json" >&2
+		return 1
+	fi
+
+	jq -n \
+		--arg token "$token" \
+		--argjson blocks "$blocks_json" \
+		--arg channel "$CHANNEL" \
+		--arg dry_run "$DRY_RUN" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: $token
+			},
+			params: {
+				channel: $channel,
+				dry_run: $dry_run,
+				blocks: $blocks
+			}
+		}' >"$TEST_PAYLOAD_FILE"
+
+	if ! jq . "$TEST_PAYLOAD_FILE" >/dev/null 2>&1; then
+		echo "Invalid JSON in test payload file" >&2
+		cat "$TEST_PAYLOAD_FILE" >&2
+		return 1
+	fi
+
+	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
+	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "version"
+	echo "$output" | grep -q "timestamp"
+	echo "$output" | grep -q "main:: parsing payload"
+	echo "$output" | grep -q "main:: creating Concourse metadata"
+	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
+
+	echo ""
+	echo "=========================================="
+	echo "Acceptance Test: User DM Button"
+	echo "=========================================="
+	echo "1. Check Slack channel: ${CHANNEL}"
+	echo "2. Click the 'Send to Me' button"
+	echo "3. Verify 'Hello, world!' message appears in your DMs"
+	echo "=========================================="
+}
