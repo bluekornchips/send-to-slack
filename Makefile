@@ -30,21 +30,21 @@ test: check-deps
 		./tests/blocks/*tests.sh
 
 test-smoke: check-deps
-	clear && SMOKE_TEST=true bats --timing --verbose-run -f "smoke" \
-		./tests/*-tests.sh \
-		./tests/blocks/*tests.sh
+	clear && SMOKE_TEST=true bats --timing --verbose-run \
+		./tests/smoke-tests.sh
 
 test-acceptance: check-deps
-	clear && ACCEPTANCE_TEST=true bats --timing --verbose-run -f "acceptance" \
-		./tests/*-tests.sh \
-		./tests/blocks/*tests.sh
+	clear && ACCEPTANCE_TEST=true bats --timing --verbose-run \
+		./tests/acceptance-tests.sh
 
 test-all: check-deps
 	clear && SMOKE_TEST=true ACCEPTANCE_TEST=true \
 		bats --timing --verbose-run \
 		./concourse/resource-type/tests/*tests.sh \
 		./tests/*-tests.sh \
-		./tests/blocks/*tests.sh
+		./tests/blocks/*tests.sh \
+		./tests/smoke-tests.sh \
+		./tests/acceptance-tests.sh
 
 ########################################################
 # Code Quality

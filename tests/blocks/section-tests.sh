@@ -50,7 +50,6 @@ setup() {
 }
 
 teardown() {
-	smoke_test_teardown
 	return 0
 }
 
@@ -410,93 +409,4 @@ EOF
 	run create_section <<<"$test_input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "section cannot have both text and fields"
-}
-
-########################################################
-# smoke tests
-########################################################
-
-smoke_test_setup() {
-	local blocks_json="$1"
-
-	if [[ "$SMOKE_TEST" != "true" ]]; then
-		skip "SMOKE_TEST is not set"
-	fi
-
-	if [[ -z "$REAL_TOKEN" ]]; then
-		skip "SLACK_BOT_USER_OAUTH_TOKEN not set"
-	fi
-
-	local dry_run="false"
-	local channel="notification-testing"
-
-	# Source required scripts
-	source "$GIT_ROOT/bin/parse-payload.sh"
-	source "$SEND_TO_SLACK_SCRIPT"
-
-	SMOKE_TEST_PAYLOAD_FILE=$(mktemp)
-	chmod 0600 "${SMOKE_TEST_PAYLOAD_FILE}"
-
-	jq -n \
-		--argjson blocks "$blocks_json" \
-		--arg channel "$channel" \
-		--arg dry_run "$dry_run" \
-		--arg token "$REAL_TOKEN" \
-		'{
-			source: {
-				slack_bot_user_oauth_token: $token
-			},
-			params: {
-				channel: $channel,
-				blocks: $blocks,
-				dry_run: $dry_run
-			}
-		}' >"$SMOKE_TEST_PAYLOAD_FILE"
-
-	export SMOKE_TEST_PAYLOAD_FILE
-}
-
-smoke_test_teardown() {
-	[[ -n "$SMOKE_TEST_PAYLOAD_FILE" ]] && rm -f "$SMOKE_TEST_PAYLOAD_FILE"
-	return 0
-}
-
-@test "smoke test, section block" {
-	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "section-plain-text") | .plan[0].params.blocks' "$EXAMPLES_FILE")
-
-	smoke_test_setup "$blocks_json"
-	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
-		echo "parse_payload failed" >&2
-		return 1
-	fi
-
-	if [[ -z "$parsed_payload" ]]; then
-		echo "parsed_payload is empty" >&2
-		return 1
-	fi
-
-	run send_notification "$parsed_payload"
-	[[ "$status" -eq 0 ]]
-}
-
-@test "smoke test, section block with fields" {
-	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "section-fields") | .plan[0].params.blocks' "$EXAMPLES_FILE")
-
-	smoke_test_setup "$blocks_json"
-	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
-		echo "parse_payload failed" >&2
-		return 1
-	fi
-
-	if [[ -z "$parsed_payload" ]]; then
-		echo "parsed_payload is empty" >&2
-		return 1
-	fi
-
-	run send_notification "$parsed_payload"
-	[[ "$status" -eq 0 ]]
 }
