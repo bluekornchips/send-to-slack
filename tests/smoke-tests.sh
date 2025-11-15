@@ -166,28 +166,7 @@ smoke_test_setup() {
 @test "smoke test, markdown block" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/markdown.yaml"
 	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "basic-markdown") | .plan[0].params.blocks' "$EXAMPLES_FILE")
-
-	smoke_test_setup "$blocks_json"
-	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
-		echo "parse_payload failed" >&2
-		return 1
-	fi
-
-	if [[ -z "$parsed_payload" ]]; then
-		echo "parsed_payload is empty" >&2
-		return 1
-	fi
-
-	run send_notification "$parsed_payload"
-	[[ "$status" -eq 0 ]]
-}
-
-@test "smoke test, markdown-with-formatting" {
-	local EXAMPLES_FILE="$GIT_ROOT/examples/markdown.yaml"
-	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "markdown-with-formatting") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "markdown-build-notification") | .plan[0].params.blocks' "$EXAMPLES_FILE")
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
@@ -274,7 +253,7 @@ smoke_test_setup() {
 @test "smoke test, section block" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/section.yaml"
 	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "section-text-with-markdown-formatting") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "section-deployment-status-with-button") | .plan[0].params.blocks' "$EXAMPLES_FILE")
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
@@ -295,7 +274,7 @@ smoke_test_setup() {
 @test "smoke test, section block with fields" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/section.yaml"
 	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "section-fields-with-status-information") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "section-build-summary-with-fields") | .plan[0].params.blocks' "$EXAMPLES_FILE")
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload

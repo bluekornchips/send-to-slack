@@ -15,7 +15,7 @@ common_slack_params: &common_slack_params
   channel: notification-testing
 
 jobs:
-  - name: section-text-with-markdown-formatting
+  - name: section-deployment-status-with-button
     plan:
       - put: slack-notification
         no_get: true
@@ -26,63 +26,8 @@ jobs:
                 type: text
                 text:
                   type: mrkdwn
-                  text: "Build *succeeded* in `2m 34s`. See <https://example.com/build/123|logs> for details."
-
-  - name: section-fields-with-status-information
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          <<: *common_slack_params
-          blocks:
-            - section:
-                type: fields
-                fields:
-                  - type: mrkdwn
-                    text: "*Priority*"
-                  - type: mrkdwn
-                    text: "*Type*"
-                  - type: plain_text
-                    text: "High"
-                  - type: plain_text
-                    text: "Deployment"
-                  - type: mrkdwn
-                    text: "*Status*"
-                  - type: mrkdwn
-                    text: "*Duration*"
-                  - type: plain_text
-                    text: "Success"
-                  - type: plain_text
-                    text: "2m 34s"
-
-  - name: section-text-with-block-id-and-expand
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          <<: *common_slack_params
-          blocks:
-            - section:
-                type: text
-                text:
-                  type: plain_text
-                  text: "This is a long message that demonstrates the expand field. When expand is set to true, the full text will always be displayed without requiring users to click 'see more'. This is particularly useful for AI Assistant apps that need to post comprehensive messages."
-                block_id: "expanded_message_001"
-                expand: true
-
-  - name: section-text-with-accessory-button
-    plan:
-      - put: slack-notification
-        no_get: true
-        params:
-          <<: *common_slack_params
-          blocks:
-            - section:
-                type: text
-                text:
-                  type: mrkdwn
-                  text: "*Deployment* ready for review. Click the button to approve."
-                block_id: "deployment_review"
+                  text: "*Deployment* ready for review. Build *#1234* completed *successfully* in `2m 34s`. See <https://example.com/build/123|logs> for details."
+                block_id: "deployment_review_001"
                 accessory:
                   type: button
                   text:
@@ -91,7 +36,7 @@ jobs:
                   action_id: "approve_deployment"
                   style: "primary"
 
-  - name: section-fields-with-block-id
+  - name: section-build-summary-with-fields
     plan:
       - put: slack-notification
         no_get: true
@@ -111,10 +56,29 @@ jobs:
                   - type: plain_text
                     text: "main"
                   - type: mrkdwn
+                    text: "*Status*"
+                  - type: mrkdwn
+                    text: "*Duration*"
+                  - type: plain_text
+                    text: "Success"
+                  - type: plain_text
+                    text: "2m 34s"
+                  - type: mrkdwn
                     text: "*Commit*"
                   - type: mrkdwn
                     text: "*Author*"
-                  - type: plain_text
-                    text: "abc123def"
-                  - type: plain_text
-                    text: "John Doe"
+
+  - name: section-expanded-message-with-block-id
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          <<: *common_slack_params
+          blocks:
+            - section:
+                type: text
+                text:
+                  type: plain_text
+                  text: "This is a comprehensive message that demonstrates the expand field. When expand is set to true, the full text will always be displayed without requiring users to click 'see more'. This is particularly useful for AI Assistant apps that need to post detailed information, error logs, or comprehensive status reports that should be immediately visible to users."
+                block_id: "expanded_message_001"
+                expand: true

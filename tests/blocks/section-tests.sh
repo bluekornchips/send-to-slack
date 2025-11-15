@@ -145,14 +145,14 @@ EOF
 
 @test "create_text_section:: from example with markdown" {
 	local section_json
-	section_json=$(yq -o json -r '.jobs[] | select(.name == "section-text-with-markdown-formatting") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
+	section_json=$(yq -o json -r '.jobs[] | select(.name == "section-deployment-status-with-button") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
 	local test_text
 	test_text=$(echo "$section_json" | jq -r '.text')
 
 	run create_text_section "$test_text"
 	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "Deployment"
 	echo "$output" | grep -q "Build"
-	echo "$output" | grep -q "succeeded"
 }
 
 @test "create_text_section:: mrkdwn" {
@@ -259,29 +259,29 @@ EOF
 }
 
 @test "create_section:: text section with markdown from example" {
-	TEST_INPUT=$(yq -o json -r '.jobs[] | select(.name == "section-text-with-markdown-formatting") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
+	TEST_INPUT=$(yq -o json -r '.jobs[] | select(.name == "section-deployment-status-with-button") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
 
 	run create_section <<<"$TEST_INPUT"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.type == "section"' >/dev/null
 	echo "$output" | jq -e '.text.type == "mrkdwn"' >/dev/null
-	echo "$output" | jq -e '.text.text | contains("Build")' >/dev/null
+	echo "$output" | jq -e '.text.text | contains("Deployment")' >/dev/null
 	send_request_to_slack "$output"
 }
 
 @test "create_section:: fields section from example" {
-	TEST_INPUT=$(yq -o json -r '.jobs[] | select(.name == "section-fields-with-status-information") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
+	TEST_INPUT=$(yq -o json -r '.jobs[] | select(.name == "section-build-summary-with-fields") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
 
 	run create_section <<<"$TEST_INPUT"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.type == "section"' >/dev/null
 	echo "$output" | jq -e '.fields != null' >/dev/null
-	echo "$output" | jq -e '.fields | length == 8' >/dev/null
+	echo "$output" | jq -e '.fields | length == 10' >/dev/null
 	send_request_to_slack "$output"
 }
 
 @test "create_section:: text section with block_id and expand" {
-	TEST_INPUT=$(yq -o json -r '.jobs[] | select(.name == "section-text-with-block-id-and-expand") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
+	TEST_INPUT=$(yq -o json -r '.jobs[] | select(.name == "section-expanded-message-with-block-id") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
 
 	run create_section <<<"$TEST_INPUT"
 	[[ "$status" -eq 0 ]]
@@ -292,25 +292,25 @@ EOF
 }
 
 @test "create_section:: text section with accessory" {
-	TEST_INPUT=$(yq -o json -r '.jobs[] | select(.name == "section-text-with-accessory-button") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
+	TEST_INPUT=$(yq -o json -r '.jobs[] | select(.name == "section-deployment-status-with-button") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
 
 	run create_section <<<"$TEST_INPUT"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.type == "section"' >/dev/null
 	echo "$output" | jq -e '.accessory != null' >/dev/null
 	echo "$output" | jq -e '.accessory.type == "button"' >/dev/null
-	echo "$output" | jq -e '.block_id == "deployment_review"' >/dev/null
+	echo "$output" | jq -e '.block_id == "deployment_review_001"' >/dev/null
 	send_request_to_slack "$output"
 }
 
 @test "create_section:: fields section with block_id from example" {
-	TEST_INPUT=$(yq -o json -r '.jobs[] | select(.name == "section-fields-with-block-id") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
+	TEST_INPUT=$(yq -o json -r '.jobs[] | select(.name == "section-build-summary-with-fields") | .plan[0].params.blocks[0].section' "$EXAMPLES_FILE")
 
 	run create_section <<<"$TEST_INPUT"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.type == "section"' >/dev/null
 	echo "$output" | jq -e '.block_id == "build_summary_001"' >/dev/null
-	echo "$output" | jq -e '.fields | length == 8' >/dev/null
+	echo "$output" | jq -e '.fields | length == 12' >/dev/null
 	send_request_to_slack "$output"
 }
 
