@@ -179,22 +179,26 @@ send_request_to_slack() {
 	echo "$output" | jq -e '.text.text | length == 150' >/dev/null
 }
 
-@test "create_header:: from example" {
+@test "create_header:: plain_text only from example" {
 	local header_json
-	header_json=$(yq -o json -r '.jobs[] | select(.name == "basic-header") | .plan[0].params.blocks[0].header' "$EXAMPLES_FILE")
+	header_json=$(yq -o json -r '.jobs[] | select(.name == "header-with-plain-text-only") | .plan[0].params.blocks[0].header' "$EXAMPLES_FILE")
 
 	run create_header <<<"$header_json"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.type == "header"' >/dev/null
+	echo "$output" | jq -e '.text.type == "plain_text"' >/dev/null
+	echo "$output" | jq -e '.text.text == "A Heartfelt Header"' >/dev/null
 	send_request_to_slack "$output"
 }
 
-@test "create_header:: with block id from example" {
+@test "create_header:: with block_id and maximum text from example" {
 	local header_json
-	header_json=$(yq -o json -r '.jobs[] | select(.name == "header-with-block-id") | .plan[0].params.blocks[0].header' "$EXAMPLES_FILE")
+	header_json=$(yq -o json -r '.jobs[] | select(.name == "header-with-block-id-and-maximum-text") | .plan[0].params.blocks[0].header' "$EXAMPLES_FILE")
 
 	run create_header <<<"$header_json"
 	[[ "$status" -eq 0 ]]
-	echo "$output" | jq -e '.block_id' >/dev/null
+	echo "$output" | jq -e '.type == "header"' >/dev/null
+	echo "$output" | jq -e '.block_id == "header_with_block_id_001"' >/dev/null
+	echo "$output" | jq -e '.text.text | length == 150' >/dev/null
 	send_request_to_slack "$output"
 }

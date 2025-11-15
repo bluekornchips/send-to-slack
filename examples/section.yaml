@@ -15,70 +15,65 @@ common_slack_params: &common_slack_params
   channel: notification-testing
 
 jobs:
-  - name: section-deployment-status-with-button
+  - name: section-with-mrkdwn-text-and-button-accessory
     plan:
       - put: slack-notification
         no_get: true
         params:
           <<: *common_slack_params
+          text: "Testing section block with mrkdwn text and button accessory"
           blocks:
             - section:
                 type: text
                 text:
                   type: mrkdwn
-                  text: "*Deployment* ready for review. Build *#1234* completed *successfully* in `2m 34s`. See <https://example.com/build/123|logs> for details."
-                block_id: "deployment_review_001"
+                  text: "A message *with some bold text* and _some italicized text_."
+                block_id: "section_mrkdwn_text_001"
                 accessory:
                   type: button
                   text:
                     type: plain_text
                     text: "Approve"
-                  action_id: "approve_deployment"
+                  action_id: "approve_action"
                   style: "primary"
 
-  - name: section-build-summary-with-fields
+  - name: section-with-fields-array-and-block-id
     plan:
       - put: slack-notification
         no_get: true
         params:
           <<: *common_slack_params
+          text: "Testing section block with fields array (side-by-side text) and block_id"
           blocks:
             - section:
                 type: fields
-                block_id: "build_summary_001"
+                block_id: "section_fields_001"
                 fields:
                   - type: mrkdwn
-                    text: "*Build Number*"
+                    text: "*Priority*"
                   - type: mrkdwn
-                    text: "*Branch*"
+                    text: "*Type*"
                   - type: plain_text
-                    text: "#1234"
+                    text: "High"
                   - type: plain_text
-                    text: "main"
-                  - type: mrkdwn
-                    text: "*Status*"
-                  - type: mrkdwn
-                    text: "*Duration*"
-                  - type: plain_text
-                    text: "Success"
-                  - type: plain_text
-                    text: "2m 34s"
-                  - type: mrkdwn
-                    text: "*Commit*"
-                  - type: mrkdwn
-                    text: "*Author*"
+                    text: "String"
 
-  - name: section-expanded-message-with-block-id
+  - name: section-with-plain-text-expand-and-image-accessory
     plan:
       - put: slack-notification
         no_get: true
         params:
           <<: *common_slack_params
+          text: "Testing section block with plain_text, expand field, and image accessory"
           blocks:
             - section:
                 type: text
                 text:
                   type: plain_text
-                  text: "This is a comprehensive message that demonstrates the expand field. When expand is set to true, the full text will always be displayed without requiring users to click 'see more'. This is particularly useful for AI Assistant apps that need to post detailed information, error logs, or comprehensive status reports that should be immediately visible to users."
-                block_id: "expanded_message_001"
+                  text: "This section demonstrates the expand field. When expand is set to true, the full text will always be displayed without requiring users to click 'see more'. This is particularly useful for AI Assistant apps that need to post detailed information, error logs, or comprehensive status reports that should be immediately visible to users."
+                block_id: "section_expand_001"
                 expand: true
+                accessory:
+                  type: image
+                  image_url: "https://api.slack.com/img/blocks/bkb_template_images/approvalsNewDevice.png"
+                  alt_text: "Example image"
