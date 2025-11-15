@@ -652,6 +652,257 @@ create_test_payload() {
 }
 
 ########################################################
+# Thread Support Tests
+########################################################
+
+@test "parse_payload:: thread_ts is added to payload when provided" {
+	local test_payload
+	test_payload=$(jq -n \
+		--arg channel "$CHANNEL" \
+		--arg thread_ts "1234567890.123456" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "test-token"
+			},
+			params: {
+				channel: $channel,
+				thread_ts: $thread_ts,
+				blocks: [{
+					section: {
+						type: "text",
+						text: { type: "plain_text", text: "Test" }
+					}
+				}]
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+
+	local payload_output
+	payload_output=$(parse_payload "$TEST_PAYLOAD_FILE")
+	echo "$payload_output" | jq -e '.thread_ts == "1234567890.123456"' >/dev/null
+}
+
+@test "parse_payload:: thread_ts defaults to empty string when not provided" {
+	local test_payload
+	test_payload=$(jq -n \
+		--arg channel "$CHANNEL" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "test-token"
+			},
+			params: {
+				channel: $channel,
+				blocks: [{
+					section: {
+						type: "text",
+						text: { type: "plain_text", text: "Test" }
+					}
+				}]
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+
+	local payload_output
+	payload_output=$(parse_payload "$TEST_PAYLOAD_FILE")
+	# thread_ts should not be present in payload when not provided
+	echo "$payload_output" | jq -e 'has("thread_ts") == false' >/dev/null
+}
+
+@test "parse_payload:: create_thread defaults to false" {
+	local test_payload
+	test_payload=$(jq -n \
+		--arg channel "$CHANNEL" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "test-token"
+			},
+			params: {
+				channel: $channel,
+				blocks: [{
+					section: {
+						type: "text",
+						text: { type: "plain_text", text: "Test" }
+					}
+				}]
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+	# Should not log warning about create_thread when it's false
+	echo "$output" | grep -v -q "create_thread is true but only one block provided"
+}
+
+@test "parse_payload:: create_thread explicitly set to false" {
+	local test_payload
+	test_payload=$(jq -n \
+		--arg channel "$CHANNEL" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "test-token"
+			},
+			params: {
+				channel: $channel,
+				create_thread: false,
+				blocks: [{
+					section: {
+						type: "text",
+						text: { type: "plain_text", text: "Test" }
+					}
+				}]
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+	# Should not log warning about create_thread when explicitly set to false
+	echo "$output" | grep -v -q "create_thread is true but only one block provided"
+}
+
+@test "parse_payload:: create_thread warning logged when only one block provided" {
+	local test_payload
+	test_payload=$(jq -n \
+		--arg channel "$CHANNEL" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "test-token"
+			},
+			params: {
+				channel: $channel,
+				create_thread: true,
+				blocks: [{
+					section: {
+						type: "text",
+						text: { type: "plain_text", text: "Test" }
+					}
+				}]
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "create_thread is true but only one block provided, continuing as normal"
+}
+
+@test "parse_payload:: create_thread and thread_ts cannot both be set" {
+	local test_payload
+	test_payload=$(jq -n \
+		--arg channel "$CHANNEL" \
+		--arg thread_ts "1234567890.123456" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "test-token"
+			},
+			params: {
+				channel: $channel,
+				thread_ts: $thread_ts,
+				create_thread: true,
+				blocks: [
+					{
+						section: {
+							type: "text",
+							text: { type: "plain_text", text: "Test 1" }
+						}
+					},
+					{
+						section: {
+							type: "text",
+							text: { type: "plain_text", text: "Test 2" }
+						}
+					}
+				]
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "create_thread and thread_ts cannot both be set"
+}
+
+@test "parse_payload:: create_thread works correctly with multiple blocks" {
+	local test_payload
+	test_payload=$(jq -n \
+		--arg channel "$CHANNEL" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "test-token"
+			},
+			params: {
+				channel: $channel,
+				create_thread: true,
+				blocks: [
+					{
+						section: {
+							type: "text",
+							text: { type: "plain_text", text: "Test 1" }
+						}
+					},
+					{
+						section: {
+							type: "text",
+							text: { type: "plain_text", text: "Test 2" }
+						}
+					}
+				]
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+	# Should not log warning when multiple blocks are provided
+	echo "$output" | grep -v -q "create_thread is true but only one block provided"
+}
+
+@test "parse_payload:: thread_ts empty string is not added to payload" {
+	local test_payload
+	test_payload=$(jq -n \
+		--arg channel "$CHANNEL" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "test-token"
+			},
+			params: {
+				channel: $channel,
+				thread_ts: "",
+				blocks: [{
+					section: {
+						type: "text",
+						text: { type: "plain_text", text: "Test" }
+					}
+				}]
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+
+	local payload_output
+	payload_output=$(parse_payload "$TEST_PAYLOAD_FILE")
+	# thread_ts should not be present in payload when empty string
+	echo "$payload_output" | jq -e 'has("thread_ts") == false' >/dev/null
+}
+
+########################################################
 # Smoke Tests
 ########################################################
 

@@ -19,8 +19,8 @@ jobs:
         params:
           channel: notification-testing
           text: "Test of all Slack block types"
+          create_thread: true
           blocks:
-            # Header block - main title
             - header:
                 text:
                   type: plain_text

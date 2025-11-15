@@ -166,6 +166,10 @@ The program enforces Slack's message composition limits:
 - Maximum <strong>20 attachments</strong> per message
 - Maximum <strong>40,000 characters</strong> for text fields
 
+## Threading
+
+Reply to existing threads with `thread_ts`. Create new threads with `create_thread: true` with the first block as the parent message, remaining blocks as the thread reply. See [acceptance.yaml](acceptance.yaml) for examples. If you only have one block, it will be sent as a regular message.
+
 ## Alternative Input Methods
 
 ### Raw JSON String
