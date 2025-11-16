@@ -16,7 +16,6 @@ setup_file() {
 		skip "SMOKE_TEST is not set"
 	fi
 
-
 	SEND_TO_SLACK_SCRIPT="$GIT_ROOT/send-to-slack.sh"
 
 	if [[ -n "$SLACK_BOT_USER_OAUTH_TOKEN" ]]; then

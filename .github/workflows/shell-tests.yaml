@@ -18,11 +18,7 @@ jobs:
           wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
           chmod +x /usr/local/bin/yq
 
-      - name: Run bats tests for changed files
-        run: |
-          changed=$(git diff --name-only --diff-filter=ACMR origin/${{ github.base_ref }}...HEAD | grep -E '.*-tests\.sh$' || true)
-          if [ -z "$changed" ]; then
-            echo "No test files changed, skipping tests"
-            exit 0
-          fi
-          echo "$changed" | xargs -I {} sh -c 'echo "Running tests for: {}" && bats --timing --verbose-run "{}"'
+      - name: Run shell tests
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+        run: ./ci/shell-tests.sh
