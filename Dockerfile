@@ -15,7 +15,15 @@ COPY --chown=slack:slack ./concourse/resource-type/scripts/out.sh /opt/resource/
 COPY --chown=slack:slack ./send-to-slack.sh /opt/resource/send-to-slack.sh
 COPY --chown=slack:slack ./bin/ /opt/resource/bin/
 
-RUN chmod -R +x /opt/resource/bin && \
+# Explicitly set executable permissions for all scripts
+# This ensures scripts are executable regardless of how Git checked them out
+# Different Concourse environments may use different methods (git archive vs git checkout)
+# which can affect whether executable permissions are preserved in the build context
+RUN chmod +x /opt/resource/check && \
+	chmod +x /opt/resource/in && \
+	chmod +x /opt/resource/out && \
+	chmod +x /opt/resource/send-to-slack.sh && \
+	chmod -R +x /opt/resource/bin && \
 	find /opt/resource -type f -name "*.sh" -exec chmod +x {} \; && \
 	chmod -R 755 /opt/resource
 
