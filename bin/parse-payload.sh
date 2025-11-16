@@ -423,7 +423,8 @@ process_blocks() {
 	if [[ -n "$thread_ts" && "$thread_ts" != "null" && "$thread_ts" != "empty" ]]; then
 		local converted_ts
 		converted_ts=$(convert_thread_ts "$thread_ts")
-		if [[ $? -ne 0 ]]; then
+		local convert_thread_ts_exit_code=$?
+		if [[ $convert_thread_ts_exit_code -ne 0 ]]; then
 			echo "parse_payload:: failed to convert thread_ts from permalink" >&2
 			return 1
 		fi
