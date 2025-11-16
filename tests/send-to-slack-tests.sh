@@ -201,7 +201,7 @@ mock_curl_network_error() {
 
 	run send_notification "$payload"
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "curl failed to send request"
+	echo "$output" | grep -q "Failed to send notification"
 }
 
 @test "send_notification:: fails when Slack API returns error" {
@@ -288,7 +288,7 @@ mock_curl_permalink_failure() {
 
 	run get_message_permalink "C123456" "1234567890.123456"
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "Slack API returned error"
+	echo "$output" | grep -q "Channel not found"
 }
 
 ########################################################
@@ -396,6 +396,322 @@ mock_curl_permalink_failure() {
 	[[ "$status" -eq 0 ]]
 
 	rm -f "$input_payload"
+}
+
+########################################################
+# Health Check Tests
+########################################################
+
+@test "health_check:: passes when dependencies are available" {
+	unset SLACK_BOT_USER_OAUTH_TOKEN
+	run health_check
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "jq found"
+	echo "$output" | grep -q "curl found"
+	echo "$output" | grep -q "Health check passed"
+}
+
+@test "health_check:: skips API check when token not set" {
+	unset SLACK_BOT_USER_OAUTH_TOKEN
+	run health_check
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "SLACK_BOT_USER_OAUTH_TOKEN not set, skipping API connectivity check"
+}
+
+@test "health_check:: tests API connectivity when token is set" {
+	SLACK_BOT_USER_OAUTH_TOKEN="test-token"
+	export SLACK_BOT_USER_OAUTH_TOKEN
+
+	run health_check
+	echo "$output" | grep -q "Testing Slack API connectivity"
+}
+
+@test "health_check:: --health-check flag works" {
+	unset SLACK_BOT_USER_OAUTH_TOKEN
+	run "$SCRIPT" --health-check
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "health_check"
+}
+
+@test "health_check:: -h flag works" {
+	unset SLACK_BOT_USER_OAUTH_TOKEN
+	run "$SCRIPT" -h
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "health_check"
+}
+
+########################################################
+# Retry Logic Tests
+########################################################
+
+@test "retry_with_backoff:: succeeds on first attempt" {
+	local attempt_file
+	attempt_file=$(mktemp /tmp/retry-attempt.XXXXXX)
+	echo "0" >"$attempt_file"
+
+	test_command() {
+		local count
+		count=$(cat "$attempt_file")
+		count=$((count + 1))
+		echo "$count" >"$attempt_file"
+		return 0
+	}
+	export -f test_command
+	export attempt_file
+
+	run retry_with_backoff 3 'test_command'
+	local attempt_count
+	attempt_count=$(cat "$attempt_file")
+	rm -f "$attempt_file"
+
+	[[ "$status" -eq 0 ]]
+	[[ $attempt_count -eq 1 ]]
+}
+
+@test "retry_with_backoff:: retries on failure and succeeds" {
+	local attempt_file
+	attempt_file=$(mktemp /tmp/retry-attempt.XXXXXX)
+	echo "0" >"$attempt_file"
+
+	test_command() {
+		local count
+		count=$(cat "$attempt_file")
+		count=$((count + 1))
+		echo "$count" >"$attempt_file"
+		if [[ $count -lt 2 ]]; then
+			return 1
+		fi
+		return 0
+	}
+	export -f test_command
+	export attempt_file
+
+	RETRY_INITIAL_DELAY=0
+	export RETRY_INITIAL_DELAY
+
+	run retry_with_backoff 3 'test_command'
+	local attempt_count
+	attempt_count=$(cat "$attempt_file")
+	rm -f "$attempt_file"
+
+	[[ "$status" -eq 0 ]]
+	[[ $attempt_count -eq 2 ]]
+}
+
+@test "retry_with_backoff:: exhausts all retries on persistent failure" {
+	local attempt_file
+	attempt_file=$(mktemp /tmp/retry-attempt.XXXXXX)
+	echo "0" >"$attempt_file"
+
+	test_command() {
+		local count
+		count=$(cat "$attempt_file")
+		count=$((count + 1))
+		echo "$count" >"$attempt_file"
+		return 1
+	}
+	export -f test_command
+	export attempt_file
+
+	RETRY_INITIAL_DELAY=0
+	RETRY_MAX_ATTEMPTS=3
+	export RETRY_INITIAL_DELAY
+	export RETRY_MAX_ATTEMPTS
+
+	run retry_with_backoff 3 'test_command'
+	local attempt_count
+	attempt_count=$(cat "$attempt_file")
+	rm -f "$attempt_file"
+
+	[[ "$status" -eq 1 ]]
+	[[ $attempt_count -eq 3 ]]
+	echo "$output" | grep -q "All 3 attempts failed"
+}
+
+@test "retry_with_backoff:: respects RETRY_MAX_ATTEMPTS" {
+	local attempt_file
+	attempt_file=$(mktemp /tmp/retry-attempt.XXXXXX)
+	echo "0" >"$attempt_file"
+
+	test_command() {
+		local count
+		count=$(cat "$attempt_file")
+		count=$((count + 1))
+		echo "$count" >"$attempt_file"
+		return 1
+	}
+	export -f test_command
+	export attempt_file
+
+	RETRY_INITIAL_DELAY=0
+	RETRY_MAX_ATTEMPTS=5
+	export RETRY_INITIAL_DELAY
+	export RETRY_MAX_ATTEMPTS
+
+	run retry_with_backoff 5 'test_command'
+	local attempt_count
+	attempt_count=$(cat "$attempt_file")
+	rm -f "$attempt_file"
+
+	[[ "$status" -eq 1 ]]
+	[[ $attempt_count -eq 5 ]]
+}
+
+@test "retry_with_backoff:: uses exponential backoff" {
+	local attempt_file
+	attempt_file=$(mktemp /tmp/retry-attempt.XXXXXX)
+	echo "0" >"$attempt_file"
+
+	test_command() {
+		local count
+		count=$(cat "$attempt_file")
+		count=$((count + 1))
+		echo "$count" >"$attempt_file"
+		return 1
+	}
+	export -f test_command
+	export attempt_file
+
+	RETRY_INITIAL_DELAY=1
+	RETRY_BACKOFF_MULTIPLIER=2
+	RETRY_MAX_ATTEMPTS=3
+	export RETRY_INITIAL_DELAY
+	export RETRY_BACKOFF_MULTIPLIER
+	export RETRY_MAX_ATTEMPTS
+
+	start_time=$(date +%s)
+	run retry_with_backoff 3 'test_command'
+	end_time=$(date +%s)
+	elapsed=$((end_time - start_time))
+	rm -f "$attempt_file"
+
+	[[ $elapsed -ge 2 ]]
+	[[ "$status" -eq 1 ]]
+}
+
+@test "retry_with_backoff:: respects RETRY_MAX_DELAY" {
+	local attempt_file
+	attempt_file=$(mktemp /tmp/retry-attempt.XXXXXX)
+	echo "0" >"$attempt_file"
+
+	test_command() {
+		local count
+		count=$(cat "$attempt_file")
+		count=$((count + 1))
+		echo "$count" >"$attempt_file"
+		return 1
+	}
+	export -f test_command
+	export attempt_file
+
+	RETRY_INITIAL_DELAY=2
+	RETRY_BACKOFF_MULTIPLIER=10
+	RETRY_MAX_DELAY=3
+	RETRY_MAX_ATTEMPTS=3
+	export RETRY_INITIAL_DELAY
+	export RETRY_BACKOFF_MULTIPLIER
+	export RETRY_MAX_DELAY
+	export RETRY_MAX_ATTEMPTS
+
+	start_time=$(date +%s)
+	run retry_with_backoff 3 'test_command'
+	end_time=$(date +%s)
+	elapsed=$((end_time - start_time))
+	rm -f "$attempt_file"
+
+	[[ "$status" -eq 1 ]]
+	[[ $elapsed -lt 15 ]]
+}
+
+@test "retry_with_backoff:: uses default RETRY_MAX_ATTEMPTS when not specified" {
+	local attempt_file
+	attempt_file=$(mktemp /tmp/retry-attempt.XXXXXX)
+	echo "0" >"$attempt_file"
+
+	test_command() {
+		local count
+		count=$(cat "$attempt_file")
+		count=$((count + 1))
+		echo "$count" >"$attempt_file"
+		return 1
+	}
+	export -f test_command
+	export attempt_file
+
+	RETRY_MAX_ATTEMPTS=2
+	RETRY_INITIAL_DELAY=0
+	export RETRY_MAX_ATTEMPTS
+	export RETRY_INITIAL_DELAY
+
+	run retry_with_backoff "" 'test_command'
+	local attempt_count
+	attempt_count=$(cat "$attempt_file")
+	rm -f "$attempt_file"
+
+	[[ "$status" -eq 1 ]]
+	[[ $attempt_count -eq 2 ]]
+}
+
+########################################################
+# Enhanced Error Handling Tests
+########################################################
+
+@test "handle_slack_api_error:: handles rate_limited error" {
+	local response='{"ok": false, "error": "rate_limited"}'
+	run handle_slack_api_error "$response" "test_context"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "Rate limited"
+	echo "$output" | grep -q "retry logic"
+	echo "$output" | grep -q "test_context"
+}
+
+@test "handle_slack_api_error:: handles invalid_auth error" {
+	local response='{"ok": false, "error": "invalid_auth"}'
+	run handle_slack_api_error "$response" "test_context"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "Authentication failed"
+	echo "$output" | grep -q "SLACK_BOT_USER_OAUTH_TOKEN"
+	echo "$output" | grep -q "test_context"
+}
+
+@test "handle_slack_api_error:: handles channel_not_found error" {
+	local response='{"ok": false, "error": "channel_not_found"}'
+	run handle_slack_api_error "$response" "test_context"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "Channel not found"
+	echo "$output" | grep -q "test_context"
+}
+
+@test "handle_slack_api_error:: handles not_in_channel error" {
+	local response='{"ok": false, "error": "not_in_channel"}'
+	run handle_slack_api_error "$response" "test_context"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "Bot is not in the specified channel"
+	echo "$output" | grep -q "Invite the bot"
+}
+
+@test "handle_slack_api_error:: handles missing_scope error with needed scope" {
+	local response='{"ok": false, "error": "missing_scope", "needed": "channels:read"}'
+	run handle_slack_api_error "$response" "test_context"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "Missing required OAuth scope"
+	echo "$output" | grep -q "channels:read"
+}
+
+@test "handle_slack_api_error:: handles unknown error" {
+	local response='{"ok": false, "error": "unknown_error"}'
+	run handle_slack_api_error "$response" "test_context"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "Slack API error: unknown_error"
+	echo "$output" | grep -q "test_context"
+}
+
+@test "handle_slack_api_error:: works without context" {
+	local response='{"ok": false, "error": "rate_limited"}'
+	run handle_slack_api_error "$response"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "Rate limited"
+	! echo "$output" | grep -q "Context:"
 }
 
 ########################################################
