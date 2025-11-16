@@ -33,7 +33,7 @@ format:
 	find . -name "*.sh" -type f -exec shfmt -w {} \;
 
 lint:
-	find . -name "*.sh" -type f -exec shellcheck --shell=bash {} \;
+	find . -name "*.sh" -type f -print0 | xargs -0 shellcheck --shell=bash
 
 # installation
 install:
