@@ -57,7 +57,7 @@ format: check-deps
 	find . -name "*.sh" -type f -exec shfmt -w {} \;
 
 lint: check-deps
-	find . -name "*.sh" -type f -exec shellcheck {} \;
+	find . -name "*.sh" -type f -exec shellcheck --shell=bash {} \;
 
 ########################################################
 # Installation
