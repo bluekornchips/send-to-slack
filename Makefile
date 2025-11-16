@@ -1,43 +1,22 @@
-########################################################
-# Variables
-########################################################
-
 VERSION := $(shell cat VERSION 2>/dev/null || echo "Unavailable")
 SYSTEM_PREFIX := /usr/local
 
-########################################################
-# Development Dependencies
-########################################################
-
-check-deps:
-	@command -v bats >/dev/null 2>&1 || { echo "Error: bats is required but not installed" >&2; exit 1; }
-	@command -v shfmt >/dev/null 2>&1 || { echo "Error: shfmt is required but not installed" >&2; exit 1; }
-	@command -v shellcheck >/dev/null 2>&1 || { echo "Error: shellcheck is required but not installed" >&2; exit 1; }
-
-check-runtime-deps:
-	@command -v bash >/dev/null 2>&1 || { echo "Error: bash is required but not installed" >&2; exit 1; }
-	@command -v jq >/dev/null 2>&1 || { echo "Error: jq is required but not installed" >&2; exit 1; }
-	@command -v curl >/dev/null 2>&1 || { echo "Error: curl is required but not installed" >&2; exit 1; }
-
-########################################################
 # Testing
-########################################################
-
-test: check-deps
+test:
 	clear && bats --timing --verbose-run \
 		./concourse/resource-type/tests/*tests.sh \
 		./tests/*-tests.sh \
 		./tests/blocks/*tests.sh
 
-test-smoke: check-deps
+test-smoke:
 	clear && SMOKE_TEST=true bats --timing --verbose-run \
 		./tests/smoke-tests.sh
 
-test-acceptance: check-deps
+test-acceptance:
 	clear && ACCEPTANCE_TEST=true bats --timing --verbose-run \
 		./tests/acceptance-tests.sh
 
-test-all: check-deps
+test-all:
 	clear && SMOKE_TEST=true ACCEPTANCE_TEST=true \
 		bats --timing --verbose-run \
 		./concourse/resource-type/tests/*tests.sh \
@@ -46,32 +25,24 @@ test-all: check-deps
 		./tests/smoke-tests.sh \
 		./tests/acceptance-tests.sh
 
-test-in-docker: check-deps
+test-in-docker:
 	clear && ./tests/run-tests-in-docker.sh
 
-########################################################
-# Code Quality
-########################################################
-
-format: check-deps
+# quality checks
+format:
 	find . -name "*.sh" -type f -exec shfmt -w {} \;
 
-lint: check-deps
+lint:
 	find . -name "*.sh" -type f -exec shellcheck --shell=bash {} \;
 
-########################################################
-# Installation
-########################################################
-
+# installation
 install:
 	@sudo ./install.sh $(SYSTEM_PREFIX)
 
 uninstall:
 	@sudo ./uninstall.sh $(SYSTEM_PREFIX)
-########################################################
-# Concourse CI
-########################################################
 
+# concourse
 check-docker-deps:
 	@command -v docker-compose >/dev/null 2>&1 || { echo "Error: docker-compose is required but not installed" >&2; exit 1; }
 
@@ -88,10 +59,7 @@ concourse-load-examples:
 		fly -t local set-pipeline -p "$$pipeline" -c "$$file" --non-interactive -v SLACK_BOT_USER_OAUTH_TOKEN=$$SLACK_BOT_USER_OAUTH_TOKEN || exit 1; \
 	done
 
-########################################################
-# Development Tools
-########################################################
-
+# dev tools, not for production
 check-docker:
 	@command -v docker >/dev/null 2>&1 || { echo "Error: docker is required but not installed" >&2; exit 1; }
 
