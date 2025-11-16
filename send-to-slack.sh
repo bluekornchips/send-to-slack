@@ -14,6 +14,14 @@ SHOW_METADATA="false"
 SHOW_PAYLOAD="false"
 METADATA="[]"
 
+RETRY_MAX_ATTEMPTS=3
+RETRY_INITIAL_DELAY=1
+RETRY_MAX_DELAY=60
+RETRY_BACKOFF_MULTIPLIER=2
+
+ERROR_CODES_TRUE_FAILURES=("invalid_auth" "channel_not_found" "not_in_channel" "missing_scope" "invalid_blocks")
+ERROR_CODES_RETRYABLE=("rate_limited")
+
 # Check for required external commands
 #
 # Returns:
@@ -131,8 +139,7 @@ get_message_permalink() {
 
 	# Check if Slack API returned success
 	if ! echo "${api_response}" | jq -e '.ok' >/dev/null 2>&1; then
-		echo "get_message_permalink:: Slack API returned error:" >&2
-		jq -r '.' <<<"${api_response}" >&2
+		handle_slack_api_error "${api_response}" "get_message_permalink"
 		return 1
 	fi
 
@@ -243,6 +250,8 @@ crosspost_notification() {
 		# Write payload to temp file for parsing
 		local temp_payload
 		temp_payload=$(mktemp /tmp/crosspost-payload.XXXXXX)
+		chmod 0600 "${temp_payload}"
+		trap 'rm -f "$temp_payload"' RETURN EXIT
 		echo "$crosspost_payload" >"$temp_payload"
 
 		# Parse the payload
@@ -263,6 +272,189 @@ crosspost_notification() {
 	done
 
 	return 0
+}
+
+# Handle Slack API errors with detailed context
+#
+# Arguments:
+#   $1 - response: Slack API response JSON
+#   $2 - context: Additional context string
+#
+# Side Effects:
+# - Outputs detailed error messages to stderr
+handle_slack_api_error() {
+	local response="$1"
+	local context="$2"
+
+	local error_code
+	error_code=$(echo "$response" | jq -r '.error // "unknown"' 2>/dev/null || echo "unknown")
+
+	case "$error_code" in
+	"rate_limited")
+		echo "handle_slack_api_error:: Rate limited. Slack API is throttling requests." >&2
+		echo "handle_slack_api_error:: Consider implementing retry logic or reducing request frequency." >&2
+		if [[ -n "$context" ]]; then
+			echo "handle_slack_api_error:: Context: $context" >&2
+		fi
+		;;
+	"invalid_auth")
+		echo "handle_slack_api_error:: Authentication failed. Check your SLACK_BOT_USER_OAUTH_TOKEN." >&2
+		echo "handle_slack_api_error:: Token may be expired or invalid." >&2
+		if [[ -n "$context" ]]; then
+			echo "handle_slack_api_error:: Context: $context" >&2
+		fi
+		;;
+	"channel_not_found")
+		echo "handle_slack_api_error:: Channel not found. Verify the channel name/ID exists and the bot has access." >&2
+		if [[ -n "$context" ]]; then
+			echo "handle_slack_api_error:: Context: $context" >&2
+		fi
+		;;
+	"not_in_channel")
+		echo "handle_slack_api_error:: Bot is not in the specified channel. Invite the bot to the channel first." >&2
+		if [[ -n "$context" ]]; then
+			echo "handle_slack_api_error:: Context: $context" >&2
+		fi
+		;;
+	"missing_scope")
+		echo "handle_slack_api_error:: Missing required OAuth scope. Check your bot's scopes in Slack app settings." >&2
+		local needed_scope
+		needed_scope=$(echo "$response" | jq -r '.needed // "unknown"' 2>/dev/null)
+		if [[ -n "$needed_scope" ]] && [[ "$needed_scope" != "unknown" ]]; then
+			echo "handle_slack_api_error:: Required scope: $needed_scope" >&2
+		fi
+		;;
+	"invalid_blocks")
+		echo "handle_slack_api_error:: Invalid blocks in payload. Check block structure and validation rules." >&2
+		if [[ -n "$context" ]]; then
+			echo "handle_slack_api_error:: Context: $context" >&2
+		fi
+		;;
+	*)
+		echo "handle_slack_api_error:: Slack API error: $error_code" >&2
+		if [[ -n "$context" ]]; then
+			echo "handle_slack_api_error:: Context: $context" >&2
+		fi
+		;;
+	esac
+}
+
+# Retry a command with exponential backoff
+#
+# Arguments:
+#   $1 - max_attempts: Maximum number of retry attempts (default: RETRY_MAX_ATTEMPTS)
+#   $2 - command: Command to execute (as string, will be eval'd)
+#
+# Returns:
+#   0 on success
+#   1 on failure after all retries
+retry_with_backoff() {
+	local max_attempts="${1:-$RETRY_MAX_ATTEMPTS}"
+	local cmd="$2"
+	local attempt=1
+	local delay="$RETRY_INITIAL_DELAY"
+	local last_exit_code=1
+
+	while [[ $attempt -le $max_attempts ]]; do
+		# Execute the command and capture exit code
+		if eval "$cmd"; then
+			return 0
+		fi
+
+		last_exit_code=$?
+
+		# Check if we should retry
+		if [[ $attempt -lt $max_attempts ]]; then
+			echo "retry_with_backoff:: Attempt $attempt failed, retrying in ${delay}s." >&2
+			sleep "$delay"
+
+			delay=$((delay * RETRY_BACKOFF_MULTIPLIER))
+			if [[ $delay -gt $RETRY_MAX_DELAY ]]; then
+				delay="$RETRY_MAX_DELAY"
+			fi
+
+			attempt=$((attempt + 1))
+		else
+			echo "retry_with_backoff:: All $max_attempts attempts failed" >&2
+			return 1
+		fi
+	done
+
+	return 1
+}
+
+# Health check function
+#
+# Checks dependencies and optionally Slack API connectivity
+#
+# Returns:
+#   0 if all checks pass
+#   1 if any check fails
+health_check() {
+	local errors=0
+
+	echo "health_check:: Starting health check."
+
+	# Check dependencies
+	if ! command -v jq >/dev/null 2>&1; then
+		echo "health_check:: jq not found in PATH" >&2
+		errors=$((errors + 1))
+	else
+		echo "health_check:: jq found: $(command -v jq)"
+	fi
+
+	if ! command -v curl >/dev/null 2>&1; then
+		echo "health_check:: curl not found in PATH" >&2
+		errors=$((errors + 1))
+	else
+		echo "health_check:: curl found: $(command -v curl)"
+	fi
+
+	# Check Slack API connectivity if token is provided
+	if [[ -n "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
+		echo "health_check:: Testing Slack API connectivity."
+		local response
+		local http_code
+		http_code=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+			-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
+			--max-time 5 \
+			--connect-timeout 5 \
+			"https://slack.com/api/auth.test" 2>/dev/null)
+
+		if [[ "$http_code" == "200" ]]; then
+			response=$(curl -s -X POST \
+				-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
+				--max-time 5 \
+				--connect-timeout 5 \
+				"https://slack.com/api/auth.test" 2>/dev/null)
+
+			if echo "$response" | jq -e '.ok == true' >/dev/null 2>&1; then
+				local team
+				local user
+				team=$(echo "$response" | jq -r '.team // "unknown"' 2>/dev/null)
+				user=$(echo "$response" | jq -r '.user // "unknown"' 2>/dev/null)
+				echo "health_check:: Slack API accessible - Team: $team, User: $user"
+			else
+				local error
+				error=$(echo "$response" | jq -r '.error // "unknown"' 2>/dev/null)
+				echo "health_check:: Slack API authentication failed: $error" >&2
+				errors=$((errors + 1))
+			fi
+		else
+			echo "health_check:: Slack API not accessible (HTTP $http_code)" >&2
+			errors=$((errors + 1))
+		fi
+	else
+		echo "health_check:: SLACK_BOT_USER_OAUTH_TOKEN not set, skipping API connectivity check"
+	fi
+
+	if [[ $errors -eq 0 ]]; then
+		echo "health_check:: Health check passed"
+		return 0
+	else
+		echo "health_check:: Health check failed with $errors error(s)" >&2
+		return 1
+	fi
 }
 
 # Send notification to Slack API
@@ -296,24 +488,81 @@ send_notification() {
 		return 1
 	fi
 
-	local response
-	if ! response=$(curl -X POST "${SLACK_API_URL}" \
-		-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
-		-H "Content-type: application/json; charset=utf-8" \
-		-d "${payload}" \
-		--silent --show-error \
-		--max-time 30 \
-		--connect-timeout 10); then
-		echo "send_notification:: curl failed to send request" >&2
-		return 1
-	fi
+	# Use retry logic for the API call
+	local response=""
+	local attempt=1
+	local delay="$RETRY_INITIAL_DELAY"
+	local last_exit_code=0
 
-	# Check if Slack API returned success
-	if ! echo "${response}" | jq -e '.ok' >/dev/null 2>&1; then
-		echo "send_notification:: Slack API returned error:" >&2
-		jq -r '.' <<<"${response}" >&2
-		return 1
-	fi
+	while [[ $attempt -le $RETRY_MAX_ATTEMPTS ]]; do
+		# Make the API call
+		local curl_output
+		curl_output=$(curl -X POST "${SLACK_API_URL}" \
+			-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
+			-H "Content-type: application/json; charset=utf-8" \
+			-d "${payload}" \
+			--silent --show-error \
+			--max-time 30 \
+			--connect-timeout 10 \
+			-w "\n%{http_code}" 2>&1)
+
+		local http_code
+		http_code=$(echo "$curl_output" | tail -n1)
+		response=$(echo "$curl_output" | head -n-1)
+
+		# Check for HTTP errors
+		if [[ "$http_code" != "200" ]]; then
+			echo "send_notification:: HTTP error code: $http_code" >&2
+			last_exit_code=1
+		# response is valid JSON
+		elif ! echo "$response" | jq . >/dev/null 2>&1; then
+			echo "send_notification:: Invalid JSON response from Slack API" >&2
+			last_exit_code=1
+		# Slack API returned success
+		elif ! echo "$response" | jq -e '.ok == true' >/dev/null 2>&1; then
+			local error_code
+			error_code=$(echo "$response" | jq -r '.error // "unknown"' 2>/dev/null)
+
+			#error retryable or not
+			case "$error_code" in
+			"${ERROR_CODES_RETRYABLE[@]}")
+				echo "send_notification:: Rate limited, will retry" >&2
+				last_exit_code=1
+				;;
+			"${ERROR_CODES_TRUE_FAILURES[@]}")
+				# fail immediately
+				handle_slack_api_error "$response" "send_notification"
+				return 1
+				;;
+			*)
+				#retrys okay
+				echo "send_notification:: Slack API error: $error_code, will retry" >&2
+				last_exit_code=1
+				;;
+			esac
+		else
+			break
+		fi
+
+		if [[ $attempt -lt $RETRY_MAX_ATTEMPTS ]] && [[ $last_exit_code -ne 0 ]]; then
+			echo "send_notification:: Attempt $attempt failed, retrying in ${delay}s." >&2
+			sleep "$delay"
+
+			delay=$((delay * RETRY_BACKOFF_MULTIPLIER))
+			if [[ $delay -gt $RETRY_MAX_DELAY ]]; then
+				delay="$RETRY_MAX_DELAY"
+			fi
+
+			attempt=$((attempt + 1))
+		else
+			if [[ -n "$response" ]]; then
+				handle_slack_api_error "$response" "send_notification"
+			else
+				echo "send_notification:: Failed to send notification after $RETRY_MAX_ATTEMPTS attempts" >&2
+			fi
+			return 1
+		fi
+	done
 
 	# Extract channel and timestamp from response to get permalink
 	local channel
@@ -475,8 +724,29 @@ main() {
 	local script_dir
 	local bin_dir
 	local main_args
+	local health_check_mode=false
 
-	main_args=("$@")
+	# Parse command line arguments
+	main_args=()
+	while [[ $# -gt 0 ]]; do
+		case $1 in
+		--health-check | -h)
+			health_check_mode=true
+			shift
+			;;
+		*)
+			main_args+=("$1")
+			shift
+			;;
+		esac
+	done
+
+	if [[ "$health_check_mode" == "true" ]]; then
+		if ! health_check; then
+			return 1
+		fi
+		return 0
+	fi
 
 	if [[ -z "${SEND_TO_SLACK_ROOT}" ]]; then
 		local script_path

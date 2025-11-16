@@ -12,6 +12,11 @@ setup_file() {
 		exit 1
 	fi
 
+	if [[ "$SMOKE_TEST" != "true" ]]; then
+		skip "SMOKE_TEST is not set"
+	fi
+
+
 	SEND_TO_SLACK_SCRIPT="$GIT_ROOT/send-to-slack.sh"
 
 	if [[ -n "$SLACK_BOT_USER_OAUTH_TOKEN" ]]; then
@@ -42,10 +47,6 @@ teardown() {
 
 smoke_test_setup() {
 	local blocks_json="$1"
-
-	if [[ "$SMOKE_TEST" != "true" ]]; then
-		skip "SMOKE_TEST is not set"
-	fi
 
 	if [[ -z "$REAL_TOKEN" ]]; then
 		skip "SLACK_BOT_USER_OAUTH_TOKEN not set"
@@ -614,7 +615,6 @@ smoke_test_setup() {
 
 	[[ "$test_result" -eq 0 ]]
 }
-
 
 ########################################################
 # File upload smoke tests

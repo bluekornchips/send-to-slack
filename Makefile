@@ -46,6 +46,9 @@ test-all: check-deps
 		./tests/smoke-tests.sh \
 		./tests/acceptance-tests.sh
 
+test-in-docker: check-deps
+	clear && ./tests/run-tests-in-docker.sh
+
 ########################################################
 # Code Quality
 ########################################################
