@@ -10,6 +10,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Run shellcheck
+      - name: Install shellcheck
         run: |
-          find . -name "*.sh" -type f -exec shellcheck --shell=bash {} \;
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+      - name: Run lint
+        run: make lint
