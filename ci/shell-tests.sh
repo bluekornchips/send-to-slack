@@ -8,6 +8,7 @@ set -eo pipefail
 
 BASE_BRANCH="main"
 DIFF_FILTER="ACMR"
+TEST_DIRS=("tests" "concourse/resource-type/tests")
 
 main() {
 	local base_ref
@@ -39,7 +40,7 @@ main() {
 			echo "${file}"
 		else
 			basename=$(basename "${file}" .sh)
-			find tests/ concourse/resource-type/tests/ -name "*-tests.sh" -type f -exec grep -l "${basename}\|${file}" {} \;
+			find "${TEST_DIRS[@]}" -name "*-tests.sh" -type f -exec grep -l "${basename}\|${file}" {} \;
 		fi
 	done <<<"${all_changed_sh}" | sort -u)
 
