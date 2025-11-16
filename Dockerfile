@@ -15,7 +15,8 @@ COPY --chown=slack:slack ./concourse/resource-type/scripts/out.sh /opt/resource/
 COPY --chown=slack:slack ./send-to-slack.sh /opt/resource/send-to-slack.sh
 COPY --chown=slack:slack ./bin/ /opt/resource/bin/
 
-RUN find /opt/resource -type f -name "*.sh" -exec chmod +x {} \; && \
+RUN chmod -R +x /opt/resource/bin && \
+	find /opt/resource -type f -name "*.sh" -exec chmod +x {} \; && \
 	chmod -R 755 /opt/resource
 
 WORKDIR /opt/resource
