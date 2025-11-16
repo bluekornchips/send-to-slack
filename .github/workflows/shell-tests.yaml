@@ -1,0 +1,28 @@
+name: test
+
+on:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bats jq
+          wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          chmod +x /usr/local/bin/yq
+
+      - name: Run bats tests for changed files
+        run: |
+          changed=$(git diff --name-only --diff-filter=ACMR origin/${{ github.base_ref }}...HEAD | grep -E '.*-tests\.sh$' || true)
+          if [ -z "$changed" ]; then
+            echo "No test files changed, skipping tests"
+            exit 0
+          fi
+          echo "$changed" | xargs -I {} sh -c 'echo "Running tests for: {}" && bats --timing --verbose-run "{}"'
