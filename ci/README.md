@@ -1,14 +1,16 @@
 # CI Scripts
 
-## shell-tests.sh
+## run-bats.sh
 
 Detects changed shell files and runs corresponding bats tests.
 
 ### Behavior
 
-- If a test file changes (matches `*-tests.sh`), runs that test file directly
-- If a source file changes, searches test files in `tests/` and `concourse/resource-type/tests/` for references to the changed file
+- If a test file changes (matches `*-tests.sh` or `*-tests.bats`), runs that test file directly
+- If a source file changes, searches test files in `TEST_DIRS` for references to the changed file
 - Test files are matched by searching for the basename or full path of the changed file
+- Only processes files matching `FILE_EXTENSIONS` (default: `sh|bats`)
+- Only includes test files within `TEST_DIRS`
 
 ### Usage
 
@@ -21,7 +23,7 @@ The script runs automatically in GitHub Actions workflows. Set `GITHUB_BASE_REF`
 Run the script directly:
 
 ```bash
-./ci/shell-tests.sh
+./ci/run-bats.sh
 ```
 
 When run locally without `GITHUB_BASE_REF`, the script compares the current branch to `origin/main`.
@@ -31,8 +33,11 @@ When run locally without `GITHUB_BASE_REF`, the script compares the current bran
 Constants at the top of the script:
 
 - `BASE_BRANCH`: Default branch for local comparisons (default: `"main"`)
-- `DIFF_FILTER`: Git diff filter for changed files (default: `"ACMR"`)
+- `DIFF_FILTER`: Git diff filter for changed files (default: `"ACMR"` - Added, Copied, Modified, Renamed)
 - `TEST_DIRS`: Array of directories containing test files (default: `("tests" "concourse/resource-type/tests")`)
+- `FILE_EXTENSIONS`: Pipe-separated list of file extensions to process (default: `"sh|bats"`)
+
+Always fetches the base branch from origin before comparing.
 
 ### Examples
 
