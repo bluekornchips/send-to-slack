@@ -51,7 +51,7 @@ main() {
 
 	echo -e "\n\nshell-tests:: Test files to run:"
 	echo "${test_files}"
-	bats --timing --verbose-run "${test_files}"
+	bats --timing --verbose-run "${test_files//$'\n'/ }"
 
 	return 0
 }
