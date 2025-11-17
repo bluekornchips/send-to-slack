@@ -54,8 +54,8 @@ _validate_block_script() {
 		return 1
 	fi
 
-	if [[ ! -x "$full_path" ]]; then
-		echo "_validate_block_script:: block script not executable: $full_path" >&2
+	if [[ ! -r "$full_path" ]]; then
+		echo "_validate_block_script:: block script not readable: $full_path" >&2
 		return 1
 	fi
 

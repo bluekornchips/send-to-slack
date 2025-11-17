@@ -37,8 +37,8 @@ handle_oversize_text() {
 		return 1
 	fi
 
-	if [[ ! -x "$upload_script_path" ]]; then
-		echo "handle_oversize_text:: file upload script not executable: $upload_script_path" >&2
+	if [[ ! -r "$upload_script_path" ]]; then
+		echo "handle_oversize_text:: file upload script not readable: $upload_script_path" >&2
 		return 1
 	fi
 
