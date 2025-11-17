@@ -21,4 +21,4 @@ jobs:
       - name: Run shell tests
         env:
           GITHUB_BASE_REF: ${{ github.base_ref }}
-        run: ./ci/shell-tests.sh
+        run: ./ci/run-bats.sh
