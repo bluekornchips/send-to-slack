@@ -530,6 +530,8 @@ send_notification() {
 			"${ERROR_CODES_TRUE_FAILURES[@]}")
 				# fail immediately
 				handle_slack_api_error "$response" "send_notification"
+				echo "Failed to send notification with payload:" >&2
+				jq . <<<"$payload" >&2
 				return 1
 				;;
 			*)
@@ -558,6 +560,8 @@ send_notification() {
 			else
 				echo "send_notification:: Failed to send notification after $RETRY_MAX_ATTEMPTS attempts" >&2
 			fi
+			echo "Failed to send notification with payload:" >&2
+			jq . <<<"$payload" >&2
 			return 1
 		fi
 	done

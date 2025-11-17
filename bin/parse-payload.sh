@@ -115,20 +115,30 @@ create_block() {
 		return 1
 	fi
 
-	# Interpolate environment variables using $VAR syntax only
-	# envsubst handles $VAR syntax when variables are exported
-	local interpolated_block
-	interpolated_block=$(printf '%s' "$block" | envsubst)
-	
+	# JSON-escape BUILD_PIPELINE_INSTANCE_VARS if it contains JSON to prevent breaking JSON structure
+	# Ref: https://concourse-ci.org/implementing-resource-types.html#resource-metadata
+	if [[ -n "${BUILD_PIPELINE_INSTANCE_VARS}" ]] && [[ "$BUILD_PIPELINE_INSTANCE_VARS" =~ ^\{.*\}$ ]]; then
+		local escaped_vars
+		escaped_vars=$(echo "$BUILD_PIPELINE_INSTANCE_VARS" | jq -Rs . | sed 's/^"//;s/"$//;s/\\n$//')
+		BUILD_PIPELINE_INSTANCE_VARS="$escaped_vars"
+		export BUILD_PIPELINE_INSTANCE_VARS
+	fi
+
+	# Interpolate environment variables using $VAR syntax
+	block=$(printf '%s' "$block" | envsubst | jq .)
+
 	# Validate JSON after interpolation
-	if ! echo "$interpolated_block" | jq . >/dev/null 2>&1; then
+	if ! echo "$block" | jq . >/dev/null 2>&1; then
 		echo "create_block:: failed to parse block after variable interpolation" >&2
 		echo "create_block:: interpolated block:" >&2
-		echo "$interpolated_block" >&2
+		echo "$block" >&2
 		return 1
 	fi
-	
-	block=$(echo "$interpolated_block" | jq .)
+
+	# Filter out empty text elements in rich-text blocks (Slack rejects them)
+	if echo "$block" | jq -e '.type == "rich_text"' >/dev/null 2>&1; then
+		block=$(echo "$block" | jq 'walk(if type == "object" and .type == "text" and (.text == "" or .text == null) then empty else . end)')
+	fi
 
 	echo "$block"
 

@@ -196,11 +196,11 @@ create_section() {
 
 	local text
 	local fields
-	if ! text=$(jq -r '.text // empty' <<<"$input"); then
+	if ! text=$(jq '.text // empty' <<<"$input"); then
 		echo "create_section:: invalid JSON format" >&2
 		return 1
 	fi
-	if ! fields=$(jq -r '.fields // empty' <<<"$input"); then
+	if ! fields=$(jq '.fields // empty' <<<"$input"); then
 		echo "create_section:: invalid JSON format" >&2
 		return 1
 	fi
@@ -255,7 +255,7 @@ create_section() {
 	# Add optional accessory if present
 	if jq -e '.accessory' <<<"$input" >/dev/null 2>&1; then
 		local accessory
-		if ! accessory=$(jq -r '.accessory' <<<"$input"); then
+		if ! accessory=$(jq '.accessory' <<<"$input"); then
 			echo "create_section:: invalid JSON format" >&2
 			return 1
 		fi
