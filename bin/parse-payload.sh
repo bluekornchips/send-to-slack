@@ -115,6 +115,21 @@ create_block() {
 		return 1
 	fi
 
+	# Interpolate environment variables using $VAR syntax only
+	# envsubst handles $VAR syntax when variables are exported
+	local interpolated_block
+	interpolated_block=$(printf '%s' "$block" | envsubst)
+	
+	# Validate JSON after interpolation
+	if ! echo "$interpolated_block" | jq . >/dev/null 2>&1; then
+		echo "create_block:: failed to parse block after variable interpolation" >&2
+		echo "create_block:: interpolated block:" >&2
+		echo "$interpolated_block" >&2
+		return 1
+	fi
+	
+	block=$(echo "$interpolated_block" | jq .)
+
 	echo "$block"
 
 	return 0

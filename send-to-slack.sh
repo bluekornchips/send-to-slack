@@ -68,13 +68,11 @@ create_metadata() {
 			--arg dry_run "$DRY_RUN" \
 			--arg show_metadata "$SHOW_METADATA" \
 			--arg show_payload "$SHOW_PAYLOAD" \
-			'{
-        "metadata": [
+			'[
           { "name": "dry_run", "value": $dry_run },
           { "name": "show_metadata", "value": $show_metadata },
           { "name": "show_payload", "value": $show_payload }
-        ]
-      }'
+        ]'
 	)
 
 	if [[ "${SHOW_PAYLOAD}" == "true" ]] && [[ -n "${payload}" ]]; then
@@ -87,7 +85,7 @@ create_metadata() {
 		fi
 		METADATA=$(echo "$METADATA" | jq \
 			--arg payload "$safe_payload" \
-			'.metadata += [{"name": "payload", "value": $payload}]')
+			'. += [{"name": "payload", "value": $payload}]')
 	fi
 
 	return 0

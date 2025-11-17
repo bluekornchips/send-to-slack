@@ -140,7 +140,7 @@ mock_curl_network_error() {
 
 	create_metadata "$payload"
 	[[ -n "$METADATA" ]]
-	echo "$METADATA" | jq -e '.metadata[] | select(.name == "dry_run") | .value == "true"' >/dev/null
+	echo "$METADATA" | jq -e '.[] | select(.name == "dry_run") | .value == "true"' >/dev/null
 }
 
 @test "create_metadata:: includes payload when show_payload is true" {
@@ -151,7 +151,7 @@ mock_curl_network_error() {
 
 	create_metadata "$payload"
 	[[ -n "$METADATA" ]]
-	echo "$METADATA" | jq -e '.metadata[] | select(.name == "payload")' >/dev/null
+	echo "$METADATA" | jq -e '.[] | select(.name == "payload")' >/dev/null
 }
 
 @test "create_metadata:: does nothing when show_metadata is false" {
