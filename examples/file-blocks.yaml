@@ -3,15 +3,15 @@
 # File blocks upload files and create image blocks for images, rich_text blocks for other files
 
 resource_types:
-  - name: slack
-    type: docker-image
+  - name: slack-notification
+    type: registry-image
     source:
       repository: sunflowersoftware/send-to-slack
       tag: latest
 
 resources:
   - name: slack-notification
-    type: slack
+    type: slack-notification
     source:
       slack_bot_user_oauth_token: ((SLACK_BOT_USER_OAUTH_TOKEN))
 

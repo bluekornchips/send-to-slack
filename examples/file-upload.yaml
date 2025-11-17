@@ -5,12 +5,14 @@ resource_types:
   - name: slack-notification
     type: registry-image
     source:
-      repository: bluekornchips/send-to-slack
+      repository: sunflowersoftware/send-to-slack
       tag: latest
 
 resources:
   - name: slack-notification
     type: slack-notification
+    source:
+      slack_bot_user_oauth_token: ((SLACK_BOT_USER_OAUTH_TOKEN))
 
 jobs:
   # Upload single file
@@ -39,10 +41,11 @@ jobs:
       - put: slack-notification
         params:
           channel: notification-testing
-          files:
-            - path: output/report.txt
-              title: "Daily Report"
-              comment: "Today's report"
+          text: "Today's report"
+          blocks:
+            - file:
+                path: output/report.txt
+                title: "Daily Report"
 
   # Upload multiple files
   - name: upload-multiple-files
@@ -72,13 +75,16 @@ jobs:
       - put: slack-notification
         params:
           channel: ((slack_data_channel))
-          files:
-            - path: output/data1.csv
-              title: "Q1 Data"
-            - path: output/data2.csv
-              title: "Q2 Data"
-            - path: output/summary.txt
-              title: "Summary"
+          blocks:
+            - file:
+                path: output/data1.csv
+                title: "Q1 Data"
+            - file:
+                path: output/data2.csv
+                title: "Q2 Data"
+            - file:
+                path: output/summary.txt
+                title: "Summary"
 
   # Upload file without channel
   - name: upload-private-file
@@ -105,9 +111,10 @@ jobs:
 
       - put: slack-notification
         params:
-          files:
-            - path: output/archive.tar.gz
-              title: "Build Artifacts"
+          blocks:
+            - file:
+                path: output/archive.tar.gz
+                title: "Build Artifacts"
 
   # Upload with message
   - name: upload-with-message
@@ -135,16 +142,17 @@ jobs:
       - put: slack-notification
         params:
           channel: ((slack_notifications_channel))
-          files:
-            - path: output/build.log
-              title: "Build Log - $(date +%Y-%m-%d)"
-              comment: |
-                Build completed successfully
+          text: |
+            Build completed successfully
 
-                Files attached:
-                - Build logs
+            Files attached:
+            - Build logs
 
-                Status: Success
+            Status: Success
+          blocks:
+            - file:
+                path: output/build.log
+                title: "Build Log - $(date +%Y-%m-%d)"
 
   # Upload with timestamp
   - name: upload-from-env
@@ -173,7 +181,8 @@ jobs:
       - put: slack-notification
         params:
           channel: notification-testing
-          files:
-            - path: output/report_*.txt
-              title: "Timestamped Report"
-              comment: "Timestamped report"
+          text: "Timestamped report"
+          blocks:
+            - file:
+                path: output/report_*.txt
+                title: "Timestamped Report"

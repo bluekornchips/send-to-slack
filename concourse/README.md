@@ -11,7 +11,7 @@ resource_types:
   - name: slack-notification
     type: registry-image
     source:
-      repository: bluekornchips/send-to-slack
+      repository: sunflowersoftware/send-to-slack
       tag: latest
 
 resources:
