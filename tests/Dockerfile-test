@@ -1,6 +1,6 @@
 FROM --platform=amd64 alpine:3.20
 
-RUN apk add --no-cache bash jq curl ca-certificates && \
+RUN apk add --no-cache bash jq curl ca-certificates gettext && \
     addgroup -g 1000 slack && \
     adduser -D -u 1000 -G slack -h /opt/resource slack
 

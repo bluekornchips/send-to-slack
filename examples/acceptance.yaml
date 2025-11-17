@@ -11,6 +11,13 @@ resources:
     source:
       slack_bot_user_oauth_token: ((SLACK_BOT_USER_OAUTH_TOKEN))
 
+slack_build_info_section: &slack_build_info_section
+  section:
+    type: text
+    text:
+      type: mrkdwn
+      text: "*<$ATC_EXTERNAL_URL/teams/$BUILD_TEAM_NAME/pipelines/$BUILD_PIPELINE_NAME/jobs/$BUILD_JOB_NAME/builds/$BUILD_NAME|$BUILD_JOB_NAME #$BUILD_NAME>"
+
 jobs:
   - name: acceptance
     plan:
@@ -21,6 +28,7 @@ jobs:
           text: "Test of all Slack block types"
           create_thread: true
           blocks:
+            - <<: *slack_build_info_section
             - header:
                 text:
                   type: plain_text

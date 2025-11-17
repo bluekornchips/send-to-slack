@@ -135,10 +135,8 @@ create_block() {
 		return 1
 	fi
 
-	# Filter out empty text elements in rich-text blocks (Slack rejects them)
-	if echo "$block" | jq -e '.type == "rich_text"' >/dev/null 2>&1; then
-		block=$(echo "$block" | jq 'walk(if type == "object" and .type == "text" and (.text == "" or .text == null) then empty else . end)')
-	fi
+	# Filter out empty values (strings, arrays, objects, and null, from all blocks
+	block=$(echo "$block" | jq 'walk(if . == null or . == "" or . == [] or . == {} or (type == "object" and .type == "text" and (.text == "" or .text == null)) then empty else . end)')
 
 	echo "$block"
 
