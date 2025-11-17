@@ -10,8 +10,8 @@ set -eo pipefail
 # Default values
 ########################################################
 SLACK_API_URL="https://slack.com/api/chat.postMessage"
-SHOW_METADATA="false"
-SHOW_PAYLOAD="false"
+SHOW_METADATA="true"
+SHOW_PAYLOAD="true"
 METADATA="[]"
 
 RETRY_MAX_ATTEMPTS=3

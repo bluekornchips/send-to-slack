@@ -41,7 +41,7 @@ setup() {
 	MESSAGE="test message"
 	DRY_RUN="true"
 	SHOW_METADATA="true"
-	SHOW_PAYLOAD="false"
+	SHOW_PAYLOAD="true"
 	BLOCKS="$(jq -n '[
 		{
 			"type": "section",
