@@ -54,11 +54,6 @@ _validate_block_script() {
 		return 1
 	fi
 
-	if [[ ! -x "$full_path" ]]; then
-		echo "_validate_block_script:: block script not executable: $full_path" >&2
-		return 1
-	fi
-
 	return 0
 }
 
@@ -119,6 +114,29 @@ create_block() {
 		echo "create_block:: output: $block" >&2
 		return 1
 	fi
+
+	# JSON-escape BUILD_PIPELINE_INSTANCE_VARS if it contains JSON to prevent breaking JSON structure
+	# Ref: https://concourse-ci.org/implementing-resource-types.html#resource-metadata
+	if [[ -n "${BUILD_PIPELINE_INSTANCE_VARS}" ]] && [[ "$BUILD_PIPELINE_INSTANCE_VARS" =~ ^\{.*\}$ ]]; then
+		local escaped_vars
+		escaped_vars=$(echo "$BUILD_PIPELINE_INSTANCE_VARS" | jq -Rs . | sed 's/^"//;s/"$//;s/\\n$//')
+		BUILD_PIPELINE_INSTANCE_VARS="$escaped_vars"
+		export BUILD_PIPELINE_INSTANCE_VARS
+	fi
+
+	# Interpolate environment variables using $VAR syntax
+	block=$(printf '%s' "$block" | envsubst | jq .)
+
+	# Validate JSON after interpolation
+	if ! echo "$block" | jq . >/dev/null 2>&1; then
+		echo "create_block:: failed to parse block after variable interpolation" >&2
+		echo "create_block:: interpolated block:" >&2
+		echo "$block" >&2
+		return 1
+	fi
+
+	# Filter out empty values (strings, arrays, objects, and null, from all blocks
+	block=$(echo "$block" | jq 'walk(if . == null or . == "" or . == [] or . == {} or (type == "object" and .type == "text" and (.text == "" or .text == null)) then empty else . end)')
 
 	echo "$block"
 
@@ -362,6 +380,17 @@ process_blocks() {
 		local is_attachment="false"
 		if [[ -n "$block_color" ]] || [[ "$block_type" == "table" ]]; then
 			is_attachment="true"
+			# If block_color is not a hex color, try and match it to one of our defined colors
+			if [[ "$block_color" != "#[0-9A-Fa-f]{6}" ]]; then
+				local block_color_lowercase
+				block_color_lowercase=$(echo "$block_color" | tr '[:upper:]' '[:lower:]')
+				case "$block_color" in
+				"danger") block_color="$DANGER_COLOR" ;;
+				"success") block_color="$SUCCESS_COLOR" ;;
+				"warning") block_color="$WARN_COLOR" ;;
+				*) block_color="$DANGER_COLOR" ;;
+				esac
+			fi
 		fi
 
 		local block

@@ -37,8 +37,8 @@ handle_oversize_text() {
 		return 1
 	fi
 
-	if [[ ! -x "$upload_script_path" ]]; then
-		echo "handle_oversize_text:: file upload script not executable: $upload_script_path" >&2
+	if [[ ! -r "$upload_script_path" ]]; then
+		echo "handle_oversize_text:: file upload script not readable: $upload_script_path" >&2
 		return 1
 	fi
 
@@ -96,7 +96,7 @@ create_rich_text() {
 	local block
 	local block_id
 
-	block_id=$(jq '.block_id // empty' "$input_json")
+	block_id=$(jq -r '.block_id // empty' "$input_json")
 
 	# Extract all text content and calculate length
 	local extracted_text

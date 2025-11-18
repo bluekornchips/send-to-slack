@@ -11,6 +11,13 @@ resources:
     source:
       slack_bot_user_oauth_token: ((SLACK_BOT_USER_OAUTH_TOKEN))
 
+slack_build_info_section: &slack_build_info_section
+  section:
+    type: text
+    text:
+      type: mrkdwn
+      text: "<$ATC_EXTERNAL_URL/teams/$BUILD_TEAM_NAME/pipelines/$BUILD_PIPELINE_NAME/jobs/$BUILD_JOB_NAME/builds/$BUILD_NAME|$BUILD_JOB_NAME #$BUILD_NAME>"
+
 jobs:
   - name: acceptance
     plan:
@@ -26,6 +33,7 @@ jobs:
                   type: plain_text
                   text: "Feature Examples"
                 block_id: "main_header"
+            - <<: *slack_build_info_section
 
             # Section with rich text
             - section:
@@ -335,9 +343,50 @@ jobs:
                     action_id: send_user_message
                 block_id: "interactive_actions"
 
+            # Divider before metadata section
+            - divider:
+                block_id: "actions_metadata_separator"
+
+            # Header for Concourse metadata
+            - header:
+                text:
+                  type: plain_text
+                  text: "Concourse Metadata Variables"
+                block_id: "metadata_header"
+
+            # Section introducing metadata variables
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "*Concourse Build Metadata*\nAll metadata environment variables available to resource scripts:"
+                block_id: "metadata_intro"
+
+            # Section displaying all Concourse metadata variables
+            - section:
+                type: fields
+                fields:
+                  - type: mrkdwn
+                    text: "*BUILD_ID:*\n`$BUILD_ID`"
+                  - type: mrkdwn
+                    text: "*BUILD_NAME:*\n`$BUILD_NAME`"
+                  - type: mrkdwn
+                    text: "*BUILD_JOB_NAME:*\n`$BUILD_JOB_NAME`"
+                  - type: mrkdwn
+                    text: "*BUILD_PIPELINE_NAME:*\n`$BUILD_PIPELINE_NAME`"
+                  - type: mrkdwn
+                    text: "*BUILD_TEAM_NAME:*\n`$BUILD_TEAM_NAME`"
+                  - type: mrkdwn
+                    text: "*BUILD_CREATED_BY:*\n`$BUILD_CREATED_BY`"
+                  - type: mrkdwn
+                    text: "*BUILD_PIPELINE_INSTANCE_VARS:*\n`$BUILD_PIPELINE_INSTANCE_VARS`"
+                  - type: mrkdwn
+                    text: "*ATC_EXTERNAL_URL:*\n<$ATC_EXTERNAL_URL|$ATC_EXTERNAL_URL>"
+                block_id: "concourse_metadata"
+
             # Divider before context/footer
             - divider:
-                block_id: "actions_separator"
+                block_id: "metadata_separator"
 
             # Context block with metadata and timestamps
             - context:

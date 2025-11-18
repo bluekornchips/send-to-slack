@@ -51,7 +51,7 @@ create_image() {
 
 	if jq -e 'has("slack_file")' <<<"$input" >/dev/null 2>&1; then
 		local slack_file_check
-		slack_file_check=$(jq -r '.slack_file // empty' <<<"$input")
+		slack_file_check=$(jq '.slack_file // empty' <<<"$input")
 		if [[ -n "$slack_file_check" ]] && [[ "$slack_file_check" != "null" ]]; then
 			has_slack_file=true
 		fi
@@ -77,7 +77,7 @@ create_image() {
 
 	local slack_file_json=""
 	if [[ "$has_slack_file" == true ]]; then
-		if ! slack_file_json=$(jq -r '.slack_file' <<<"$input"); then
+		if ! slack_file_json=$(jq '.slack_file' <<<"$input"); then
 			echo "create_image:: invalid JSON format" >&2
 			return 1
 		fi
@@ -140,7 +140,7 @@ create_image() {
 				return 1
 			fi
 
-			title_json=$(jq -r '.title' <<<"$input")
+			title_json=$(jq '.title' <<<"$input")
 		fi
 	fi
 

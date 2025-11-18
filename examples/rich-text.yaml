@@ -298,3 +298,103 @@ jobs:
                     elements:
                       - type: text
                         text: "Third block as colored attachment"
+
+  - name: rich-text-with-concourse-metadata-variables
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          channel: notification-testing
+          blocks:
+            - rich-text:
+                block_id: "metadata_variables_test"
+                elements:
+                  - type: rich_text_section
+                    elements:
+                      - type: text
+                        text: "Testing Concourse metadata variable interpolation in rich-text blocks"
+                        style:
+                          bold: true
+                      - type: text
+                        text: "\n\n"
+                      - type: text
+                        text: "Build ID: "
+                      - type: text
+                        text: "$BUILD_ID"
+                        style:
+                          code: true
+                      - type: text
+                        text: "\n"
+                      - type: text
+                        text: "Build Name: "
+                      - type: text
+                        text: "$BUILD_NAME"
+                        style:
+                          code: true
+                      - type: text
+                        text: "\n"
+                      - type: text
+                        text: "Job Name: "
+                      - type: text
+                        text: "$BUILD_JOB_NAME"
+                        style:
+                          code: true
+                      - type: text
+                        text: "\n"
+                      - type: text
+                        text: "Pipeline: "
+                      - type: text
+                        text: "$BUILD_PIPELINE_NAME"
+                        style:
+                          code: true
+                      - type: text
+                        text: "\n"
+                      - type: text
+                        text: "Team: "
+                      - type: text
+                        text: "$BUILD_TEAM_NAME"
+                        style:
+                          code: true
+                      - type: text
+                        text: "\n"
+                      - type: text
+                        text: "Created By: "
+                      - type: text
+                        text: "$BUILD_CREATED_BY"
+                        style:
+                          code: true
+                      - type: text
+                        text: "\n"
+                      - type: text
+                        text: "ATC URL: "
+                      - type: link
+                        url: "$ATC_EXTERNAL_URL"
+                        text: "$ATC_EXTERNAL_URL"
+
+  - name: rich-text-metadata-test
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          channel: notification-testing
+          blocks:
+            - section:
+                type: fields
+                fields:
+                  - type: mrkdwn
+                    text: "*BUILD_ID:*\n`$BUILD_ID`"
+                  - type: mrkdwn
+                    text: "*BUILD_NAME:*\n`$BUILD_NAME`"
+                  - type: mrkdwn
+                    text: "*BUILD_JOB_NAME:*\n`$BUILD_JOB_NAME`"
+                  - type: mrkdwn
+                    text: "*BUILD_PIPELINE_NAME:*\n`$BUILD_PIPELINE_NAME`"
+                  - type: mrkdwn
+                    text: "*BUILD_TEAM_NAME:*\n`$BUILD_TEAM_NAME`"
+                  - type: mrkdwn
+                    text: "*BUILD_CREATED_BY:*\n`$BUILD_CREATED_BY`"
+                  - type: mrkdwn
+                    text: "*BUILD_PIPELINE_INSTANCE_VARS:*\n`$BUILD_PIPELINE_INSTANCE_VARS`"
+                  - type: mrkdwn
+                    text: "*ATC_EXTERNAL_URL:*\n<$ATC_EXTERNAL_URL|$ATC_EXTERNAL_URL>"
+                block_id: "concourse_metadata_test"

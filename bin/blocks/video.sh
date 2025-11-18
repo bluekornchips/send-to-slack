@@ -123,7 +123,7 @@ create_video() {
 	fi
 
 	local title_json
-	title_json=$(jq -r '.title' <<<"$input")
+	title_json=$(jq '.title' <<<"$input")
 
 	local title_url=""
 	if jq -e '.title_url' <<<"$input" >/dev/null 2>&1; then
@@ -169,7 +169,7 @@ create_video() {
 				return 1
 			fi
 
-			description_json=$(jq -r '.description' <<<"$input")
+			description_json=$(jq '.description' <<<"$input")
 		fi
 	fi
 

@@ -124,7 +124,7 @@ create_actions() {
 	fi
 
 	local elements_json
-	if ! elements_json=$(jq -r '.elements // empty' <<<"$input"); then
+	if ! elements_json=$(jq '.elements // empty' <<<"$input"); then
 		echo "create_actions:: invalid JSON format" >&2
 		return 1
 	fi

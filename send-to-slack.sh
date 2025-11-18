@@ -10,8 +10,8 @@ set -eo pipefail
 # Default values
 ########################################################
 SLACK_API_URL="https://slack.com/api/chat.postMessage"
-SHOW_METADATA="false"
-SHOW_PAYLOAD="false"
+SHOW_METADATA="true"
+SHOW_PAYLOAD="true"
 METADATA="[]"
 
 RETRY_MAX_ATTEMPTS=3
@@ -68,13 +68,11 @@ create_metadata() {
 			--arg dry_run "$DRY_RUN" \
 			--arg show_metadata "$SHOW_METADATA" \
 			--arg show_payload "$SHOW_PAYLOAD" \
-			'{
-        "metadata": [
+			'[
           { "name": "dry_run", "value": $dry_run },
           { "name": "show_metadata", "value": $show_metadata },
           { "name": "show_payload", "value": $show_payload }
-        ]
-      }'
+        ]'
 	)
 
 	if [[ "${SHOW_PAYLOAD}" == "true" ]] && [[ -n "${payload}" ]]; then
@@ -87,7 +85,7 @@ create_metadata() {
 		fi
 		METADATA=$(echo "$METADATA" | jq \
 			--arg payload "$safe_payload" \
-			'.metadata += [{"name": "payload", "value": $payload}]')
+			'. += [{"name": "payload", "value": $payload}]')
 	fi
 
 	return 0
@@ -532,6 +530,8 @@ send_notification() {
 			"${ERROR_CODES_TRUE_FAILURES[@]}")
 				# fail immediately
 				handle_slack_api_error "$response" "send_notification"
+				echo "Failed to send notification with payload:" >&2
+				jq . <<<"$payload" >&2
 				return 1
 				;;
 			*)
@@ -560,6 +560,8 @@ send_notification() {
 			else
 				echo "send_notification:: Failed to send notification after $RETRY_MAX_ATTEMPTS attempts" >&2
 			fi
+			echo "Failed to send notification with payload:" >&2
+			jq . <<<"$payload" >&2
 			return 1
 		fi
 	done
