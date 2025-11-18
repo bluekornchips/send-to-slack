@@ -16,7 +16,7 @@ slack_build_info_section: &slack_build_info_section
     type: text
     text:
       type: mrkdwn
-      text: "*<$ATC_EXTERNAL_URL/teams/$BUILD_TEAM_NAME/pipelines/$BUILD_PIPELINE_NAME/jobs/$BUILD_JOB_NAME/builds/$BUILD_NAME|$BUILD_JOB_NAME #$BUILD_NAME>"
+      text: "<$ATC_EXTERNAL_URL/teams/$BUILD_TEAM_NAME/pipelines/$BUILD_PIPELINE_NAME/jobs/$BUILD_JOB_NAME/builds/$BUILD_NAME|$BUILD_JOB_NAME #$BUILD_NAME>"
 
 jobs:
   - name: acceptance
@@ -28,12 +28,12 @@ jobs:
           text: "Test of all Slack block types"
           create_thread: true
           blocks:
-            - <<: *slack_build_info_section
             - header:
                 text:
                   type: plain_text
                   text: "Feature Examples"
                 block_id: "main_header"
+            - <<: *slack_build_info_section
 
             # Section with rich text
             - section:
