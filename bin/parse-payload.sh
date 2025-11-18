@@ -380,6 +380,17 @@ process_blocks() {
 		local is_attachment="false"
 		if [[ -n "$block_color" ]] || [[ "$block_type" == "table" ]]; then
 			is_attachment="true"
+			# If block_color is not a hex color, try and match it to one of our defined colors
+			if [[ "$block_color" != "#[0-9A-Fa-f]{6}" ]]; then
+				local block_color_lowercase
+				block_color_lowercase=$(echo "$block_color" | tr '[:upper:]' '[:lower:]')
+				case "$block_color" in
+				"danger") block_color="$DANGER_COLOR" ;;
+				"success") block_color="$SUCCESS_COLOR" ;;
+				"warning") block_color="$WARN_COLOR" ;;
+				*) block_color="$DANGER_COLOR" ;;
+				esac
+			fi
 		fi
 
 		local block
