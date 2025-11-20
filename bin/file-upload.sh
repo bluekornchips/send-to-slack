@@ -105,7 +105,7 @@ _post_file_contents() {
 	http_code=$(tail -n1 <<<"$http_response")
 
 	local response_body
-	response_body=$(head -n-1 <<<"$http_response")
+	response_body=$(sed '$d' <<<"$http_response")
 
 	local response_size
 	response_size="${response_body//OK - /}"

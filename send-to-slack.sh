@@ -84,7 +84,7 @@ create_metadata() {
 			safe_payload="${payload}"
 		fi
 		METADATA=$(echo "$METADATA" | jq \
-			--arg payload "$safe_payload" \
+			--argjson payload "$safe_payload" \
 			'. += [{"name": "payload", "value": $payload}]')
 	fi
 
@@ -506,7 +506,7 @@ send_notification() {
 
 		local http_code
 		http_code=$(echo "$curl_output" | tail -n1)
-		response=$(echo "$curl_output" | head -n-1)
+		response=$(echo "$curl_output" | sed '$d')
 
 		# Check for HTTP errors
 		if [[ "$http_code" != "200" ]]; then
@@ -584,10 +584,10 @@ send_notification() {
 	return 0
 }
 
-# Process input from stdin or file specified via -file|--file option
+# Process input from stdin or file specified via -f|--file option
 #
 # Inputs:
-# - $@: Command line arguments (may include -file|--file <path>)
+# - $@: Command line arguments (may include -f|--file <path>)
 #
 # Outputs:
 # - Writes path to temporary input payload file to stdout on success
@@ -610,13 +610,13 @@ process_input() {
 	# Parse command line arguments
 	while [[ $# -gt 0 ]]; do
 		case $1 in
-		-file | --file)
+		-f | -file | --file)
 			if [[ -n "${input_file}" ]]; then
-				echo "process_input:: -file|--file option can only be specified once" >&2
+				echo "process_input:: -f|-file|--file option can only be specified once" >&2
 				return 1
 			fi
 			if [[ $# -lt 2 ]]; then
-				echo "process_input:: -file|--file requires a file path argument" >&2
+				echo "process_input:: -f|-file|--file requires a file path argument" >&2
 				return 1
 			fi
 			input_file="$2"
@@ -624,31 +624,14 @@ process_input() {
 			;;
 		*)
 			echo "process_input:: unknown option: $1" >&2
-			echo "process_input:: use -file|--file <path> to specify input file, or provide input via stdin" >&2
+			echo "process_input:: use -f|-file|--file <path> to specify input file, or provide input via stdin" >&2
 			return 1
 			;;
 		esac
 	done
 
-	# Only one of stdin or file is allowed
+	# Use file if specified, otherwise use stdin
 	if [[ -n "${input_file}" ]]; then
-		# Check if stdin has data being piped in, not just redirected from /dev/null like in a test script
-		if [[ ! -t 0 ]]; then
-			local stdin_source
-			stdin_source=$(readlink -f /proc/self/fd/0 2>/dev/null || echo "")
-			# If stdin is not /dev/null and not a terminal, assume it has data
-			if [[ -z "$stdin_source" ]] || [[ "$stdin_source" != "/dev/null" ]]; then
-				# Try to peek at stdin to see if there's data (this consumes one byte if present)
-				local peek_byte
-				if peek_byte=$(dd bs=1 count=1 iflag=nonblock 2>/dev/null); then
-					if [[ -n "$peek_byte" ]]; then
-						echo "process_input:: cannot use both -file|--file option and stdin input" >&2
-						echo "process_input:: please provide input via either stdin or -file|--file, not both" >&2
-						return 1
-					fi
-				fi
-			fi
-		fi
 		if [[ ! -f "${input_file}" ]]; then
 			echo "process_input:: input file does not exist: ${input_file}" >&2
 			return 1
@@ -664,7 +647,7 @@ process_input() {
 		use_stdin="false"
 	else
 		if [[ -t 0 ]]; then
-			echo "process_input:: no input provided: use -file|--file <path> or provide input via stdin" >&2
+			echo "process_input:: no input provided: use -f|--file <path> or provide input via stdin" >&2
 			return 1
 		fi
 		use_stdin="true"
@@ -708,8 +691,8 @@ process_input() {
 # Main entry point that processes stdin payload and sends to Slack
 #
 # Inputs:
-# - Reads JSON payload from stdin or from file specified with -file|--file
-# - Command line arguments: -file|--file <path> (optional)
+# - Reads JSON payload from stdin or from file specified with -f|--file
+# - Command line arguments: -f|--file <path> (optional)
 #
 # Side Effects:
 # - Sends message to Slack API
@@ -751,9 +734,7 @@ main() {
 	fi
 
 	if [[ -z "${SEND_TO_SLACK_ROOT}" ]]; then
-		local script_path
-		script_path=$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")
-		script_dir=$(dirname "$script_path")
+		script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 		# Check for source/Docker layout: script_dir/bin exists
 		if [[ -d "$script_dir/bin" ]] && [[ -f "$script_dir/bin/parse-payload.sh" ]]; then
@@ -895,10 +876,10 @@ main() {
     }')
 
 	if [[ -n "${SEND_TO_SLACK_OUTPUT}" ]]; then
-		echo "${json_output}" >"${SEND_TO_SLACK_OUTPUT}"
+		jq -r '.' <<<"${json_output}" >"${SEND_TO_SLACK_OUTPUT}"
 		echo "main:: output written to ${SEND_TO_SLACK_OUTPUT}"
 	else
-		echo "${json_output}"
+		jq -r '.' <<<"${json_output}"
 	fi
 
 	echo "main:: finished running send-to-slack.sh successfully"

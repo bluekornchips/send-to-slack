@@ -163,7 +163,7 @@ convert_thread_ts() {
 
 	# Extract 16-digit number and convert
 	local timestamp
-	timestamp=$(echo "$input" | grep -oE '[0-9]{16}' | head -n1)
+	timestamp=$(echo "$input" | grep -oE '[0-9]{16}' | sed -n '1p')
 
 	if [[ -n "$timestamp" ]]; then
 		# Convert format to insert decimal after 10 digits
@@ -200,7 +200,7 @@ validate_input_payload_json() {
 
 	if ! jq . "$INPUT_PAYLOAD" >/dev/null 2>&1; then
 		local jq_error
-		jq_error=$(jq . "$INPUT_PAYLOAD" 2>&1 | head -3)
+		jq_error=$(jq . "$INPUT_PAYLOAD" 2>&1 | sed -n '1,3p')
 		cat <<EOF >&2
 validate_input_payload_json:: invalid JSON in payload file: ${INPUT_PAYLOAD}
 validate_input_payload_json:: jq error: ${jq_error}
@@ -374,24 +374,8 @@ process_blocks() {
 		local block_color
 
 		block_type=$(jq -r '.key' <<<"$block_entry")
-		block_value=$(jq -r '.value' <<<"$block_entry")
+		block_value=$(jq '.value | del(.color)' <<<"$block_entry") # Ignore the color field, if it is present
 		block_color=$(jq -r '.value.color // empty' <<<"$block_entry")
-
-		local is_attachment="false"
-		if [[ -n "$block_color" ]] || [[ "$block_type" == "table" ]]; then
-			is_attachment="true"
-			# If block_color is not a hex color, try and match it to one of our defined colors
-			if [[ "$block_color" != "#[0-9A-Fa-f]{6}" ]]; then
-				local block_color_lowercase
-				block_color_lowercase=$(echo "$block_color" | tr '[:upper:]' '[:lower:]')
-				case "$block_color" in
-				"danger") block_color="$DANGER_COLOR" ;;
-				"success") block_color="$SUCCESS_COLOR" ;;
-				"warning") block_color="$WARN_COLOR" ;;
-				*) block_color="$DANGER_COLOR" ;;
-				esac
-			fi
-		fi
 
 		local block
 		if ! block=$(create_block "$block_value" "$block_type"); then
@@ -399,10 +383,20 @@ process_blocks() {
 			return 1
 		fi
 
-		if [[ "$is_attachment" == "true" ]]; then
+		# Normalize and wrap colored blocks in attachments
+		if [[ -n "$block_color" ]] || [[ "$block_type" == "table" ]]; then
+			# Normalize color value if needed
+			if [[ -n "$block_color" ]] && [[ ! "$block_color" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
+				case "$block_color" in
+				"danger") block_color="$DANGER_COLOR" ;;
+				"success") block_color="$SUCCESS_COLOR" ;;
+				"warning") block_color="$WARN_COLOR" ;;
+				*) block_color="$DANGER_COLOR" ;;
+				esac
+			fi
 			attachments=$(jq \
 				--argjson block "$block" \
-				--arg color "$block_color" \
+				--arg color "${block_color:-}" \
 				'. += [{ color: $color, blocks: [$block]}]' <<<"$attachments")
 		else
 			blocks=$(jq --argjson block "$block" '. += [$block]' <<<"$blocks")

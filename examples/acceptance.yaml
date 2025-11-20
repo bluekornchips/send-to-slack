@@ -29,6 +29,7 @@ jobs:
           create_thread: true
           blocks:
             - header:
+                color: success
                 text:
                   type: plain_text
                   text: "Feature Examples"
@@ -37,6 +38,7 @@ jobs:
 
             # Section with rich text
             - section:
+                color: warning
                 type: text
                 text:
                   type: mrkdwn
@@ -49,6 +51,7 @@ jobs:
 
             # Table block demonstrating tabular data
             - table:
+                color: danger
                 rows:
                   - - type: raw_text
                       text: "Feature"

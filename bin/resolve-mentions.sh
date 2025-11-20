@@ -81,7 +81,7 @@ resolve_user_id() {
 		local found_id
 		found_id=$(jq -r \
 			--arg name "$user_name" \
-			'.members[] | select(.name == $name) | .id' <<<"$api_response" | head -1)
+			'.members[] | select(.name == $name) | .id' <<<"$api_response" | sed -n '1p')
 
 		if [[ -n "$found_id" ]]; then
 			echo "${found_id}"
@@ -169,7 +169,7 @@ resolve_channel_id() {
 		local found_id
 		found_id=$(jq -r \
 			--arg name "$channel_name" \
-			'.channels[] | select(.name == $name) | .id' <<<"$api_response" | head -1)
+			'.channels[] | select(.name == $name) | .id' <<<"$api_response" | sed -n '1p')
 
 		if [[ -n "$found_id" ]]; then
 			echo "${found_id}"

@@ -796,14 +796,13 @@ mock_curl_permalink_failure() {
 	rm -f "$empty_file"
 }
 
-@test "main:: fails when both stdin and -file are provided" {
+@test "main:: uses file and ignores stdin when both are provided" {
 	create_test_payload
 
 	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
 	run "$SCRIPT" -file "$TEST_PAYLOAD_FILE" <"$TEST_PAYLOAD_FILE"
-	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "process_input::"
-	echo "$output" | grep -q "cannot use both -file|--file option and stdin input"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
 }
 
 @test "main:: fails when no input is provided" {
