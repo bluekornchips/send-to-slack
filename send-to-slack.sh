@@ -19,7 +19,13 @@ RETRY_INITIAL_DELAY=1
 RETRY_MAX_DELAY=60
 RETRY_BACKOFF_MULTIPLIER=2
 
-ERROR_CODES_TRUE_FAILURES=("invalid_auth" "channel_not_found" "not_in_channel" "missing_scope" "invalid_blocks")
+ERROR_CODES_TRUE_FAILURES=(
+	"invalid_auth"
+	"channel_not_found"
+	"not_in_channel"
+	"missing_scope"
+	"invalid_blocks"
+	"invalid_attachments")
 ERROR_CODES_RETRYABLE=("rate_limited")
 
 # Check for required external commands
@@ -328,6 +334,12 @@ handle_slack_api_error() {
 			echo "handle_slack_api_error:: Context: $context" >&2
 		fi
 		;;
+	"invalid_attachments")
+		echo "handle_slack_api_error:: Invalid attachments in payload. Common issues:" >&2
+		if [[ -n "$context" ]]; then
+			echo "handle_slack_api_error:: Context: $context" >&2
+		fi
+		;;
 	*)
 		echo "handle_slack_api_error:: Slack API error: $error_code" >&2
 		if [[ -n "$context" ]]; then
@@ -335,6 +347,11 @@ handle_slack_api_error() {
 		fi
 		;;
 	esac
+
+	if [[ -n "$response" ]]; then
+		echo "handle_slack_api_error:: Full Slack API response:" >&2
+		echo "$response" | jq . >&2 2>/dev/null || echo "$response" >&2
+	fi
 }
 
 # Retry a command with exponential backoff
@@ -511,10 +528,16 @@ send_notification() {
 		# Check for HTTP errors
 		if [[ "$http_code" != "200" ]]; then
 			echo "send_notification:: HTTP error code: $http_code" >&2
+			if [[ -n "$response" ]]; then
+				echo "send_notification:: HTTP response body:" >&2
+				echo "$response" | jq . >&2 2>/dev/null || echo "$response" >&2
+			fi
 			last_exit_code=1
 		# response is valid JSON
 		elif ! echo "$response" | jq . >/dev/null 2>&1; then
 			echo "send_notification:: Invalid JSON response from Slack API" >&2
+			echo "send_notification:: Raw response:" >&2
+			echo "$response" >&2
 			last_exit_code=1
 		# Slack API returned success
 		elif ! echo "$response" | jq -e '.ok == true' >/dev/null 2>&1; then
@@ -530,13 +553,15 @@ send_notification() {
 			"${ERROR_CODES_TRUE_FAILURES[@]}")
 				# fail immediately
 				handle_slack_api_error "$response" "send_notification"
-				echo "Failed to send notification with payload:" >&2
+				echo "send_notification:: Full request payload:" >&2
 				jq . <<<"$payload" >&2
 				return 1
 				;;
 			*)
 				#retrys okay
 				echo "send_notification:: Slack API error: $error_code, will retry" >&2
+				echo "send_notification:: Error response:" >&2
+				echo "$response" | jq . >&2 2>/dev/null || echo "$response" >&2
 				last_exit_code=1
 				;;
 			esac
@@ -559,8 +584,9 @@ send_notification() {
 				handle_slack_api_error "$response" "send_notification"
 			else
 				echo "send_notification:: Failed to send notification after $RETRY_MAX_ATTEMPTS attempts" >&2
+				echo "send_notification:: No response received from Slack API" >&2
 			fi
-			echo "Failed to send notification with payload:" >&2
+			echo "send_notification:: Full request payload:" >&2
 			jq . <<<"$payload" >&2
 			return 1
 		fi
