@@ -59,6 +59,7 @@ create_button_element() {
 	fi
 	if [[ -z "$action_id" ]] || [[ "$action_id" == "null" ]]; then
 		echo "create_button_element:: action_id is required" >&2
+		echo "create_button_element:: See button element docs: https://docs.slack.dev/reference/block-kit/blocks/actions-block#button" >&2
 		return 1
 	fi
 

@@ -49,6 +49,7 @@ create_header() {
 	fi
 	if [[ "$text_type" != "$REQUIRED_TEXT_TYPE" ]]; then
 		echo "create_header:: text type must be $REQUIRED_TEXT_TYPE" >&2
+		echo "create_header:: See header block docs: https://docs.slack.dev/reference/block-kit/blocks/header-block" >&2
 		return 1
 	fi
 
@@ -64,6 +65,7 @@ create_header() {
 
 	if [[ "${#text_content}" -gt "$MAX_HEADER_LENGTH" ]]; then
 		echo "create_header:: header text must be $MAX_HEADER_LENGTH characters or less" >&2
+		echo "create_header:: See header block limits: https://docs.slack.dev/reference/block-kit/blocks/header-block" >&2
 		return 1
 	fi
 

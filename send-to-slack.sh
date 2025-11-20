@@ -297,6 +297,7 @@ handle_slack_api_error() {
 	"rate_limited")
 		echo "handle_slack_api_error:: Rate limited. Slack API is throttling requests." >&2
 		echo "handle_slack_api_error:: Consider implementing retry logic or reducing request frequency." >&2
+		echo "handle_slack_api_error:: See: https://api.slack.com/docs/rate-limits" >&2
 		if [[ -n "$context" ]]; then
 			echo "handle_slack_api_error:: Context: $context" >&2
 		fi
@@ -304,18 +305,21 @@ handle_slack_api_error() {
 	"invalid_auth")
 		echo "handle_slack_api_error:: Authentication failed. Check your SLACK_BOT_USER_OAUTH_TOKEN." >&2
 		echo "handle_slack_api_error:: Token may be expired or invalid." >&2
+		echo "handle_slack_api_error:: See: https://api.slack.com/authentication" >&2
 		if [[ -n "$context" ]]; then
 			echo "handle_slack_api_error:: Context: $context" >&2
 		fi
 		;;
 	"channel_not_found")
 		echo "handle_slack_api_error:: Channel not found. Verify the channel name/ID exists and the bot has access." >&2
+		echo "handle_slack_api_error:: See: https://api.slack.com/methods/conversations.list" >&2
 		if [[ -n "$context" ]]; then
 			echo "handle_slack_api_error:: Context: $context" >&2
 		fi
 		;;
 	"not_in_channel")
 		echo "handle_slack_api_error:: Bot is not in the specified channel. Invite the bot to the channel first." >&2
+		echo "handle_slack_api_error:: See: https://api.slack.com/methods/conversations.join" >&2
 		if [[ -n "$context" ]]; then
 			echo "handle_slack_api_error:: Context: $context" >&2
 		fi
@@ -326,22 +330,29 @@ handle_slack_api_error() {
 		needed_scope=$(echo "$response" | jq -r '.needed // "unknown"' 2>/dev/null)
 		if [[ -n "$needed_scope" ]] && [[ "$needed_scope" != "unknown" ]]; then
 			echo "handle_slack_api_error:: Required scope: $needed_scope" >&2
+			echo "handle_slack_api_error:: See: https://api.slack.com/scopes" >&2
 		fi
 		;;
 	"invalid_blocks")
 		echo "handle_slack_api_error:: Invalid blocks in payload. Check block structure and validation rules." >&2
+		echo "handle_slack_api_error:: See: https://docs.slack.dev/reference/block-kit/blocks" >&2
+		echo "handle_slack_api_error:: Use Block Kit Builder to validate: https://app.slack.com/block-kit-builder" >&2
 		if [[ -n "$context" ]]; then
 			echo "handle_slack_api_error:: Context: $context" >&2
 		fi
 		;;
 	"invalid_attachments")
 		echo "handle_slack_api_error:: Invalid attachments in payload. Common issues:" >&2
+		echo "handle_slack_api_error:: - Attachment structure must match Slack's format" >&2
+		echo "handle_slack_api_error:: - Maximum 20 attachments per message" >&2
+		echo "handle_slack_api_error:: See: https://api.slack.com/reference/messaging/payload#legacy" >&2
 		if [[ -n "$context" ]]; then
 			echo "handle_slack_api_error:: Context: $context" >&2
 		fi
 		;;
 	*)
 		echo "handle_slack_api_error:: Slack API error: $error_code" >&2
+		echo "handle_slack_api_error:: See: https://api.slack.com/methods/chat.postMessage#errors" >&2
 		if [[ -n "$context" ]]; then
 			echo "handle_slack_api_error:: Context: $context" >&2
 		fi

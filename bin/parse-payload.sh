@@ -88,6 +88,7 @@ create_block() {
 	"file") script_path="$FILE_UPLOAD_SCRIPT" ;;
 	*)
 		echo "create_block:: unsupported block type: $block_type. Skipping." >&2
+		echo "create_block:: See supported block types: https://docs.slack.dev/reference/block-kit/blocks" >&2
 		return 0
 		;;
 	esac
@@ -101,6 +102,32 @@ create_block() {
 
 	if [[ $script_exit_code -ne 0 ]]; then
 		echo "create_block:: block script failed with exit code $script_exit_code" >&2
+		case "$block_type" in
+		"section")
+			echo "create_block:: See section block docs: https://docs.slack.dev/reference/block-kit/blocks/section-block" >&2
+			;;
+		"header")
+			echo "create_block:: See header block docs: https://docs.slack.dev/reference/block-kit/blocks/header-block" >&2
+			;;
+		"image")
+			echo "create_block:: See image block docs: https://docs.slack.dev/reference/block-kit/blocks/image-block" >&2
+			;;
+		"context")
+			echo "create_block:: See context block docs: https://docs.slack.dev/reference/block-kit/blocks/context-block" >&2
+			;;
+		"markdown")
+			echo "create_block:: See markdown block docs: https://docs.slack.dev/reference/block-kit/blocks/markdown-block" >&2
+			;;
+		"rich-text")
+			echo "create_block:: See rich text block docs: https://docs.slack.dev/reference/block-kit/blocks/rich-text-block" >&2
+			;;
+		"actions")
+			echo "create_block:: See actions block docs: https://docs.slack.dev/reference/block-kit/blocks/actions-block" >&2
+			;;
+		"video")
+			echo "create_block:: See video block docs: https://docs.slack.dev/reference/block-kit/blocks/video-block" >&2
+			;;
+		esac
 		return 1
 	fi
 
@@ -410,6 +437,7 @@ process_blocks() {
 	block_count=$(jq '. | length' <<<"$blocks")
 	if ((block_count > MAX_BLOCKS)); then
 		echo "parse_payload:: block count ($block_count) exceeds Slack's maximum of $MAX_BLOCKS blocks per message" >&2
+		echo "parse_payload:: See block limits: https://docs.slack.dev/reference/block-kit/blocks" >&2
 		return 1
 	fi
 
@@ -422,6 +450,7 @@ process_blocks() {
 	fi
 	if ((attachment_count > MAX_ATTACHMENTS)); then
 		echo "parse_payload:: attachment count ($attachment_count) exceeds Slack's maximum of $MAX_ATTACHMENTS attachments per message" >&2
+		echo "parse_payload:: See attachment limits: https://api.slack.com/reference/messaging/payload#legacy" >&2
 		return 1
 	fi
 
@@ -433,6 +462,7 @@ process_blocks() {
 	local total_block_count=$((block_count + attachment_block_count))
 	if ((total_block_count > MAX_BLOCKS)); then
 		echo "parse_payload:: total block count ($total_block_count) exceeds Slack's maximum of $MAX_BLOCKS blocks per message" >&2
+		echo "parse_payload:: See block limits: https://docs.slack.dev/reference/block-kit/blocks" >&2
 		return 1
 	fi
 

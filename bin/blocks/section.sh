@@ -48,6 +48,7 @@ create_text_section() {
 	pattern=" ${SUPPORTED_TEXT_TYPES[*]} "
 	if ! [[ "$pattern" =~ ${text_type} ]]; then
 		echo "create_text_section:: text type must be one of: ${SUPPORTED_TEXT_TYPES[*]}" >&2
+		echo "create_text_section:: See text object docs: https://docs.slack.dev/reference/block-kit/composition-objects/text-object" >&2
 		return 1
 	fi
 
@@ -58,6 +59,7 @@ create_text_section() {
 	fi
 	if [[ "${#text}" -gt "$MAX_TEXT_LENGTH" ]]; then
 		echo "create_text_section:: text length must be less than $MAX_TEXT_LENGTH" >&2
+		echo "create_text_section:: See section block limits: https://docs.slack.dev/reference/block-kit/blocks/section-block" >&2
 		return 1
 	fi
 
