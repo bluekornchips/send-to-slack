@@ -40,10 +40,16 @@ teardown_file() {
 # Basic functionality
 ########################################################
 
-@test "install:: fails without prefix argument" {
+@test "install:: uses default prefix when no argument provided" {
 	run "$SCRIPT"
-	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "usage:"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "Installed send-to-slack to"
+	# Verify it installed to the default location
+	local expected_default="${HOME}/.local/bin/send-to-slack"
+	[[ -f "$expected_default" ]]
+	# Clean up default installation
+	rm -rf "${HOME}/.local/bin/send-to-slack" "${HOME}/.local/bin/blocks" "${HOME}/.local/bin"/*.sh 2>/dev/null || true
+	rmdir "${HOME}/.local/bin/blocks" "${HOME}/.local/bin" 2>/dev/null || true
 }
 
 @test "install:: creates required directories" {

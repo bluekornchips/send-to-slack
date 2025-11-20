@@ -10,10 +10,13 @@ set -eo pipefail
 # Side Effects:
 # - Outputs usage message to stderr
 usage() {
-	printf '%s\n' \
-		"usage: $0 <prefix>" \
-		"  e.g. $0 /usr/local" \
-		"       $0 ~/.local" >&2
+	cat <<EOF >&2
+usage: $0 [prefix]
+  prefix: Installation prefix directory (default: ~/.local)
+  e.g. $0 /usr/local
+				$0 ~/.local
+				$0
+EOF
 }
 
 # Validate installation prerequisites
@@ -74,7 +77,7 @@ install_files() {
 # Main entry point
 #
 # Inputs:
-# - $1 - prefix: Installation prefix directory
+# - $1 - prefix: Installation prefix directory (optional, defaults to ~/.local)
 #
 # Returns:
 # - 0 on success
@@ -82,13 +85,25 @@ install_files() {
 main() {
 	local script_root
 	local prefix
+	local default_prefix
 
 	script_root="${0%/*}"
+	default_prefix="${HOME}/.local"
 	prefix="${1%/}"
 
+	# Use default prefix if none provided
 	if [[ -z "$prefix" ]]; then
-		usage
-		return 1
+		if [[ -z "$HOME" ]]; then
+			echo "main:: HOME environment variable is not set and no prefix provided" >&2
+			usage
+			return 1
+		fi
+		prefix="$default_prefix"
+	fi
+
+	# Expand ~ to home directory if present
+	if [[ "$prefix" == ~* ]] && [[ -n "$HOME" ]]; then
+		prefix="${prefix/#\~/$HOME}"
 	fi
 
 	if ! validate_prerequisites "$script_root"; then
@@ -99,7 +114,7 @@ main() {
 		return 1
 	fi
 
-	echo "Installed send-to-slack to $prefix/bin/send-to-slack"
+	echo "main:: Installed send-to-slack to ${prefix}/bin/send-to-slack"
 
 	return 0
 }
