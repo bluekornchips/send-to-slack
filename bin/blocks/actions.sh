@@ -11,6 +11,17 @@ set -eo pipefail
 MAX_ELEMENTS=25
 SUPPORTED_ELEMENT_TYPES=("button")
 
+########################################################
+# Documentation URLs
+########################################################
+DOC_URL_BUTTON_ELEMENT="https://docs.slack.dev/reference/block-kit/blocks/actions-block#button"
+
+########################################################
+# Example Strings
+########################################################
+EXAMPLE_BUTTON_ELEMENT='{"type": "button", "text": {"type": "plain_text", "text": "Click"}, "action_id": "btn_1"}'
+EXAMPLE_ACTIONS_BLOCK="{\"elements\": [$EXAMPLE_BUTTON_ELEMENT]}"
+
 # Create button element following Slack Block Kit format
 #
 # Inputs:
@@ -39,6 +50,7 @@ create_button_element() {
 
 	if ! jq -e '.text' <<<"$button_json" >/dev/null 2>&1; then
 		echo "create_button_element:: text is required" >&2
+		echo "create_button_element:: Example: $EXAMPLE_BUTTON_ELEMENT" >&2
 		return 1
 	fi
 
@@ -49,6 +61,7 @@ create_button_element() {
 	fi
 	if [[ -z "$text_type" ]] || [[ "$text_type" == "null" ]]; then
 		echo "create_button_element:: text.type is required" >&2
+		echo "create_button_element:: Example: $EXAMPLE_BUTTON_ELEMENT" >&2
 		return 1
 	fi
 
@@ -59,7 +72,8 @@ create_button_element() {
 	fi
 	if [[ -z "$action_id" ]] || [[ "$action_id" == "null" ]]; then
 		echo "create_button_element:: action_id is required" >&2
-		echo "create_button_element:: See button element docs: https://docs.slack.dev/reference/block-kit/blocks/actions-block#button" >&2
+		echo "create_button_element:: Example: $EXAMPLE_BUTTON_ELEMENT" >&2
+		echo "create_button_element:: See button element docs: $DOC_URL_BUTTON_ELEMENT" >&2
 		return 1
 	fi
 
@@ -130,7 +144,8 @@ create_actions() {
 		return 1
 	fi
 	if [[ -z "$elements_json" ]] || [[ "$elements_json" == "null" ]] || [[ "$elements_json" == "[]" ]]; then
-		echo "create_actions:: elements array is required" >&2
+		echo "create_actions:: elements array is required and cannot be empty" >&2
+		echo "create_actions:: Example: $EXAMPLE_ACTIONS_BLOCK" >&2
 		return 1
 	fi
 

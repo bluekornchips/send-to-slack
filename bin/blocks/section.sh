@@ -15,6 +15,17 @@ MAX_FIELD_TEXT_LENGTH=2000
 MAX_FIELDS=10
 DEFAULT_TEXT_TYPE="plain_text"
 
+########################################################
+# Documentation URLs
+########################################################
+DOC_URL_TEXT_OBJECT="https://docs.slack.dev/reference/block-kit/composition-objects/text-object"
+DOC_URL_SECTION_BLOCK="https://docs.slack.dev/reference/block-kit/blocks/section-block"
+
+########################################################
+# Example Strings
+########################################################
+EXAMPLE_TEXT_OBJECT='{"type": "plain_text", "text": "Your message here"}'
+
 # Create text section block following Slack Block Kit format
 #
 # Inputs:
@@ -48,7 +59,7 @@ create_text_section() {
 	pattern=" ${SUPPORTED_TEXT_TYPES[*]} "
 	if ! [[ "$pattern" =~ ${text_type} ]]; then
 		echo "create_text_section:: text type must be one of: ${SUPPORTED_TEXT_TYPES[*]}" >&2
-		echo "create_text_section:: See text object docs: https://docs.slack.dev/reference/block-kit/composition-objects/text-object" >&2
+		echo "create_text_section:: See text object docs: $DOC_URL_TEXT_OBJECT" >&2
 		return 1
 	fi
 
@@ -57,9 +68,16 @@ create_text_section() {
 		echo "create_text_section:: invalid JSON format" >&2
 		return 1
 	fi
-	if [[ "${#text}" -gt "$MAX_TEXT_LENGTH" ]]; then
-		echo "create_text_section:: text length must be less than $MAX_TEXT_LENGTH" >&2
-		echo "create_text_section:: See section block limits: https://docs.slack.dev/reference/block-kit/blocks/section-block" >&2
+	if [[ -z "$text" ]] || [[ "$text" == "null" ]]; then
+		echo "create_text_section:: text field is required and cannot be empty" >&2
+		echo "create_text_section:: Example: $EXAMPLE_TEXT_OBJECT" >&2
+		return 1
+	fi
+	local text_length
+	text_length=${#text}
+	if ((text_length > MAX_TEXT_LENGTH)); then
+		echo "create_text_section:: text length ($text_length) exceeds maximum of $MAX_TEXT_LENGTH characters" >&2
+		echo "create_text_section:: See section block limits: $DOC_URL_SECTION_BLOCK" >&2
 		return 1
 	fi
 
@@ -142,8 +160,11 @@ create_fields_section() {
 			echo "create_fields_section:: invalid JSON format for field at index $field_index" >&2
 			return 1
 		fi
-		if [[ "${#field_text}" -gt "$MAX_FIELD_TEXT_LENGTH" ]]; then
-			echo "create_fields_section:: field at index $field_index text length must be less than $MAX_FIELD_TEXT_LENGTH" >&2
+		local field_text_length
+		field_text_length=${#field_text}
+		if ((field_text_length > MAX_FIELD_TEXT_LENGTH)); then
+			echo "create_fields_section:: field at index $field_index text length ($field_text_length) exceeds maximum of $MAX_FIELD_TEXT_LENGTH characters" >&2
+			echo "create_fields_section:: See section block limits: $DOC_URL_SECTION_BLOCK" >&2
 			return 1
 		fi
 

@@ -12,6 +12,16 @@ BLOCK_TYPE="header"
 REQUIRED_TEXT_TYPE="plain_text"
 MAX_HEADER_LENGTH=150
 
+########################################################
+# Documentation URLs
+########################################################
+DOC_URL_HEADER_BLOCK="https://docs.slack.dev/reference/block-kit/blocks/header-block"
+
+########################################################
+# Example Strings
+########################################################
+EXAMPLE_HEADER_BLOCK='{"text": {"type": "plain_text", "text": "Header Title"}}'
+
 # Process header block and create Slack Block Kit header block format
 #
 # Inputs:
@@ -39,6 +49,7 @@ create_header() {
 
 	if ! jq -e '.text' <<<"$input" >/dev/null 2>&1; then
 		echo "create_header:: text field is required" >&2
+		echo "create_header:: Example: $EXAMPLE_HEADER_BLOCK" >&2
 		return 1
 	fi
 
@@ -49,7 +60,7 @@ create_header() {
 	fi
 	if [[ "$text_type" != "$REQUIRED_TEXT_TYPE" ]]; then
 		echo "create_header:: text type must be $REQUIRED_TEXT_TYPE" >&2
-		echo "create_header:: See header block docs: https://docs.slack.dev/reference/block-kit/blocks/header-block" >&2
+		echo "create_header:: See header block docs: $DOC_URL_HEADER_BLOCK" >&2
 		return 1
 	fi
 
@@ -58,14 +69,17 @@ create_header() {
 		echo "create_header:: invalid JSON format" >&2
 		return 1
 	fi
-	if [[ -z "$text_content" ]]; then
-		echo "create_header:: text.text field is required" >&2
+	if [[ -z "$text_content" ]] || [[ "$text_content" == "null" ]]; then
+		echo "create_header:: text.text field is required and cannot be empty" >&2
+		echo "create_header:: Example: $EXAMPLE_HEADER_BLOCK" >&2
 		return 1
 	fi
 
-	if [[ "${#text_content}" -gt "$MAX_HEADER_LENGTH" ]]; then
-		echo "create_header:: header text must be $MAX_HEADER_LENGTH characters or less" >&2
-		echo "create_header:: See header block limits: https://docs.slack.dev/reference/block-kit/blocks/header-block" >&2
+	local text_length
+	text_length=${#text_content}
+	if ((text_length > MAX_HEADER_LENGTH)); then
+		echo "create_header:: header text length ($text_length) exceeds maximum of $MAX_HEADER_LENGTH characters" >&2
+		echo "create_header:: See header block limits: $DOC_URL_HEADER_BLOCK" >&2
 		return 1
 	fi
 

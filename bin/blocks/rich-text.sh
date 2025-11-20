@@ -10,6 +10,16 @@ MAX_RICH_TEXT_CHARS=4000
 
 UPLOAD_FILE_SCRIPT="bin/file-upload.sh"
 
+########################################################
+# Documentation URLs
+########################################################
+DOC_URL_RICH_TEXT_BLOCK="https://docs.slack.dev/reference/block-kit/blocks/rich-text-block"
+
+########################################################
+# Example Strings
+########################################################
+EXAMPLE_RICH_TEXT_BLOCK='{"elements": [{"type": "rich_text_section", "elements": [{"type": "text", "text": "Content"}]}]}'
+
 # Upload the content as a file if it exceeds the max allowed characters
 handle_oversize_text() {
 	local extracted_text="$1"
@@ -87,6 +97,7 @@ create_rich_text() {
 	# Validate required fields
 	if ! jq -e '.elements' "$input_json" >/dev/null 2>&1; then
 		echo "create_rich_text:: elements field is required" >&2
+		echo "create_rich_text:: Example: $EXAMPLE_RICH_TEXT_BLOCK" >&2
 		return 1
 	fi
 
@@ -112,11 +123,14 @@ create_rich_text() {
 		.elements // [] | map(extract_text) | join("")
 	' "$input_json")
 
-	local text_length=${#extracted_text}
+	local text_length
+	text_length=${#extracted_text}
 
 	# If the text length exceeds the max allowed characters, instead we need
 	# to upload the content as a file.
-	if [[ "$text_length" -gt "$MAX_RICH_TEXT_CHARS" ]]; then
+	if ((text_length > MAX_RICH_TEXT_CHARS)); then
+		echo "create_rich_text:: text length ($text_length) exceeds maximum of $MAX_RICH_TEXT_CHARS characters" >&2
+		echo "create_rich_text:: See rich text block limits: $DOC_URL_RICH_TEXT_BLOCK" >&2
 		handle_oversize_text "$extracted_text"
 		return $?
 	fi
