@@ -17,6 +17,11 @@ MAX_AUTHOR_NAME_LENGTH=2000
 MAX_PROVIDER_NAME_LENGTH=2000
 MAX_BLOCK_ID_LENGTH=255
 
+########################################################
+# Example Strings
+########################################################
+EXAMPLE_VIDEO_BLOCK='{"video_url": "https://www.youtube.com/embed/pWTSK5waNs8", "thumbnail_url": "https://i.ytimg.com/vi/pWTSK5waNs8/hqdefault.jpg", "alt_text": "Example video", "title": {"type": "plain_text", "text": "Example Video"}}'
+
 # Process video block and create Slack Block Kit video block format
 #
 # Inputs:
@@ -44,6 +49,7 @@ create_video() {
 
 	if ! jq -e '.video_url' <<<"$input" >/dev/null 2>&1; then
 		echo "create_video:: video_url field is required" >&2
+		echo "create_video:: Example: $EXAMPLE_VIDEO_BLOCK" >&2
 		return 1
 	fi
 
@@ -53,12 +59,14 @@ create_video() {
 		return 1
 	fi
 	if [[ -z "$video_url" ]] || [[ "$video_url" == "null" ]]; then
-		echo "create_video:: video_url field is required" >&2
+		echo "create_video:: video_url field is required and cannot be empty" >&2
+		echo "create_video:: Example: $EXAMPLE_VIDEO_BLOCK" >&2
 		return 1
 	fi
 
 	if ! jq -e '.thumbnail_url' <<<"$input" >/dev/null 2>&1; then
 		echo "create_video:: thumbnail_url field is required" >&2
+		echo "create_video:: Example: $EXAMPLE_VIDEO_BLOCK" >&2
 		return 1
 	fi
 
@@ -68,12 +76,14 @@ create_video() {
 		return 1
 	fi
 	if [[ -z "$thumbnail_url" ]] || [[ "$thumbnail_url" == "null" ]]; then
-		echo "create_video:: thumbnail_url field is required" >&2
+		echo "create_video:: thumbnail_url field is required and cannot be empty" >&2
+		echo "create_video:: Example: $EXAMPLE_VIDEO_BLOCK" >&2
 		return 1
 	fi
 
 	if ! jq -e '.alt_text' <<<"$input" >/dev/null 2>&1; then
 		echo "create_video:: alt_text field is required" >&2
+		echo "create_video:: Example: $EXAMPLE_VIDEO_BLOCK" >&2
 		return 1
 	fi
 
@@ -83,7 +93,8 @@ create_video() {
 		return 1
 	fi
 	if [[ -z "$alt_text" ]] || [[ "$alt_text" == "null" ]]; then
-		echo "create_video:: alt_text field is required" >&2
+		echo "create_video:: alt_text field is required and cannot be empty" >&2
+		echo "create_video:: Example: $EXAMPLE_VIDEO_BLOCK" >&2
 		return 1
 	fi
 
@@ -94,6 +105,7 @@ create_video() {
 
 	if ! jq -e '.title' <<<"$input" >/dev/null 2>&1; then
 		echo "create_video:: title field is required" >&2
+		echo "create_video:: Example: $EXAMPLE_VIDEO_BLOCK" >&2
 		return 1
 	fi
 
@@ -113,7 +125,8 @@ create_video() {
 		return 1
 	fi
 	if [[ -z "$title_text" ]] || [[ "$title_text" == "null" ]]; then
-		echo "create_video:: title.text field is required" >&2
+		echo "create_video:: title.text field is required and cannot be empty" >&2
+		echo "create_video:: Example: $EXAMPLE_VIDEO_BLOCK" >&2
 		return 1
 	fi
 

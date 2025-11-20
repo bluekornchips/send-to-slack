@@ -13,6 +13,12 @@ MAX_ALT_TEXT_LENGTH=2000
 MAX_TITLE_TEXT_LENGTH=2000
 MAX_BLOCK_ID_LENGTH=255
 
+########################################################
+# Example Strings
+########################################################
+EXAMPLE_IMAGE_URL='{"image_url": "https://example.com/image.png", "alt_text": "Image description"}'
+EXAMPLE_IMAGE_SLACK_FILE='{"slack_file": {"id": "F012345678"}, "alt_text": "Image description"}'
+
 # Process image block and create Slack Block Kit image block format
 #
 # Inputs:
@@ -59,6 +65,8 @@ create_image() {
 
 	if [[ "$has_image_url" == false ]] && [[ "$has_slack_file" == false ]]; then
 		echo "create_image:: either image_url or slack_file field is required" >&2
+		echo "create_image:: Example with image_url: $EXAMPLE_IMAGE_URL" >&2
+		echo "create_image:: Example with slack_file: $EXAMPLE_IMAGE_SLACK_FILE" >&2
 		return 1
 	fi
 
@@ -89,6 +97,7 @@ create_image() {
 
 	if ! jq -e '.alt_text' <<<"$input" >/dev/null 2>&1; then
 		echo "create_image:: alt_text field is required" >&2
+		echo "create_image:: Example: $EXAMPLE_IMAGE_URL" >&2
 		return 1
 	fi
 
@@ -98,7 +107,8 @@ create_image() {
 		return 1
 	fi
 	if [[ -z "$alt_text" ]] || [[ "$alt_text" == "null" ]]; then
-		echo "create_image:: alt_text field is required" >&2
+		echo "create_image:: alt_text field is required and cannot be empty" >&2
+		echo "create_image:: Example: $EXAMPLE_IMAGE_URL" >&2
 		return 1
 	fi
 

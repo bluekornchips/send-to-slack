@@ -253,6 +253,29 @@ The program supports all Slack Block Kit block types. See [examples/README.md](e
 - [Concourse CI Integration](concourse/README.md) - Using as a Concourse resource type
 - [Interactive Components](python/README.md) - Python server setup for interactive buttons
 
+## Development Tools
+
+### Block Kit Builder
+
+Before creating your payload, go take a look at Slack's [Block Kit Builder](https://app.slack.com/block-kit-builder) to visually design and see how your message layout will look. It's better than trying to figure out payloads by brute forcing tests.
+
+The Builder allows you to:
+
+- Drag and drop blocks to create your layout
+- See a live preview of how your message will appear
+- Export the JSON structure for use in your code
+
+#### Example Workflow:
+
+1. Design in Block Kit Builder: Open the [Block Kit Builder](https://app.slack.com/block-kit-builder) and design your message layout visually
+2. Export JSON: Copy the generated JSON from the Builder
+3. Convert to Tool Format: Transform the Builder's format to match this tool's payload structure:
+   - Builder exports blocks directly in a `blocks` array
+   - This tool expects blocks wrapped in `params.blocks` with block type keys (e.g., `{"section": {...}}`)
+4. Use in Tool: Include the converted blocks in your payload
+
+The Block Kit Builder exports blocks in Slack's native format. When used with our `send-to-slack` tool, you'll need to wrap blocks in the tool's expected format (see [README.md](../README.md#block-kit-builder) for conversion details).
+
 ## Development
 
 ### Running Tests
