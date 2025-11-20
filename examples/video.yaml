@@ -23,12 +23,13 @@ jobs:
           <<: *common_slack_params
           blocks:
             - video:
-                video_url: "https://www.youtube.com/pWTSK5waNs8"
+                video_url: "https://www.youtube.com/embed/pWTSK5waNs8"
                 thumbnail_url: "https://i.ytimg.com/vi/pWTSK5waNs8/hqdefault.jpg"
                 alt_text: "Example video"
                 title:
                   type: plain_text
                   text: "Example Video"
+                provider_name: "YouTube"
 
   - name: video-with-description
     plan:
@@ -38,7 +39,7 @@ jobs:
           <<: *common_slack_params
           blocks:
             - video:
-                video_url: "https://www.youtube.com/pWTSK5waNs8"
+                video_url: "https://www.youtube.com/watch?v=pWTSK5waNs8"
                 thumbnail_url: "https://i.ytimg.com/vi/pWTSK5waNs8/hqdefault.jpg"
                 alt_text: "Tutorial video"
                 title:
@@ -56,7 +57,7 @@ jobs:
           <<: *common_slack_params
           blocks:
             - video:
-                video_url: "https://www.youtube.com/pWTSK5waNs8"
+                video_url: "https://www.youtube.com/watch?v=pWTSK5waNs8"
                 thumbnail_url: "https://i.ytimg.com/vi/pWTSK5waNs8/hqdefault.jpg"
                 alt_text: "YouTube video"
                 title:
@@ -74,7 +75,7 @@ jobs:
           <<: *common_slack_params
           blocks:
             - video:
-                video_url: "https://www.youtube.com/pWTSK5waNs8"
+                video_url: "https://www.youtube.com/watch?v=pWTSK5waNs8"
                 thumbnail_url: "https://i.ytimg.com/vi/pWTSK5waNs8/hqdefault.jpg"
                 alt_text: "Video by author"
                 title:
@@ -93,7 +94,7 @@ jobs:
           <<: *common_slack_params
           blocks:
             - video:
-                video_url: "https://www.youtube.com/pWTSK5waNs8"
+                video_url: "https://www.youtube.com/watch?v=pWTSK5waNs8"
                 thumbnail_url: "https://i.ytimg.com/vi/pWTSK5waNs8/hqdefault.jpg"
                 alt_text: "Complete video example"
                 title:
@@ -125,7 +126,7 @@ jobs:
                   type: mrkdwn
                   text: "Watch this video to learn about our deployment process."
             - video:
-                video_url: "https://www.youtube.com/pWTSK5waNs8"
+                video_url: "https://www.youtube.com/watch?v=pWTSK5waNs8"
                 thumbnail_url: "https://i.ytimg.com/vi/pWTSK5waNs8/hqdefault.jpg"
                 alt_text: "Deployment tutorial"
                 title:
