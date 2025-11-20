@@ -76,7 +76,7 @@ create_text_section() {
 	local text_length
 	text_length=${#text}
 	if ((text_length > MAX_TEXT_LENGTH)); then
-		echo "create_text_section:: text length ($text_length) exceeds maximum of $MAX_TEXT_LENGTH characters" >&2
+		echo "create_text_section:: text length must be less than $MAX_TEXT_LENGTH" >&2
 		echo "create_text_section:: See section block limits: $DOC_URL_SECTION_BLOCK" >&2
 		return 1
 	fi
@@ -163,7 +163,7 @@ create_fields_section() {
 		local field_text_length
 		field_text_length=${#field_text}
 		if ((field_text_length > MAX_FIELD_TEXT_LENGTH)); then
-			echo "create_fields_section:: field at index $field_index text length ($field_text_length) exceeds maximum of $MAX_FIELD_TEXT_LENGTH characters" >&2
+			echo "create_fields_section:: text length must be less than $MAX_FIELD_TEXT_LENGTH" >&2
 			echo "create_fields_section:: See section block limits: $DOC_URL_SECTION_BLOCK" >&2
 			return 1
 		fi
@@ -171,7 +171,7 @@ create_fields_section() {
 		# Add validated field to array
 		validated_fields=$(jq --argjson field "$validated_field" '. += [$field]' <<<"$validated_fields")
 
-		((field_index++))
+		field_index=$((field_index + 1))
 	done < <(jq -r -c '.[]' <<<"$fields_json")
 
 	echo "$validated_fields"

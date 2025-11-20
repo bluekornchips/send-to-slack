@@ -78,7 +78,7 @@ create_header() {
 	local text_length
 	text_length=${#text_content}
 	if ((text_length > MAX_HEADER_LENGTH)); then
-		echo "create_header:: header text length ($text_length) exceeds maximum of $MAX_HEADER_LENGTH characters" >&2
+		echo "create_header:: header text must be $MAX_HEADER_LENGTH characters or less" >&2
 		echo "create_header:: See header block limits: $DOC_URL_HEADER_BLOCK" >&2
 		return 1
 	fi

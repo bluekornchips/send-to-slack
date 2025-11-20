@@ -72,24 +72,28 @@ create_context() {
 		return 1
 	fi
 
-	# Validate each element's text length
+	# Validate each element's text length (only for text-based elements)
 	local element_index=0
 	while read -r element_entry; do
-		local element_text
-		element_text=""
-		if jq -e '.text' <<<"$element_entry" >/dev/null 2>&1; then
-			element_text=$(jq -r '.text // ""' <<<"$element_entry" 2>/dev/null)
-		fi
-		if [[ -n "$element_text" ]] && [[ "$element_text" != "null" ]]; then
-			local element_text_length
-			element_text_length=${#element_text}
-			if ((element_text_length > MAX_ELEMENT_TEXT_LENGTH)); then
-				echo "create_context:: element at index $element_index text length ($element_text_length) exceeds maximum of $MAX_ELEMENT_TEXT_LENGTH characters" >&2
-				echo "create_context:: See context block limits: $DOC_URL_CONTEXT_BLOCK" >&2
-				return 1
+		local element_type
+		element_type=$(jq -r '.type // ""' <<<"$element_entry" 2>/dev/null)
+		if [[ -n "$element_type" ]] && [[ "$element_type" != "null" ]] && [[ "$element_type" != "image" ]]; then
+			local element_text
+			element_text=""
+			if jq -e '.text' <<<"$element_entry" >/dev/null 2>&1; then
+				element_text=$(jq -r '.text // ""' <<<"$element_entry" 2>/dev/null)
+			fi
+			if [[ -n "$element_text" ]] && [[ "$element_text" != "null" ]]; then
+				local element_text_length
+				element_text_length=${#element_text}
+				if ((element_text_length > MAX_ELEMENT_TEXT_LENGTH)); then
+					echo "create_context:: element at index $element_index text length ($element_text_length) exceeds maximum of $MAX_ELEMENT_TEXT_LENGTH characters" >&2
+					echo "create_context:: See context block limits: $DOC_URL_CONTEXT_BLOCK" >&2
+					return 1
+				fi
 			fi
 		fi
-		((element_index++))
+		element_index=$((element_index + 1))
 	done < <(jq -r -c '.elements[]' <<<"$input")
 
 	# Create the context block

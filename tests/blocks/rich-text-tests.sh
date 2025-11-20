@@ -41,6 +41,12 @@ setup() {
 	return 0
 }
 
+teardown() {
+	# Clean up mock script if it exists
+	rm -f /tmp/mock_file_upload*.sh 2>/dev/null || true
+	return 0
+}
+
 ########################################################
 # create_rich_text
 ########################################################
@@ -87,7 +93,8 @@ setup() {
 	block_value=$(jq -n --arg text "$text" '{type: "rich_text", elements: [{"type": "text", "text": $text}]}')
 
 	# Mock the file upload script to avoid actual API calls
-	local mock_script="/tmp/mock_file_upload.sh"
+	local mock_script
+	mock_script=$(mktemp /tmp/mock_file_upload.XXXXXX.sh)
 	cat >"$mock_script" <<'EOF'
 #!/bin/bash
 echo '{"type": "section", "text": {"type": "mrkdwn", "text": "<http://example.com/file.txt|oversized-rich-text.txt>"}}'
@@ -98,13 +105,17 @@ EOF
 	local original_upload_script="$UPLOAD_FILE_SCRIPT"
 	UPLOAD_FILE_SCRIPT="$mock_script"
 
-	run create_rich_text <<<"$block_value"
+	local json_output
+	local stderr_file
+	stderr_file=$(mktemp)
+	json_output=$(create_rich_text <<<"$block_value" 2>"$stderr_file")
+	local status=$?
 
 	# Restore original
 	UPLOAD_FILE_SCRIPT="$original_upload_script"
-	rm -f "$mock_script"
+	rm -f "$mock_script" "$stderr_file"
 
 	[[ "$status" -eq 0 ]]
-	echo "$output" | jq -e '.type == "section"' >/dev/null
-	echo "$output" | jq -e '.text.type == "mrkdwn"' >/dev/null
+	echo "$json_output" | jq -e '.type == "section"' >/dev/null
+	echo "$json_output" | jq -e '.text.type == "mrkdwn"' >/dev/null
 }

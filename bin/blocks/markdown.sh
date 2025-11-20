@@ -66,7 +66,7 @@ create_markdown() {
 	local text_length
 	text_length=${#text_content}
 	if ((text_length > MAX_TEXT_LENGTH)); then
-		echo "create_markdown:: text length ($text_length) exceeds maximum of $MAX_TEXT_LENGTH characters" >&2
+		echo "create_markdown:: text must be $MAX_TEXT_LENGTH characters or less" >&2
 		echo "create_markdown:: See markdown block limits: $DOC_URL_MARKDOWN_BLOCK" >&2
 		return 1
 	fi
