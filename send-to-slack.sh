@@ -102,7 +102,7 @@ create_metadata() {
 			safe_payload="${payload}"
 		fi
 		METADATA=$(echo "$METADATA" | jq \
-			--argjson payload "$safe_payload" \
+			--arg payload "$safe_payload" \
 			'. += [{"name": "payload", "value": $payload}]')
 	fi
 
