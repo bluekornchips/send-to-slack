@@ -670,3 +670,77 @@ teardown() {
 	echo "3. Verify 'Hello, world!' message appears in your DMs"
 	echo "=========================================="
 }
+
+@test "acceptance:: slack-native format with all block types" {
+	if [[ "$ACCEPTANCE_TEST" != "true" ]]; then
+		skip "ACCEPTANCE_TEST is not set"
+	fi
+
+	if [[ -z "$REAL_TOKEN" ]]; then
+		skip "REAL_TOKEN is required for acceptance tests"
+	fi
+
+	local token="$REAL_TOKEN"
+	CHANNEL="notification-testing"
+	DRY_RUN="false"
+
+	local blocks_json
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "slack-native-format-all-block-types") | .plan[0].params.blocks' "$GIT_ROOT/examples/slack-native.yaml")
+
+	if ! echo "$blocks_json" | jq . >/dev/null 2>&1; then
+		echo "Invalid blocks_json from slack-native.yaml" >&2
+		echo "$blocks_json" >&2
+		return 1
+	fi
+
+	jq -n \
+		--arg token "$token" \
+		--argjson blocks "$blocks_json" \
+		--arg channel "$CHANNEL" \
+		--arg dry_run "$DRY_RUN" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: $token
+			},
+			params: {
+				channel: $channel,
+				dry_run: $dry_run,
+				blocks: $blocks
+			}
+		}' >"$TEST_PAYLOAD_FILE"
+
+	if ! jq . "$TEST_PAYLOAD_FILE" >/dev/null 2>&1; then
+		echo "Invalid JSON in test payload file" >&2
+		cat "$TEST_PAYLOAD_FILE" >&2
+		return 1
+	fi
+
+	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
+	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "version"
+	echo "$output" | grep -q "timestamp"
+	echo "$output" | grep -q "main:: parsing payload"
+	echo "$output" | grep -q "main:: creating Concourse metadata"
+	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
+
+	echo ""
+	echo "=========================================="
+	echo "Acceptance Test: Slack Native Format"
+	echo "=========================================="
+	echo "1. Check Slack channel: ${CHANNEL}"
+	echo "2. Verify all block types are displayed correctly:"
+	echo "   - Header block"
+	echo "   - Divider blocks"
+	echo "   - Section blocks (text and fields)"
+	echo "   - Context block"
+	echo "   - Markdown block"
+	echo "   - Rich text block"
+	echo "   - Image block"
+	echo "   - Video block"
+	echo "   - Actions block"
+	echo "   - Table block (in attachment)"
+	echo "   - Colored blocks (in attachments)"
+	echo "=========================================="
+}
