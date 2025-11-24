@@ -297,7 +297,7 @@ mock_complete_upload_success() {
 @test "file_upload:: file size exceeds 1 GB limit" {
 	# Create a mock file that reports a size exceeding 1 GB
 	local large_file
-	large_file=$(mktemp)
+	large_file=$(mktemp /tmp/large-file.XXXXXX)
 	echo "test content" >"$large_file"
 
 	# Mock stat to return a size exceeding 1 GB (1 GB + 1 byte)
@@ -325,7 +325,7 @@ mock_complete_upload_success() {
 @test "file_upload:: file size exactly at 1 GB limit succeeds" {
 	# Create a mock file that reports exactly 1 GB
 	local test_file
-	test_file=$(mktemp)
+	test_file=$(mktemp /tmp/test-file.XXXXXX)
 	echo "test content" >"$test_file"
 
 	# Mock stat to return exactly 1 GB

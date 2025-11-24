@@ -38,7 +38,7 @@ setup() {
 	SEND_TO_SLACK_ROOT="$GIT_ROOT"
 	export SEND_TO_SLACK_ROOT
 
-	TEST_PAYLOAD_FILE=$(mktemp)
+	TEST_PAYLOAD_FILE=$(mktemp /tmp/test-payload.XXXXXX)
 	export TEST_PAYLOAD_FILE
 
 	chmod 0600 "${TEST_PAYLOAD_FILE}"
@@ -356,7 +356,7 @@ create_test_payload() {
 
 @test "parse_payload:: invalid json input" {
 	local invalid_file
-	invalid_file=$(mktemp)
+	invalid_file=$(mktemp /tmp/invalid-json.XXXXXX)
 	echo "invalid json" >"$invalid_file"
 
 	run parse_payload "$invalid_file"
@@ -511,7 +511,7 @@ create_test_payload() {
 	# Call parse_payload directly to check exported variables
 	# Capture output to temp file to avoid subshell issues
 	local output_file
-	output_file=$(mktemp)
+	output_file=$(mktemp /tmp/output.XXXXXX)
 	if ! parse_payload "$TEST_PAYLOAD_FILE" >"$output_file" 2>&1; then
 		cat "$output_file"
 		rm -f "$output_file"
@@ -569,7 +569,7 @@ create_test_payload() {
 
 @test "parse_payload:: params.from_file" {
 	local payload_file
-	payload_file=$(mktemp)
+	payload_file=$(mktemp /tmp/params-file.XXXXXX)
 
 	# File contains only params (source is preserved from test payload)
 	jq -n \
@@ -618,7 +618,7 @@ create_test_payload() {
 
 @test "parse_payload:: params.from_file invalid json" {
 	local payload_file
-	payload_file=$(mktemp)
+	payload_file=$(mktemp /tmp/invalid-params-file.XXXXXX)
 	echo "invalid json" >"$payload_file"
 
 	local test_payload

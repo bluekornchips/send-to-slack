@@ -107,7 +107,7 @@ EOF
 
 	local json_output
 	local stderr_file
-	stderr_file=$(mktemp)
+	stderr_file=$(mktemp /tmp/stderr.XXXXXX)
 	json_output=$(create_rich_text <<<"$block_value" 2>"$stderr_file")
 	local status=$?
 

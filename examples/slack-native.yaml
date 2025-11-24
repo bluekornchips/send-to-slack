@@ -117,8 +117,8 @@ jobs:
 
             # Video block
             - type: video
-              video_url: "https://www.youtube.com/watch?v=example"
-              thumbnail_url: "https://i.ytimg.com/vi/example/hqdefault.jpg"
+              video_url: "https://www.youtube.com/watch?v=pWTSK5waNs8"
+              thumbnail_url: "https://i.ytimg.com/vi/pWTSK5waNs8/hqdefault.jpg"
               alt_text: "Example video"
               title:
                 type: plain_text
