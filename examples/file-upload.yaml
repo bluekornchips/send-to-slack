@@ -40,7 +40,7 @@ jobs:
 
       - put: slack-notification
         params:
-          channel: notification-testing
+          channel: ((channel))
           text: "Today's report"
           blocks:
             - file:
@@ -180,7 +180,7 @@ jobs:
 
       - put: slack-notification
         params:
-          channel: notification-testing
+          channel: ((channel))
           text: "Timestamped report"
           blocks:
             - file:

@@ -294,6 +294,19 @@ make format  # Format shell scripts
 make lint    # Lint shell scripts
 ```
 
+### Local Concourse Development
+
+```bash
+make concourse-up            # Start local Concourse server
+make concourse-down          # Stop local Concourse server
+make concourse-load-examples # Load example pipelines
+```
+
+Required environment variables for `concourse-load-examples`:
+
+- `SLACK_BOT_USER_OAUTH_TOKEN` - Slack bot OAuth token
+- `CHANNEL` - Target Slack channel for example pipelines
+
 ### Development Dependencies
 
 - `bats` - [Bash Automated Testing System](https://github.com/bats-core/bats-core)

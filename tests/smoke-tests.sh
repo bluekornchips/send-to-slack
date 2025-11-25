@@ -16,6 +16,13 @@ setup_file() {
 		skip "SMOKE_TEST is not set"
 	fi
 
+	if [[ -z "$CHANNEL" ]]; then
+		echo "CHANNEL environment variable is not set" >&2
+		exit 1
+	fi
+
+	export CHANNEL
+
 	SEND_TO_SLACK_SCRIPT="$GIT_ROOT/send-to-slack.sh"
 
 	if [[ -n "$SLACK_BOT_USER_OAUTH_TOKEN" ]]; then
@@ -24,6 +31,7 @@ setup_file() {
 	fi
 
 	export GIT_ROOT
+	export CHANNEL
 	export SEND_TO_SLACK_SCRIPT
 }
 
@@ -52,7 +60,7 @@ smoke_test_setup() {
 	fi
 
 	local dry_run="false"
-	local channel="notification-testing"
+	local channel="$CHANNEL"
 
 	SMOKE_TEST_PAYLOAD_FILE=$(mktemp smoke-payload.XXXXXX)
 	chmod 0600 "${SMOKE_TEST_PAYLOAD_FILE}"
@@ -882,7 +890,7 @@ smoke_test_setup() {
 
 @test "smoke test, params.raw" {
 	local raw_params
-	raw_params='{"channel": "notification-testing", "dry_run": "false", "blocks": [{"section": {"type": "text", "text": {"type": "plain_text", "text": "Smoke test for params.raw"}}}] }'
+	raw_params=$(jq -n --arg channel "$CHANNEL" '{"channel": $channel, "dry_run": "false", "blocks": [{"section": {"type": "text", "text": {"type": "plain_text", "text": "Smoke test for params.raw"}}}] }')
 
 	local params_json
 	params_json=$(jq -n --arg raw "$raw_params" '{ raw: $raw }')
@@ -911,7 +919,7 @@ smoke_test_setup() {
 		return 1
 	fi
 
-	echo "$payload_output" | jq -e '.channel == "notification-testing"' >/dev/null
+	echo "$payload_output" | jq -e --arg channel "$CHANNEL" '.channel == $channel' >/dev/null
 	echo "$payload_output" | jq -e '.blocks[0].type == "section"' >/dev/null
 	echo "$payload_output" | jq -e '.blocks[0].text.type == "plain_text"' >/dev/null
 	echo "$payload_output" | jq -e '.blocks[0].text.text == "Smoke test for params.raw"' >/dev/null
@@ -922,9 +930,9 @@ smoke_test_setup() {
 	payload_file=$(mktemp params-file.XXXXXX)
 	trap "rm -f '$payload_file' 2>/dev/null || true" EXIT
 
-	jq -n \
+	jq -n --arg channel "$CHANNEL" \
 		'{
-			channel: "notification-testing",
+			channel: $channel,
 			dry_run: "false",
 			blocks: [{
 				section: {
@@ -966,7 +974,7 @@ smoke_test_setup() {
 		return 1
 	fi
 
-	echo "$payload_output" | jq -e '.channel == "notification-testing"' >/dev/null
+	echo "$payload_output" | jq -e --arg channel "$CHANNEL" '.channel == $channel' >/dev/null
 	echo "$payload_output" | jq -e '.blocks[0].type == "section"' >/dev/null
 	echo "$payload_output" | jq -e '.blocks[0].text.type == "plain_text"' >/dev/null
 	echo "$payload_output" | jq -e '.blocks[0].text.text == "Smoke test for params.from_file"' >/dev/null

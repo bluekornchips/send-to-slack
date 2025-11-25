@@ -16,6 +16,11 @@ setup_file() {
 		exit 1
 	fi
 
+	if [[ "$ACCEPTANCE_TEST" == "true" ]] && [[ -z "$CHANNEL" ]]; then
+		echo "CHANNEL environment variable is not set" >&2
+		exit 1
+	fi
+
 	if [[ -n "$SLACK_BOT_USER_OAUTH_TOKEN" ]]; then
 		REAL_TOKEN="$SLACK_BOT_USER_OAUTH_TOKEN"
 		export REAL_TOKEN
@@ -23,6 +28,7 @@ setup_file() {
 
 	export GIT_ROOT
 	export SCRIPT
+	export CHANNEL
 	export REAL_TOKEN
 
 	return 0
@@ -36,7 +42,6 @@ setup() {
 	source "$SEND_TO_SLACK_ROOT/bin/parse-payload.sh"
 
 	SLACK_BOT_USER_OAUTH_TOKEN="test-token"
-	CHANNEL="#test"
 	MESSAGE="test message"
 	DRY_RUN="true"
 	SHOW_METADATA="true"
@@ -88,7 +93,6 @@ teardown() {
 	fi
 
 	local token="$REAL_TOKEN"
-	CHANNEL="notification-testing"
 	DRY_RUN="false"
 
 	local blocks_json
@@ -158,7 +162,6 @@ teardown() {
 	fi
 
 	local token="$REAL_TOKEN"
-	CHANNEL="notification-testing"
 	DRY_RUN="false"
 
 	local raw_params
@@ -248,7 +251,6 @@ teardown() {
 	fi
 
 	local token="$REAL_TOKEN"
-	CHANNEL="notification-testing"
 	DRY_RUN="false"
 
 	ACCEPTANCE_PAYLOAD_FILE=$(mktemp acceptance-payload.XXXXXX)
@@ -331,7 +333,6 @@ teardown() {
 	fi
 
 	local token="$REAL_TOKEN"
-	CHANNEL="notification-testing"
 	DRY_RUN="false"
 
 	jq -n \
@@ -357,7 +358,7 @@ teardown() {
 					}
 				],
 				crosspost: {
-					channels: ["side-channel"],
+					channels: [$channel],
 					text: "See the original message"
 				}
 			}
@@ -394,11 +395,30 @@ teardown() {
 	fi
 
 	local token="$REAL_TOKEN"
-	CHANNEL="threads"
 	DRY_RUN="false"
 
-	local permalink_ts="1763161862880069"
-	local thread_ts="${permalink_ts:0:10}.${permalink_ts:10}"
+	local parent_response
+	parent_response=$(curl -s -X POST \
+		-H "Authorization: Bearer $token" \
+		-H "Content-Type: application/json" \
+		-d "$(jq -n --arg channel "$CHANNEL" '{
+			channel: $channel,
+			text: "Parent message for thread reply test"
+		}')" \
+		"https://slack.com/api/chat.postMessage")
+
+	if ! echo "$parent_response" | jq -e '.ok == true' >/dev/null 2>&1; then
+		echo "Failed to send parent message: $(echo "$parent_response" | jq -r '.error // "unknown"')" >&2
+		skip "Could not send parent message"
+	fi
+
+	local thread_ts
+	thread_ts=$(echo "$parent_response" | jq -r '.ts')
+
+	if [[ -z "$thread_ts" ]]; then
+		echo "No timestamp in parent message response" >&2
+		skip "Could not get parent message timestamp"
+	fi
 
 	local blocks_json
 	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "acceptance") | .plan[0].params.blocks' "$GIT_ROOT/examples/acceptance.yaml")
@@ -486,7 +506,6 @@ teardown() {
 	fi
 
 	local token="$REAL_TOKEN"
-	CHANNEL="notification-testing"
 	DRY_RUN="false"
 
 	local blocks_json
@@ -557,7 +576,6 @@ teardown() {
 	fi
 
 	local token="$REAL_TOKEN"
-	CHANNEL="notification-testing"
 	DRY_RUN="false"
 
 	local blocks_json
@@ -621,7 +639,6 @@ teardown() {
 	fi
 
 	local token="$REAL_TOKEN"
-	CHANNEL="notification-testing"
 	DRY_RUN="false"
 
 	local blocks_json
@@ -685,7 +702,6 @@ teardown() {
 	fi
 
 	local token="$REAL_TOKEN"
-	CHANNEL="notification-testing"
 	DRY_RUN="false"
 
 	local blocks_json

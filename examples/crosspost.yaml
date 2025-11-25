@@ -21,7 +21,7 @@ jobs:
       - put: slack-notification
         no_get: true
         params:
-          channel: notification-testing
+          channel: ((channel))
           blocks:
             - section:
                 type: text
@@ -40,7 +40,7 @@ jobs:
       - put: slack-notification
         no_get: true
         params:
-          channel: notification-testing
+          channel: ((channel))
           blocks:
             - header:
                 text:
@@ -62,7 +62,7 @@ jobs:
       - put: slack-notification
         no_get: true
         params:
-          channel: notification-testing
+          channel: ((channel))
           blocks:
             - section:
                 type: text

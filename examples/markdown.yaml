@@ -12,7 +12,7 @@ resources:
       slack_bot_user_oauth_token: ((SLACK_BOT_USER_OAUTH_TOKEN))
 
 common_slack_params: &common_slack_params
-  channel: notification-testing
+  channel: ((channel))
 
 jobs:
   - name: markdown-build-notification

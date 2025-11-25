@@ -17,7 +17,7 @@ jobs:
       - put: slack-notification
         no_get: true
         params:
-          channel: notification-testing
+          channel: ((channel))
           blocks:
             - rich-text:
                 block_id: "comprehensive_section_example"
@@ -115,7 +115,7 @@ jobs:
       - put: slack-notification
         no_get: true
         params:
-          channel: notification-testing
+          channel: ((channel))
           blocks:
             - rich-text:
                 block_id: "lists_example"
@@ -180,7 +180,7 @@ jobs:
       - put: slack-notification
         no_get: true
         params:
-          channel: notification-testing
+          channel: ((channel))
           blocks:
             - rich-text:
                 block_id: "preformatted_quote_example"
@@ -226,7 +226,7 @@ jobs:
       - put: slack-notification
         no_get: true
         params:
-          channel: notification-testing
+          channel: ((channel))
           blocks:
             - rich-text:
                 color: "#36a64f"
@@ -265,7 +265,7 @@ jobs:
       - put: slack-notification
         no_get: true
         params:
-          channel: notification-testing
+          channel: ((channel))
           blocks:
             - rich-text:
                 block_id: "first_block"
@@ -304,7 +304,7 @@ jobs:
       - put: slack-notification
         no_get: true
         params:
-          channel: notification-testing
+          channel: ((channel))
           blocks:
             - rich-text:
                 block_id: "metadata_variables_test"
@@ -376,7 +376,7 @@ jobs:
       - put: slack-notification
         no_get: true
         params:
-          channel: notification-testing
+          channel: ((channel))
           blocks:
             - section:
                 type: fields

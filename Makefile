@@ -54,7 +54,10 @@ concourse-load-examples:
 	@for file in examples/*.yaml; do \
 		pipeline=$$(basename "$$file" .yaml); \
 		echo "Loading pipeline: $$pipeline from $$file"; \
-		fly -t local set-pipeline -p "$$pipeline" -c "$$file" --non-interactive -v SLACK_BOT_USER_OAUTH_TOKEN=$$SLACK_BOT_USER_OAUTH_TOKEN || exit 1; \
+		fly -t local set-pipeline -p "$$pipeline" -c "$$file" --non-interactive \
+			-v SLACK_BOT_USER_OAUTH_TOKEN=$$SLACK_BOT_USER_OAUTH_TOKEN \
+			-v channel=$$CHANNEL \
+			|| exit 1; \
 	done
 
 # dev tools, not for production

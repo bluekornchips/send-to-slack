@@ -17,7 +17,7 @@ jobs:
       - put: slack-notification
         no_get: true
         params:
-          channel: notification-testing
+          channel: ((channel))
           text: "Example of all block types using Slack's native type field format"
           blocks:
             # Header block

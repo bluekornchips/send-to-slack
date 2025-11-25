@@ -35,6 +35,7 @@ setup_file() {
 	export GIT_ROOT
 	export SCRIPT
 	export EXAMPLES_FILE
+	export CHANNEL
 	export SEND_TO_SLACK_SCRIPT
 
 	return 0
@@ -64,11 +65,15 @@ send_request_to_slack() {
 		skip "SLACK_BOT_USER_OAUTH_TOKEN not set"
 	fi
 
+	if [[ -z "$CHANNEL" ]]; then
+		skip "CHANNEL not set"
+	fi
+
 	local input="$1"
 	# Create proper Slack message structure with the header block in blocks array
 	local message
-	message=$(jq -c -n --argjson block "$input" '{
-		channel: "notification-testing",
+	message=$(jq -c -n --argjson block "$input" --arg channel "$CHANNEL" '{
+		channel: $channel,
 		blocks: [$block]
 	}')
 

@@ -24,7 +24,7 @@ jobs:
       - put: slack-notification
         no_get: true
         params:
-          channel: notification-testing
+          channel: ((channel))
           text: "Test of all Slack block types"
           create_thread: true
           blocks:
