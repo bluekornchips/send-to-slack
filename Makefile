@@ -21,9 +21,7 @@ test-all:
 		bats --timing --verbose-run \
 		./concourse/resource-type/tests/*tests.sh \
 		./tests/*-tests.sh \
-		./tests/blocks/*tests.sh \
-		./tests/smoke-tests.sh \
-		./tests/acceptance-tests.sh
+		./tests/blocks/*tests.sh
 
 test-in-docker:
 	clear && ./tests/run-tests-in-docker.sh

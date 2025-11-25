@@ -297,7 +297,8 @@ mock_complete_upload_success() {
 @test "file_upload:: file size exceeds 1 GB limit" {
 	# Create a mock file that reports a size exceeding 1 GB
 	local large_file
-	large_file=$(mktemp)
+	large_file=$(mktemp large-file.XXXXXX)
+	trap "rm -f '$large_file' 2>/dev/null || true" EXIT
 	echo "test content" >"$large_file"
 
 	# Mock stat to return a size exceeding 1 GB (1 GB + 1 byte)
@@ -320,12 +321,14 @@ mock_complete_upload_success() {
 	echo "$output" | grep -q "file_upload:: file size.*exceeds Slack's maximum"
 
 	rm -f "$large_file"
+	trap - EXIT
 }
 
 @test "file_upload:: file size exactly at 1 GB limit succeeds" {
 	# Create a mock file that reports exactly 1 GB
 	local test_file
-	test_file=$(mktemp)
+	test_file=$(mktemp test-file.XXXXXX)
+	trap "rm -f '$test_file' 2>/dev/null || true" EXIT
 	echo "test content" >"$test_file"
 
 	# Mock stat to return exactly 1 GB
@@ -351,6 +354,7 @@ mock_complete_upload_success() {
 	[[ "$status" -eq 0 ]]
 
 	rm -f "$test_file"
+	trap - EXIT
 }
 
 @test "file_upload:: fails when _get_upload_url fails" {
@@ -382,8 +386,8 @@ mock_complete_upload_success() {
 }
 
 teardown() {
-	if [[ -f "$TEST_FILE" ]]; then
-		rm -f "$TEST_FILE"
-	fi
+	[[ -n "$TEST_FILE" ]] && rm -f "$TEST_FILE"
+	[[ -n "$large_file" ]] && rm -f "$large_file"
+	[[ -n "$test_file" ]] && rm -f "$test_file"
 	return 0
 }

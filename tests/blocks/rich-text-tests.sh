@@ -42,8 +42,8 @@ setup() {
 }
 
 teardown() {
-	# Clean up mock script if it exists
-	rm -f /tmp/mock_file_upload*.sh 2>/dev/null || true
+	[[ -n "$mock_script" ]] && rm -f "$mock_script"
+	[[ -n "$stderr_file" ]] && rm -f "$stderr_file"
 	return 0
 }
 
@@ -94,7 +94,7 @@ teardown() {
 
 	# Mock the file upload script to avoid actual API calls
 	local mock_script
-	mock_script=$(mktemp /tmp/mock_file_upload.XXXXXX.sh)
+	mock_script=$(mktemp mock_file_upload.XXXXXX.sh)
 	cat >"$mock_script" <<'EOF'
 #!/bin/bash
 echo '{"type": "section", "text": {"type": "mrkdwn", "text": "<http://example.com/file.txt|oversized-rich-text.txt>"}}'
@@ -107,7 +107,7 @@ EOF
 
 	local json_output
 	local stderr_file
-	stderr_file=$(mktemp)
+	stderr_file=$(mktemp stderr.XXXXXX)
 	json_output=$(create_rich_text <<<"$block_value" 2>"$stderr_file")
 	local status=$?
 

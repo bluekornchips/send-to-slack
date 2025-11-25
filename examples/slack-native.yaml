@@ -1,0 +1,197 @@
+resource_types:
+  - name: slack-notification
+    type: registry-image
+    source:
+      repository: sunflowersoftware/send-to-slack
+      tag: latest
+
+resources:
+  - name: slack-notification
+    type: slack-notification
+    source:
+      slack_bot_user_oauth_token: ((SLACK_BOT_USER_OAUTH_TOKEN))
+
+jobs:
+  - name: slack-native-format-all-block-types
+    plan:
+      - put: slack-notification
+        no_get: true
+        params:
+          channel: notification-testing
+          text: "Example of all block types using Slack's native type field format"
+          blocks:
+            # Header block
+            - type: header
+              text:
+                type: plain_text
+                text: "All Block Types - Native Format"
+              block_id: "main_header"
+
+            # Divider block
+            - type: divider
+              block_id: "header_divider"
+
+            # Section block (text type) - content type is inferred from 'text' field
+            - type: section
+              text:
+                type: mrkdwn
+                text: "*Section Block*\nThis is a section block with markdown text."
+              block_id: "section_text"
+
+            # Section block (fields type) - content type is inferred from 'fields' field
+            - type: section
+              fields:
+                - type: mrkdwn
+                  text: "*Field 1*\nValue 1"
+                - type: mrkdwn
+                  text: "*Field 2*\nValue 2"
+              block_id: "section_fields"
+
+            # Divider block
+            - type: divider
+              block_id: "section_divider"
+
+            # Context block
+            - type: context
+              elements:
+                - type: plain_text
+                  text: "Context block with metadata information"
+              block_id: "context_block"
+
+            # Divider block
+            - type: divider
+              block_id: "context_divider"
+
+            # Markdown block
+            - type: markdown
+              text: |
+                **Markdown Block**
+
+                This is a markdown block with *italic* and **bold** text.
+
+                - List item 1
+                - List item 2
+                - List item 3
+
+              block_id: "markdown_block"
+
+            # Divider block
+            - type: divider
+              block_id: "markdown_divider"
+
+            # Rich text block
+            - type: rich-text
+              elements:
+                - type: rich_text_section
+                  elements:
+                    - type: text
+                      text: "Rich Text Block: "
+                    - type: text
+                      text: "bold"
+                      style:
+                        bold: true
+                    - type: text
+                      text: ", "
+                    - type: text
+                      text: "italic"
+                      style:
+                        italic: true
+              block_id: "rich_text_block"
+
+            # Divider block
+            - type: divider
+              block_id: "rich_text_divider"
+
+            # Image block
+            - type: image
+              image_url: "https://sunflowersoftware.ca/wp-content/uploads/2023/05/cropped-sunflower.gif"
+              alt_text: "Example image"
+              title:
+                type: plain_text
+                text: "Image Block Example"
+              block_id: "image_block"
+
+            # Divider block
+            - type: divider
+              block_id: "image_divider"
+
+            # Video block
+            - type: video
+              video_url: "https://www.youtube.com/embed/pWTSK5waNs8"
+              thumbnail_url: "https://i.ytimg.com/vi/pWTSK5waNs8/hqdefault.jpg"
+              alt_text: "Example video"
+              title:
+                type: plain_text
+                text: "Video Block Example"
+              provider_name: "YouTube"
+              block_id: "video_block"
+
+            # Divider block
+            - type: divider
+              block_id: "video_divider"
+
+            # Actions block
+            - type: actions
+              elements:
+                - type: button
+                  text:
+                    type: plain_text
+                    text: "Primary Button"
+                  action_id: "primary_action"
+                  style: primary
+                - type: button
+                  text:
+                    type: plain_text
+                    text: "Danger Button"
+                  action_id: "danger_action"
+                  style: danger
+              block_id: "actions_block"
+
+            # Divider block
+            - type: divider
+              block_id: "actions_divider"
+
+            # Table block (goes to attachments)
+            - type: table
+              rows:
+                - - type: raw_text
+                    text: "Header 1"
+                  - type: raw_text
+                    text: "Header 2"
+                  - type: raw_text
+                    text: "Header 3"
+                - - type: raw_text
+                    text: "Row 1 Col 1"
+                  - type: raw_text
+                    text: "Row 1 Col 2"
+                  - type: raw_text
+                    text: "Row 1 Col 3"
+                - - type: raw_text
+                    text: "Row 2 Col 1"
+                  - type: raw_text
+                    text: "Row 2 Col 2"
+                  - type: raw_text
+                    text: "Row 2 Col 3"
+              block_id: "table_block"
+
+            # Divider block
+            - type: divider
+              block_id: "table_divider"
+
+            # Section block with color (goes to attachments)
+            - type: section
+              color: success
+              text:
+                type: mrkdwn
+                text: "*Colored Section Block*\nThis section has a success color and will be placed in an attachment."
+              block_id: "colored_section"
+
+            # Rich text block with color (goes to attachments)
+            - type: rich-text
+              color: warning
+              elements:
+                - type: rich_text_section
+                  elements:
+                    - type: text
+                      text: "Colored Rich Text Block with warning color"
+              block_id: "colored_rich_text"

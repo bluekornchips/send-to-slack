@@ -16,7 +16,7 @@ setup_file() {
 		exit 1
 	fi
 
-	TEST_INSTALL_DIR=$(mktemp -d)
+	TEST_INSTALL_DIR=$(mktemp -d test-install.XXXXXX)
 	export TEST_INSTALL_DIR
 	export GIT_ROOT
 	export SCRIPT

@@ -54,7 +54,7 @@ smoke_test_setup() {
 	local dry_run="false"
 	local channel="notification-testing"
 
-	SMOKE_TEST_PAYLOAD_FILE=$(mktemp)
+	SMOKE_TEST_PAYLOAD_FILE=$(mktemp smoke-payload.XXXXXX)
 	chmod 0600 "${SMOKE_TEST_PAYLOAD_FILE}"
 
 	jq -n \
@@ -582,7 +582,8 @@ smoke_test_setup() {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/rich-text.yaml"
 	local line_text="This is some test content that will exceed the 4000 character limit for rich text blocks."
 	local long_text_file
-	long_text_file=$(mktemp -t "oversize-rich-text-XXXXXX.txt")
+	long_text_file=$(mktemp oversize-rich-text.XXXXXX.txt)
+	trap "rm -f '$long_text_file' 2>/dev/null || true" EXIT
 	for i in {1..450}; do
 		echo "$i: $line_text" >>"$long_text_file"
 	done
@@ -611,6 +612,7 @@ smoke_test_setup() {
 	local test_result=$status
 
 	rm -f "$long_text_file"
+	trap - EXIT
 
 	[[ "$test_result" -eq 0 ]]
 }
@@ -621,7 +623,8 @@ smoke_test_setup() {
 
 @test "smoke test, uploads hello world file" {
 	local hello_world_file
-	hello_world_file=$(mktemp)
+	hello_world_file=$(mktemp hello-world.XXXXXX)
+	trap "rm -f '$hello_world_file' 2>/dev/null || true" EXIT
 	echo "hello world" >"$hello_world_file"
 
 	local blocks_json
@@ -646,13 +649,15 @@ smoke_test_setup() {
 	local test_result=$status
 
 	rm -f "$hello_world_file"
+	trap - EXIT
 
 	[[ "$test_result" -eq 0 ]]
 }
 
 @test "smoke test, downloads Slack logo PNG and uploads it" {
 	local slack_logo_file
-	slack_logo_file=$(mktemp --suffix=".png")
+	slack_logo_file=$(mktemp slack-logo.XXXXXX.png)
+	trap "rm -f '$slack_logo_file' 2>/dev/null || true" EXIT
 
 	if ! curl -s -o "$slack_logo_file" "https://docs.slack.dev/img/logos/slack-developers-white.png"; then
 		echo "Failed to download Slack logo PNG" >&2
@@ -688,6 +693,7 @@ smoke_test_setup() {
 	local test_result=$status
 
 	rm -f "$slack_logo_file"
+	trap - EXIT
 
 	[[ "$test_result" -eq 0 ]]
 }
@@ -695,8 +701,9 @@ smoke_test_setup() {
 @test "smoke test, multiple file blocks in blocks array" {
 	local file1
 	local file2
-	file1=$(mktemp)
-	file2=$(mktemp)
+	file1=$(mktemp file1.XXXXXX)
+	file2=$(mktemp file2.XXXXXX)
+	trap "rm -f '$file1' '$file2' 2>/dev/null || true" EXIT
 	echo "File 1 content" >"$file1"
 	echo "File 2 content" >"$file2"
 
@@ -728,13 +735,15 @@ smoke_test_setup() {
 	local test_result=$status
 
 	rm -f "$file1" "$file2"
+	trap - EXIT
 
 	[[ "$test_result" -eq 0 ]]
 }
 
 @test "smoke test, file block without title uses filename" {
 	local test_file
-	test_file=$(mktemp --suffix=".txt")
+	test_file=$(mktemp test-file.XXXXXX.txt)
+	trap "rm -f '$test_file' 2>/dev/null || true" EXIT
 	echo "Test content" >"$test_file"
 
 	local blocks_json
@@ -759,13 +768,15 @@ smoke_test_setup() {
 	local test_result=$status
 
 	rm -f "$test_file"
+	trap - EXIT
 
 	[[ "$test_result" -eq 0 ]]
 }
 
 @test "smoke test, file block mixed with other blocks" {
 	local test_file
-	test_file=$(mktemp)
+	test_file=$(mktemp test-file.XXXXXX)
+	trap "rm -f '$test_file' 2>/dev/null || true" EXIT
 	echo "Report content" >"$test_file"
 
 	local blocks_json
@@ -797,13 +808,15 @@ smoke_test_setup() {
 	local test_result=$status
 
 	rm -f "$test_file"
+	trap - EXIT
 
 	[[ "$test_result" -eq 0 ]]
 }
 
 @test "smoke test, file permissions debug after upload" {
 	local test_file
-	test_file=$(mktemp --suffix=".txt")
+	test_file=$(mktemp test-file.XXXXXX.txt)
+	trap "rm -f '$test_file' 2>/dev/null || true" EXIT
 	echo "Permission test content" >"$test_file"
 
 	chmod 644 "$test_file"
@@ -858,6 +871,7 @@ smoke_test_setup() {
 	EOF
 
 	rm -f "$test_file"
+	trap - EXIT
 
 	[[ "$test_result" -eq 0 ]]
 }
@@ -873,7 +887,7 @@ smoke_test_setup() {
 	local params_json
 	params_json=$(jq -n --arg raw "$raw_params" '{ raw: $raw }')
 
-	SMOKE_TEST_PAYLOAD_FILE=$(mktemp)
+	SMOKE_TEST_PAYLOAD_FILE=$(mktemp smoke-payload.XXXXXX)
 	chmod 0600 "${SMOKE_TEST_PAYLOAD_FILE}"
 
 	jq -n \
@@ -905,7 +919,8 @@ smoke_test_setup() {
 
 @test "smoke test, params.from_file" {
 	local payload_file
-	payload_file=$(mktemp)
+	payload_file=$(mktemp params-file.XXXXXX)
+	trap "rm -f '$payload_file' 2>/dev/null || true" EXIT
 
 	jq -n \
 		'{
@@ -925,7 +940,7 @@ smoke_test_setup() {
 	local params_json
 	params_json=$(jq -n --arg file "$payload_file" '{ from_file: $file }')
 
-	SMOKE_TEST_PAYLOAD_FILE=$(mktemp)
+	SMOKE_TEST_PAYLOAD_FILE=$(mktemp smoke-payload.XXXXXX)
 	chmod 0600 "${SMOKE_TEST_PAYLOAD_FILE}"
 
 	jq -n \
@@ -957,4 +972,5 @@ smoke_test_setup() {
 	echo "$payload_output" | jq -e '.blocks[0].text.text == "Smoke test for params.from_file"' >/dev/null
 
 	rm -f "$payload_file"
+	trap - EXIT
 }

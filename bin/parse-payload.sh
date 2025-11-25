@@ -409,18 +409,43 @@ process_blocks() {
 	local blocks="[]"
 	local attachments="[]"
 
-	while read -r block_entry; do
+	# Process each block in the blocks array
+	while read -r block_item; do
 		local block_type
 		local block_value
 		local block_color
 
-		block_type=$(jq -r '.key' <<<"$block_entry")
-		block_value=$(jq '.value | del(.color)' <<<"$block_entry") # Ignore the color field, if it is present
-		block_color=$(jq -r '.value.color // empty' <<<"$block_entry")
+		# Check if block uses the "type" field format (Slack API format)
+		# or the key-based format (intuitive YAML format)
+		if jq -e '.type' <<<"$block_item" >/dev/null 2>&1; then
+			# Format: {"type": "rich-text", ...contents...}
+			block_type=$(jq -r '.type' <<<"$block_item")
+			block_value=$(jq 'del(.type, .color)' <<<"$block_item")
+			block_color=$(jq -r '.color // empty' <<<"$block_item")
+
+			# Section blocks require a content type ("text" or "fields") which is different from the block type
+			if [[ "$block_type" == "section" ]]; then
+				if ! jq -e '.type' <<<"$block_value" >/dev/null 2>&1; then
+					if jq -e '.text' <<<"$block_value" >/dev/null 2>&1; then
+						block_value=$(jq '. + {type: "text"}' <<<"$block_value")
+					elif jq -e '.fields' <<<"$block_value" >/dev/null 2>&1; then
+						block_value=$(jq '. + {type: "fields"}' <<<"$block_value")
+					fi
+				fi
+			fi
+		else
+			# Format: {"rich-text": {...contents...}}
+			# Convert to key-value format for processing
+			local block_entry
+			block_entry=$(jq -c 'to_entries[0]' <<<"$block_item")
+			block_type=$(jq -r '.key' <<<"$block_entry")
+			block_value=$(jq '.value | del(.color)' <<<"$block_entry")
+			block_color=$(jq -r '.value.color // empty' <<<"$block_entry")
+		fi
 
 		local block
 		if ! block=$(create_block "$block_value" "$block_type"); then
-			echo "parse_payload:: failed to create block type '$block_type': $block_entry" >&2
+			echo "parse_payload:: failed to create block type '$block_type': $block_item" >&2
 			return 1
 		fi
 
@@ -443,7 +468,7 @@ process_blocks() {
 			blocks=$(jq --argjson block "$block" '. += [$block]' <<<"$blocks")
 		fi
 
-	done < <(jq -r -c '.[] | to_entries[]' <<<"$blocks_json")
+	done < <(jq -r -c '.[]' <<<"$blocks_json")
 
 	# Validate block count against Slack's limit of 50 blocks per message
 	# Ref: https://docs.slack.dev/reference/block-kit/blocks

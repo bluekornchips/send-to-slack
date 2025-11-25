@@ -137,13 +137,15 @@ create_rich_text() {
 
 	block=$(jq -n \
 		--arg block_type "$BLOCK_TYPE" \
-		--arg block_id "$block_id" \
 		--argjson input_elements "$input_elements" \
 		'{
 			type: $block_type,
-			block_id: $block_id,
 			elements: $input_elements,
 		}')
+
+	if [[ -n "$block_id" ]]; then
+		block=$(jq --arg block_id "$block_id" '. + {block_id: $block_id}' <<<"$block")
+	fi
 
 	echo "$block"
 
