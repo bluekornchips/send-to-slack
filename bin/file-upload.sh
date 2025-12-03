@@ -388,7 +388,7 @@ validate_file_path() {
 		return 1
 	fi
 
-	if [[ ! -r "$FILE_PATH" ]]; then
+	if ! head -c 1 "$FILE_PATH" >/dev/null 2>&1; then
 		echo "file_upload:: file not readable: $FILE_PATH (check permissions)" >&2
 		return 1
 	fi
