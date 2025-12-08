@@ -10,6 +10,34 @@ Measure twice, send once.
 
 ## Installation
 
+### One-Line Remote Installation
+
+Install directly from the repository without cloning (recommended for containers and CI/CD):
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/install-remote.sh)"
+```
+
+This installer will:
+- Check for required prerequisites (bash 4.0+, curl, jq, git)
+- Clone the repository temporarily
+- Install to `/usr/local` by default (requires sudo)
+- Clean up temporary files automatically
+
+**Custom installation prefix:**
+
+```bash
+INSTALL_PREFIX=/opt /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/install-remote.sh)"
+```
+
+**Install from a specific branch:**
+
+```bash
+INSTALL_BRANCH=develop /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/install-remote.sh)"
+```
+
+The installer will fail gracefully if prerequisites are missing, making it safe to use in containers without needing to rebuild when the repository changes.
+
 ### System Installation
 
 Install to system directory `/usr/local` (requires sudo):
