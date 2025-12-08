@@ -15,52 +15,46 @@ Measure twice, send once.
 Install directly from the repository without cloning (recommended for containers and CI/CD):
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/install-remote.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/install.sh)"
 ```
 
 This installer will:
 - Check for required prerequisites (bash 4.0+, curl, jq, git)
-- Clone the repository temporarily
-- Install to `/usr/local` by default (requires sudo)
+- Clone the repository temporarily if needed
+- Install to `~/.local` by default (or `/usr/local` if you specify it)
 - Clean up temporary files automatically
 
 **Custom installation prefix:**
 
 ```bash
-INSTALL_PREFIX=/opt /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/install-remote.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/install.sh)" /usr/local
 ```
 
 **Install from a specific branch:**
 
 ```bash
-INSTALL_BRANCH=develop /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/install-remote.sh)"
+INSTALL_BRANCH=develop /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/install.sh)"
 ```
 
 The installer will fail gracefully if prerequisites are missing, making it safe to use in containers without needing to rebuild when the repository changes.
 
-### System Installation
+### Local Installation
 
-Install to system directory `/usr/local` (requires sudo):
+If you've already cloned the repository, you can install directly:
 
 ```bash
 git clone https://github.com/bluekornchips/send-to-slack.git
 cd send-to-slack
-sudo make install
-```
-
-Or use the installation script directly:
-
-```bash
 sudo ./install.sh /usr/local
 ```
 
-### Custom Installation Prefix
-
-Install to a custom location:
+Or use make:
 
 ```bash
-./install.sh /opt
+sudo make install
 ```
+
+The same `install.sh` script works both locally (from the repository) and remotely (via curl).
 
 ### Uninstallation
 
