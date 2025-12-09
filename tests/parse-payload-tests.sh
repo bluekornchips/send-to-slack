@@ -40,8 +40,6 @@ setup() {
 
 	TEST_PAYLOAD_FILE=$(mktemp test-payload.XXXXXX)
 	export TEST_PAYLOAD_FILE
-
-	chmod 0600 "${TEST_PAYLOAD_FILE}"
 	create_test_payload
 
 	SLACK_BOT_USER_OAUTH_TOKEN="xoxb-test-token"
@@ -56,7 +54,7 @@ setup() {
 }
 
 teardown() {
-	[[ -n "$TEST_PAYLOAD_FILE" ]] && rm -f "$TEST_PAYLOAD_FILE"
+	rm -f "${TEST_PAYLOAD_FILE}"
 	[[ -n "$invalid_file" ]] && rm -f "$invalid_file"
 	[[ -n "$output_file" ]] && rm -f "$output_file"
 	[[ -n "$payload_file" ]] && rm -f "$payload_file"
@@ -360,7 +358,7 @@ create_test_payload() {
 @test "parse_payload:: invalid json input" {
 	local invalid_file
 	invalid_file=$(mktemp invalid-json.XXXXXX)
-	trap "rm -f '$invalid_file' 2>/dev/null || true" EXIT
+	trap 'rm -f "$invalid_file" 2>/dev/null || true' EXIT
 	echo "invalid json" >"$invalid_file"
 
 	run parse_payload "$invalid_file"
@@ -518,16 +516,13 @@ create_test_payload() {
 	# Capture output to temp file to avoid subshell issues
 	local output_file
 	output_file=$(mktemp output.XXXXXX)
-	trap "rm -f '$output_file' 2>/dev/null || true" EXIT
+
 	if ! parse_payload "$TEST_PAYLOAD_FILE" >"$output_file" 2>&1; then
 		cat "$output_file"
 		rm -f "$output_file"
-		trap - EXIT
-		echo "parse_payload failed" >&2
 		return 1
 	fi
-	rm -f "$output_file"
-	trap - EXIT
+
 	local output
 	output=$(cat "$output_file")
 	rm -f "$output_file"
@@ -580,7 +575,7 @@ create_test_payload() {
 @test "parse_payload:: params.from_file" {
 	local payload_file
 	payload_file=$(mktemp params-file.XXXXXX)
-	trap "rm -f '$payload_file' 2>/dev/null || true" EXIT
+	trap 'rm -f "$payload_file" 2>/dev/null || true' EXIT
 
 	# File contains only params (source is preserved from test payload)
 	jq -n \
@@ -634,7 +629,7 @@ create_test_payload() {
 @test "parse_payload:: params.from_file invalid json" {
 	local payload_file
 	payload_file=$(mktemp invalid-params-file.XXXXXX)
-	trap "rm -f '$payload_file' 2>/dev/null || true" EXIT
+	trap 'rm -f "$payload_file" 2>/dev/null || true' EXIT
 	echo "invalid json" >"$payload_file"
 
 	local test_payload

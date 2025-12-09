@@ -5,3 +5,8 @@ dependencies = [
     "flask>=3.0.0",
     "requests>=2.31.0",
 ]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.4.0",
+]

@@ -48,6 +48,7 @@ validate_prerequisites() {
 # Inputs:
 # - $1 - script_root: Root directory containing send-to-slack.sh and bin/
 # - $2 - prefix: Installation prefix directory
+# - $3 - manifest_file: Manifest recording installed files
 #
 # Returns:
 # - 0 on success
@@ -55,21 +56,32 @@ validate_prerequisites() {
 install_files() {
 	local script_root="$1"
 	local prefix="$2"
+	local manifest_file="$3"
+	local manifest_dir
+	local manifest_entries=()
 
 	install -d -m 755 "$prefix/bin/blocks"
+	manifest_dir=$(dirname "$manifest_file")
+	install -d -m 755 "$manifest_dir"
+
 	install -m 755 "$script_root/send-to-slack.sh" "$prefix/bin/send-to-slack"
+	manifest_entries+=("$prefix/bin/send-to-slack")
 
 	for file in "$script_root/bin"/*; do
 		if [[ -f "$file" ]]; then
 			install -m 755 "$file" "$prefix/bin/"
+			manifest_entries+=("$prefix/bin/$(basename "$file")")
 		fi
 	done
 
 	for file in "$script_root/bin/blocks"/*; do
 		if [[ -f "$file" ]]; then
 			install -m 755 "$file" "$prefix/bin/blocks/"
+			manifest_entries+=("$prefix/bin/blocks/$(basename "$file")")
 		fi
 	done
+
+	printf '%s\n' "${manifest_entries[@]}" >"$manifest_file"
 
 	return 0
 }
@@ -86,10 +98,12 @@ main() {
 	local script_root
 	local prefix
 	local default_prefix
+	local manifest_file
 
 	script_root="${0%/*}"
 	default_prefix="${HOME}/.local"
 	prefix="${1%/}"
+	manifest_file=""
 
 	# Use default prefix if none provided
 	if [[ -z "$prefix" ]]; then
@@ -110,7 +124,9 @@ main() {
 		return 1
 	fi
 
-	if ! install_files "$script_root" "$prefix"; then
+	manifest_file="$prefix/share/send-to-slack/install_manifest.txt"
+
+	if ! install_files "$script_root" "$prefix" "$manifest_file"; then
 		return 1
 	fi
 

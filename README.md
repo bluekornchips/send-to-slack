@@ -60,7 +60,6 @@ docker pull sunflowersoftware/send-to-slack
 For development or testing without installation, you can use the script directly:
 
 ```bash
-chmod +x send-to-slack.sh
 ./send-to-slack.sh
 ```
 

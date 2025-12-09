@@ -26,7 +26,6 @@ exec 1>&2
 main() {
 	local payload
 	payload=$(mktemp /tmp/resource-in.XXXXXX)
-	chmod 0600 "${payload}"
 	trap 'rm -f "${payload}"' EXIT RETURN
 
 	cat >"${payload}" <&0

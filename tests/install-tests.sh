@@ -111,3 +111,16 @@ teardown_file() {
 
 	[[ -f "$TEST_INSTALL_DIR/bin/send-to-slack" ]]
 }
+
+@test "install:: writes manifest with installed files" {
+	run "$SCRIPT" "$TEST_INSTALL_DIR"
+	[[ "$status" -eq 0 ]]
+
+	local manifest
+	manifest="$TEST_INSTALL_DIR/share/send-to-slack/install_manifest.txt"
+	[[ -f "$manifest" ]]
+
+	grep -q "$TEST_INSTALL_DIR/bin/send-to-slack" "$manifest"
+	grep -q "$TEST_INSTALL_DIR/bin/parse-payload.sh" "$manifest"
+	grep -q "$TEST_INSTALL_DIR/bin/blocks/actions.sh" "$manifest"
+}

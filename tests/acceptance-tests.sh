@@ -57,7 +57,6 @@ setup() {
 	]')"
 
 	TEST_PAYLOAD_FILE=$(mktemp test-payload.XXXXXX)
-	chmod 0600 "${TEST_PAYLOAD_FILE}"
 
 	export SEND_TO_SLACK_ROOT
 	export SLACK_BOT_USER_OAUTH_TOKEN
@@ -72,7 +71,7 @@ setup() {
 }
 
 teardown() {
-	[[ -n "$TEST_PAYLOAD_FILE" ]] && rm -f "$TEST_PAYLOAD_FILE"
+	rm -f "${TEST_PAYLOAD_FILE}"
 	[[ -n "$ACCEPTANCE_TEST_FILE" ]] && rm -f "$ACCEPTANCE_TEST_FILE"
 	[[ -n "$ACCEPTANCE_PAYLOAD_FILE" ]] && rm -f "$ACCEPTANCE_PAYLOAD_FILE"
 	[[ -n "$parsed_payload_file" ]] && rm -f "$parsed_payload_file"
@@ -323,6 +322,79 @@ teardown() {
 	[[ -f "$ACCEPTANCE_PAYLOAD_FILE" ]] && rm -f "$ACCEPTANCE_PAYLOAD_FILE"
 }
 
+@test "acceptance:: file block from prior job with 644 perms" {
+	if [[ "$ACCEPTANCE_TEST" != "true" ]]; then
+		skip "ACCEPTANCE_TEST is not set"
+	fi
+
+	if [[ -z "$REAL_TOKEN" ]]; then
+		skip "REAL_TOKEN is required for acceptance tests"
+	fi
+
+	local token="$REAL_TOKEN"
+	DRY_RUN="false"
+
+	local blocks_json
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "acceptance") | .plan[0].params.blocks' "$GIT_ROOT/examples/acceptance.yaml")
+
+	if ! echo "$blocks_json" | jq . >/dev/null 2>&1; then
+		echo "Invalid blocks_json from acceptance.yaml" >&2
+		echo "$blocks_json" >&2
+		return 1
+	fi
+
+	# Simulate artifact created by a prior Concourse job under a different user with 0644 perms
+	umask 022
+	ACCEPTANCE_TEST_FILE=$(mktemp test-upload-644.XXXXXX)
+	echo "Artifact created in prior step" >"$ACCEPTANCE_TEST_FILE"
+	chmod 644 "$ACCEPTANCE_TEST_FILE"
+	local mode
+	mode=$(stat -c "%a" "$ACCEPTANCE_TEST_FILE")
+	[[ "$mode" == "644" ]]
+
+	local file_block
+	file_block=$(jq -n --arg path "$ACCEPTANCE_TEST_FILE" '{ "file": { "path": $path } }')
+	blocks_json=$(echo "$blocks_json" | jq --argjson file_block "$file_block" '. + [$file_block]')
+
+	if ! echo "$blocks_json" | jq . >/dev/null 2>&1; then
+		echo "Invalid blocks_json after adding file block" >&2
+		echo "$blocks_json" >&2
+		return 1
+	fi
+
+	jq -n \
+		--arg token "$token" \
+		--argjson blocks "$blocks_json" \
+		--arg channel "$CHANNEL" \
+		--arg dry_run "$DRY_RUN" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: $token
+			},
+			params: {
+				channel: $channel,
+				dry_run: $dry_run,
+				blocks: $blocks
+			}
+		}' >"$TEST_PAYLOAD_FILE"
+
+	if ! jq . "$TEST_PAYLOAD_FILE" >/dev/null 2>&1; then
+		echo "Invalid JSON in test payload file" >&2
+		cat "$TEST_PAYLOAD_FILE" >&2
+		return 1
+	fi
+
+	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
+	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "version"
+	echo "$output" | grep -q "timestamp"
+	echo "$output" | grep -q "main:: parsing payload"
+	echo "$output" | grep -q "main:: creating Concourse metadata"
+	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
+}
+
 @test "acceptance:: crosspost" {
 	if [[ "$ACCEPTANCE_TEST" != "true" ]]; then
 		skip "ACCEPTANCE_TEST is not set"
@@ -477,7 +549,7 @@ teardown() {
 
 	local parsed_payload_file
 	parsed_payload_file=$(mktemp parsed-payload.XXXXXX)
-	trap "rm -f '$parsed_payload_file' 2>/dev/null || true" EXIT
+	trap 'rm -f "$parsed_payload_file" 2>/dev/null || true' EXIT
 	if ! parse_payload "$TEST_PAYLOAD_FILE" >"$parsed_payload_file"; then
 		echo "parse_payload failed" >&2
 		rm -f "$parsed_payload_file"

@@ -266,7 +266,6 @@ crosspost_notification() {
 		# Write payload to temp file for parsing
 		local temp_payload
 		temp_payload=$(mktemp /tmp/crosspost-payload.XXXXXX)
-		chmod 0600 "${temp_payload}"
 		trap 'rm -f "$temp_payload"' RETURN EXIT
 		echo "$crosspost_payload" >"$temp_payload"
 
@@ -381,25 +380,38 @@ handle_slack_api_error() {
 #
 # Arguments:
 #   $1 - max_attempts: Maximum number of retry attempts (default: RETRY_MAX_ATTEMPTS)
-#   $2 - command: Command to execute (as string, will be eval'd)
+#   $@ - command and arguments to execute (no eval)
 #
 # Returns:
 #   0 on success
 #   1 on failure after all retries
 retry_with_backoff() {
 	local max_attempts="${1:-$RETRY_MAX_ATTEMPTS}"
-	local cmd="$2"
+	shift
+
+	if [[ -z "$max_attempts" ]]; then
+		max_attempts="$RETRY_MAX_ATTEMPTS"
+	fi
+
+	if [[ $# -eq 0 ]]; then
+		echo "retry_with_backoff:: command to execute is required" >&2
+		return 1
+	fi
+
 	local attempt=1
 	local delay="$RETRY_INITIAL_DELAY"
 	local last_exit_code=1
 
 	while [[ $attempt -le $max_attempts ]]; do
 		# Execute the command and capture exit code
-		if eval "$cmd"; then
+		local cmd_status=0
+		"$@" || cmd_status=$?
+
+		if [[ $cmd_status -eq 0 ]]; then
 			return 0
 		fi
 
-		last_exit_code=$?
+		last_exit_code=$cmd_status
 
 		# Check if we should retry
 		if [[ $attempt -lt $max_attempts ]]; then
@@ -414,11 +426,11 @@ retry_with_backoff() {
 			attempt=$((attempt + 1))
 		else
 			echo "retry_with_backoff:: All $max_attempts attempts failed" >&2
-			return 1
+			return $last_exit_code
 		fi
 	done
 
-	return 1
+	return $last_exit_code
 }
 
 # Health check function
@@ -703,7 +715,6 @@ process_input() {
 	fi
 
 	input_payload=$(mktemp /tmp/resource-in.XXXXXX)
-	chmod 0600 "${input_payload}"
 
 	# Read from stdin or file and write to temp file
 	if [[ "${use_stdin}" == "true" ]]; then

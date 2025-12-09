@@ -32,12 +32,10 @@ main() {
 	local destination="${1:-}"
 	local input_file
 
-	# Create temporary files with restricted permissions
+	# Create temporary files
 	SEND_TO_SLACK_OUTPUT=$(mktemp /tmp/resource-out.XXXXXX)
-	chmod 0600 "${SEND_TO_SLACK_OUTPUT}"
 	trap 'rm -f "${SEND_TO_SLACK_OUTPUT}"' EXIT RETURN
 	input_file=$(mktemp /tmp/resource-in.XXXXXX)
-	chmod 0600 "${input_file}"
 	trap 'rm -f "${input_file}"' EXIT RETURN
 
 	# Read the contents of stdin into the input file

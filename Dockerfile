@@ -10,8 +10,6 @@ COPY ./concourse/resource-type/scripts/out.sh /opt/resource/out
 COPY ./send-to-slack.sh /opt/resource/send-to-slack.sh
 COPY ./bin/ /opt/resource/bin/
 
-RUN chmod +x /opt/resource/check /opt/resource/in /opt/resource/out /opt/resource/send-to-slack.sh /opt/resource/bin/*
-
 ENV SEND_TO_SLACK_ROOT=/opt/resource
 
 ENTRYPOINT ["/bin/bash"]

@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 
+import hashlib
+import hmac
 import json
 import logging
 import os
+import time
 import urllib.parse
+from typing import Any, Dict, Optional
 
 import requests
-from flask import Flask, request, Response
+from flask import Flask, Response, Request, request
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -15,10 +19,13 @@ app = Flask(__name__)
 
 PORT = int(os.getenv('PORT', '3000'))
 SLACK_BOT_TOKEN = os.getenv('SLACK_BOT_USER_OAUTH_TOKEN', '')
+SLACK_SIGNING_SECRET = os.getenv('SLACK_SIGNING_SECRET', '')
+DEFAULT_BIND_HOST = os.getenv('BIND_HOST', '127.0.0.1')
 DEFAULT_MESSAGE = os.getenv('DEFAULT_ACTION_MESSAGE', 'Hello, world!')
 
 
 def send_slack_message(channel_id: str, text: str) -> None:
+    """Send a simple text message to a Slack channel or user."""
     if not channel_id or not text or not SLACK_BOT_TOKEN:
         raise ValueError('Missing required parameters')
     
@@ -39,7 +46,8 @@ def send_slack_message(channel_id: str, text: str) -> None:
         raise RuntimeError(f'Slack API error: {data.get("error")}')
 
 
-def parse_payload():
+def parse_payload() -> Dict[str, Any]:
+    """Parse Slack action payload, handling form-encoded or raw JSON bodies."""
     body = request.get_data(as_text=True)
     if not body:
         raise ValueError('Payload is required')
@@ -51,6 +59,47 @@ def parse_payload():
             return json.loads(urllib.parse.unquote_plus(encoded))
     
     return json.loads(body) if isinstance(body, str) else body
+
+
+def _verify_slack_signature(req: Request) -> bool:
+    """Validate Slack request signature and timestamp to prevent spoofing and replay."""
+    if not SLACK_SIGNING_SECRET:
+        logger.error('SLACK_SIGNING_SECRET is required to verify requests')
+        return False
+
+    timestamp = req.headers.get('X-Slack-Request-Timestamp', '')
+    signature = req.headers.get('X-Slack-Signature', '')
+    if not timestamp or not signature:
+        return False
+
+    try:
+        timestamp_int = int(timestamp)
+    except ValueError:
+        return False
+
+    if abs(time.time() - timestamp_int) > 300:
+        return False
+
+    payload = f'v0:{timestamp}:{req.get_data(as_text=True)}'.encode()
+    expected = 'v0=' + hmac.new(
+        SLACK_SIGNING_SECRET.encode(),
+        payload,
+        hashlib.sha256,
+    ).hexdigest()
+
+    return hmac.compare_digest(expected, signature)
+
+
+@app.before_request
+def require_valid_slack_signature() -> Optional[Response]:
+    """Reject Slack action requests that fail signature verification."""
+    if request.path != '/slack/actions':
+        return None
+
+    if not _verify_slack_signature(request):
+        return Response('invalid signature', status=401)
+
+    return None
 
 
 @app.route('/slack/actions', methods=['POST'])
@@ -76,10 +125,10 @@ def handle_actions():
             return Response(f'Unknown action_id: {action_id}', status=400)
         
         return Response('', status=200)
-    except ValueError as e:
-        return Response(str(e), status=400)
-    except Exception as e:
-        logger.error(f'Error: {e}', exc_info=True)
+    except ValueError as exc:
+        return Response(str(exc), status=400)
+    except (RuntimeError, requests.RequestException) as exc:
+        logger.error('Error handling action: %s', exc, exc_info=True)
         return Response('Internal server error', status=500)
 
 
@@ -92,6 +141,9 @@ if __name__ == '__main__':
     if not SLACK_BOT_TOKEN:
         logger.error('SLACK_BOT_USER_OAUTH_TOKEN required')
         exit(1)
+    if not SLACK_SIGNING_SECRET:
+        logger.error('SLACK_SIGNING_SECRET required')
+        exit(1)
     
-    logger.info(f'Starting server on port {PORT}')
-    app.run(host='0.0.0.0', port=PORT)
+    logger.info('Starting server on host %s port %s', DEFAULT_BIND_HOST, PORT)
+    app.run(host=DEFAULT_BIND_HOST, port=PORT)

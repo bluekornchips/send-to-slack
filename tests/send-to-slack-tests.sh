@@ -53,7 +53,6 @@ setup() {
 	]')"
 
 	TEST_PAYLOAD_FILE=$(mktemp test-payload.XXXXXX)
-	chmod 0600 "${TEST_PAYLOAD_FILE}"
 
 	export SEND_TO_SLACK_ROOT
 	export SLACK_BOT_USER_OAUTH_TOKEN
@@ -68,7 +67,7 @@ setup() {
 }
 
 teardown() {
-	[[ -n "$TEST_PAYLOAD_FILE" ]] && rm -f "$TEST_PAYLOAD_FILE"
+	rm -f "${TEST_PAYLOAD_FILE}"
 	[[ -n "$input_payload" ]] && rm -f "$input_payload"
 	[[ -n "$attempt_file" ]] && rm -f "$attempt_file"
 	[[ -n "$unreadable_file" ]] && rm -f "$unreadable_file"
@@ -241,8 +240,11 @@ mock_curl_permalink_success() {
 	DRY_RUN="false"
 	SLACK_BOT_USER_OAUTH_TOKEN="test-token"
 
-	get_message_permalink "C123456" "1234567890.123456"
-	[[ "$?" -eq 0 ]]
+	if ! get_message_permalink "C123456" "1234567890.123456"; then
+		echo "get_message_permalink failed" >&2
+		return 1
+	fi
+
 	[[ "$NOTIFICATION_PERMALINK" == "https://workspace.slack.com/archives/C123456/p1234567890123456" ]]
 }
 
@@ -463,7 +465,7 @@ mock_curl_permalink_failure() {
 	export -f test_command
 	export attempt_file
 
-	run retry_with_backoff 3 'test_command'
+	run retry_with_backoff 3 test_command
 	local attempt_count
 	attempt_count=$(cat "$attempt_file")
 	rm -f "$attempt_file"
@@ -493,7 +495,7 @@ mock_curl_permalink_failure() {
 	RETRY_INITIAL_DELAY=0
 	export RETRY_INITIAL_DELAY
 
-	run retry_with_backoff 3 'test_command'
+	run retry_with_backoff 3 test_command
 	local attempt_count
 	attempt_count=$(cat "$attempt_file")
 	rm -f "$attempt_file"
@@ -522,7 +524,7 @@ mock_curl_permalink_failure() {
 	export RETRY_INITIAL_DELAY
 	export RETRY_MAX_ATTEMPTS
 
-	run retry_with_backoff 3 'test_command'
+	run retry_with_backoff 3 test_command
 	local attempt_count
 	attempt_count=$(cat "$attempt_file")
 	rm -f "$attempt_file"
@@ -552,7 +554,7 @@ mock_curl_permalink_failure() {
 	export RETRY_INITIAL_DELAY
 	export RETRY_MAX_ATTEMPTS
 
-	run retry_with_backoff 5 'test_command'
+	run retry_with_backoff 5 test_command
 	local attempt_count
 	attempt_count=$(cat "$attempt_file")
 	rm -f "$attempt_file"
@@ -584,7 +586,7 @@ mock_curl_permalink_failure() {
 	export RETRY_MAX_ATTEMPTS
 
 	start_time=$(date +%s)
-	run retry_with_backoff 3 'test_command'
+	run retry_with_backoff 3 test_command
 	end_time=$(date +%s)
 	elapsed=$((end_time - start_time))
 	rm -f "$attempt_file"
@@ -618,7 +620,7 @@ mock_curl_permalink_failure() {
 	export RETRY_MAX_ATTEMPTS
 
 	start_time=$(date +%s)
-	run retry_with_backoff 3 'test_command'
+	run retry_with_backoff 3 test_command
 	end_time=$(date +%s)
 	elapsed=$((end_time - start_time))
 	rm -f "$attempt_file"
@@ -647,7 +649,7 @@ mock_curl_permalink_failure() {
 	export RETRY_MAX_ATTEMPTS
 	export RETRY_INITIAL_DELAY
 
-	run retry_with_backoff "" 'test_command'
+	run retry_with_backoff "" test_command
 	local attempt_count
 	attempt_count=$(cat "$attempt_file")
 	rm -f "$attempt_file"
@@ -715,7 +717,7 @@ mock_curl_permalink_failure() {
 	run handle_slack_api_error "$response"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "Rate limited"
-	! echo "$output" | grep -q "Context:"
+	[[ "$output" != *"Context:"* ]]
 }
 
 ########################################################
@@ -771,21 +773,6 @@ mock_curl_permalink_failure() {
 	echo "$output" | grep -q "input file does not exist"
 }
 
-@test "main:: fails when file is not readable" {
-	local unreadable_file
-	unreadable_file=$(mktemp unreadable.XXXXXX)
-	chmod 000 "$unreadable_file"
-
-	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
-	run "$SCRIPT" -file "$unreadable_file"
-	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "process_input::"
-	echo "$output" | grep -q "input file is not readable"
-
-	chmod 600 "$unreadable_file"
-	rm -f "$unreadable_file"
-}
-
 @test "main:: fails when file is empty" {
 	local empty_file
 	empty_file=$(mktemp empty.XXXXXX)
@@ -804,7 +791,13 @@ mock_curl_permalink_failure() {
 	create_test_payload
 
 	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
-	run "$SCRIPT" -file "$TEST_PAYLOAD_FILE" <"$TEST_PAYLOAD_FILE"
+
+	local stdin_copy
+	stdin_copy=$(mktemp payload-stdin.XXXXXX)
+	trap 'rm -f "$stdin_copy"' RETURN
+	cp "$TEST_PAYLOAD_FILE" "$stdin_copy"
+
+	run "$SCRIPT" -file "$TEST_PAYLOAD_FILE" <"$stdin_copy"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
 }

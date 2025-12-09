@@ -8,7 +8,6 @@ SCRIPT="$GIT_ROOT/concourse/resource-type/scripts/out.sh"
 
 setup() {
 	SEND_TO_SLACK_SCRIPT="$(mktemp /tmp/send-to-slack.XXXXXX)"
-	chmod +x "${SEND_TO_SLACK_SCRIPT}"
 
 	export SEND_TO_SLACK_SCRIPT
 
@@ -28,7 +27,7 @@ mock_send_to_slack_success() {
 #!/usr/bin/env bash
 echo '{"version": {"timestamp": "2023-12-01T12:00:00Z"}, "metadata": [{"name": "dry_run", "value": "false"}]}'
 EOF
-	chmod +x "${SEND_TO_SLACK_SCRIPT}"
+	chmod 755 "${SEND_TO_SLACK_SCRIPT}"
 }
 
 mock_send_to_slack_failure() {
@@ -37,7 +36,7 @@ mock_send_to_slack_failure() {
 echo "Failed to send message to Slack" >&2
 exit 1
 EOF
-	chmod +x "${SEND_TO_SLACK_SCRIPT}"
+	chmod 755 "${SEND_TO_SLACK_SCRIPT}"
 }
 
 ########################################################
