@@ -1,4 +1,5 @@
 VERSION := $(shell cat VERSION 2>/dev/null || echo "Unavailable")
+TARGET_VERSION ?= $(VERSION)
 SYSTEM_PREFIX := /usr/local
 
 # Testing
@@ -23,8 +24,11 @@ test-all:
 		./tests/*-tests.sh \
 		./tests/blocks/*tests.sh
 
-test-in-docker:
-	clear && ./tests/run-tests-in-docker.sh
+test-docker:
+	clear && DOCKER_IMAGE_TAG=local MAKE_COMMAND="make test-all" ./tests/run-tests-in-docker.sh
+
+test-docker-version:
+	clear && DOCKER_IMAGE_TAG=$(TARGET_VERSION) MAKE_COMMAND="TARGET_VERSION=$(TARGET_VERSION) make test-all" ./tests/run-tests-in-docker.sh
 
 # quality checks
 format:

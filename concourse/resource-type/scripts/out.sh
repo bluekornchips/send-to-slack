@@ -6,6 +6,7 @@
 #
 set -eo pipefail
 set +x
+umask 077
 
 # Redirect stdout to stderr for logging, required for Concourse to capture output.
 exec 3>&1
@@ -34,8 +35,18 @@ main() {
 
 	# Create temporary files
 	SEND_TO_SLACK_OUTPUT=$(mktemp /tmp/resource-out.XXXXXX)
+	if ! chmod 700 "$SEND_TO_SLACK_OUTPUT"; then
+		echo "out:: failed to secure output file ${SEND_TO_SLACK_OUTPUT}" >&2
+		rm -f "${SEND_TO_SLACK_OUTPUT}"
+		return 1
+	fi
 	trap 'rm -f "${SEND_TO_SLACK_OUTPUT}"' EXIT RETURN
 	input_file=$(mktemp /tmp/resource-in.XXXXXX)
+	if ! chmod 700 "$input_file"; then
+		echo "out:: failed to secure input file ${input_file}" >&2
+		rm -f "${input_file}"
+		return 1
+	fi
 	trap 'rm -f "${input_file}"' EXIT RETURN
 
 	# Read the contents of stdin into the input file

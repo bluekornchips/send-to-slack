@@ -5,6 +5,7 @@
 # Supports Block Kit formatting, file uploads, and attachments
 #
 set -eo pipefail
+umask 077
 
 ########################################################
 # Default values
@@ -39,6 +40,105 @@ DOC_URL_CONVERSATIONS_LIST="https://api.slack.com/methods/conversations.list"
 DOC_URL_LEGACY_ATTACHMENTS="https://api.slack.com/reference/messaging/payload#legacy"
 DOC_URL_RATE_LIMITS="https://api.slack.com/docs/rate-limits"
 DOC_URL_SCOPES="https://api.slack.com/scopes"
+
+# Resolve version from known locations
+#
+# Inputs:
+# - $1 - root_path: Base directory for repository or installation
+#
+# Outputs:
+# - Writes version string to stdout on success
+#
+# Returns:
+# - 0 on success, 1 on missing
+get_runtime_version() {
+	local root_path="$1"
+	local candidates
+	local version_path
+	local version_value
+
+	if [[ -z "$root_path" ]]; then
+		return 1
+	fi
+
+	candidates=(
+		"${root_path}/VERSION"
+		"${root_path}/share/send-to-slack/VERSION")
+
+	for version_path in "${candidates[@]}"; do
+		if [[ -f "$version_path" ]]; then
+			version_value=$(tr -d '\r' <"$version_path" | tr -d '\n')
+			if [[ -n "$version_value" ]]; then
+				echo "$version_value"
+				return 0
+			fi
+		fi
+	done
+
+	return 1
+}
+
+# Resolve commit from git metadata when available
+#
+# Inputs:
+# - $1 - root_path: Base directory for repository or installation
+#
+# Outputs:
+# - Writes commit string to stdout on success
+#
+# Returns:
+# - 0 on success, 1 on missing
+get_runtime_commit() {
+	local root_path="$1"
+	local commit_value
+
+	if [[ -z "$root_path" ]]; then
+		return 1
+	fi
+
+	if command -v git >/dev/null 2>&1 && [[ -d "${root_path}/.git" ]]; then
+		if commit_value=$(git -C "$root_path" rev-parse --short HEAD 2>/dev/null); then
+			if [[ -n "$commit_value" ]]; then
+				echo "$commit_value"
+				return 0
+			fi
+		fi
+	fi
+
+	return 1
+}
+
+# Log runtime version/commit information
+#
+# Inputs:
+# - $1 - root_path: Base directory for repository or installation
+#
+# Outputs:
+# - Logs version and commit to stdout
+#
+# Returns:
+# - 0 always
+log_runtime_identity() {
+	local root_path="$1"
+	local runtime_version
+	local runtime_commit
+
+	if [[ -z "$root_path" ]]; then
+		return 0
+	fi
+
+	if ! runtime_version=$(get_runtime_version "$root_path"); then
+		runtime_version="unknown"
+	fi
+
+	if ! runtime_commit=$(get_runtime_commit "$root_path"); then
+		runtime_commit="unknown"
+	fi
+
+	echo "main:: running send-to-slack version=${runtime_version} commit=${runtime_commit}"
+
+	return 0
+}
 
 # Check for required external commands
 #
@@ -266,6 +366,11 @@ crosspost_notification() {
 		# Write payload to temp file for parsing
 		local temp_payload
 		temp_payload=$(mktemp /tmp/crosspost-payload.XXXXXX)
+		if ! chmod 700 "$temp_payload"; then
+			echo "crosspost_notification:: failed to secure temp payload ${temp_payload}" >&2
+			rm -f "$temp_payload"
+			return 1
+		fi
 		trap 'rm -f "$temp_payload"' RETURN EXIT
 		echo "$crosspost_payload" >"$temp_payload"
 
@@ -463,36 +568,42 @@ health_check() {
 	# Check Slack API connectivity if token is provided
 	if [[ -n "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
 		echo "health_check:: Testing Slack API connectivity."
-		local response
-		local http_code
-		http_code=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-			-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
-			--max-time 5 \
-			--connect-timeout 5 \
-			"https://slack.com/api/auth.test" 2>/dev/null)
-
-		if [[ "$http_code" == "200" ]]; then
-			response=$(curl -s -X POST \
+		if [[ "${DRY_RUN}" == "true" || "${SKIP_SLACK_API_CHECK}" == "true" ]]; then
+			echo "health_check:: Slack API connectivity check skipped (DRY_RUN or SKIP_SLACK_API_CHECK set)"
+		else
+			local response
+			local http_code
+			http_code=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
 				-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
 				--max-time 5 \
 				--connect-timeout 5 \
 				"https://slack.com/api/auth.test" 2>/dev/null)
 
-			if echo "$response" | jq -e '.ok == true' >/dev/null 2>&1; then
-				local team
-				local user
-				team=$(echo "$response" | jq -r '.team // "unknown"' 2>/dev/null)
-				user=$(echo "$response" | jq -r '.user // "unknown"' 2>/dev/null)
-				echo "health_check:: Slack API accessible - Team: $team, User: $user"
+			if [[ "$http_code" == "200" ]]; then
+				response=$(curl -s -X POST \
+					-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
+					--max-time 5 \
+					--connect-timeout 5 \
+					"https://slack.com/api/auth.test" 2>/dev/null)
+
+				if echo "$response" | jq -e '.ok == true' >/dev/null 2>&1; then
+					local team
+					local user
+					team=$(echo "$response" | jq -r '.team // "unknown"' 2>/dev/null)
+					user=$(echo "$response" | jq -r '.user // "unknown"' 2>/dev/null)
+					echo "health_check:: Slack API accessible - Team: $team, User: $user"
+				else
+					local error
+					error=$(echo "$response" | jq -r '.error // "unknown"' 2>/dev/null)
+					echo "health_check:: Slack API authentication failed: $error" >&2
+					if [[ "$error" != "invalid_auth" ]]; then
+						errors=$((errors + 1))
+					fi
+				fi
 			else
-				local error
-				error=$(echo "$response" | jq -r '.error // "unknown"' 2>/dev/null)
-				echo "health_check:: Slack API authentication failed: $error" >&2
+				echo "health_check:: Slack API not accessible (HTTP $http_code)" >&2
 				errors=$((errors + 1))
 			fi
-		else
-			echo "health_check:: Slack API not accessible (HTTP $http_code)" >&2
-			errors=$((errors + 1))
 		fi
 	else
 		echo "health_check:: SLACK_BOT_USER_OAUTH_TOKEN not set, skipping API connectivity check"
@@ -715,6 +826,11 @@ process_input() {
 	fi
 
 	input_payload=$(mktemp /tmp/resource-in.XXXXXX)
+	if ! chmod 700 "$input_payload"; then
+		echo "process_input:: failed to secure temp input ${input_payload}" >&2
+		rm -f "$input_payload"
+		return 1
+	fi
 
 	# Read from stdin or file and write to temp file
 	if [[ "${use_stdin}" == "true" ]]; then
@@ -771,28 +887,6 @@ main() {
 	local main_args
 	local health_check_mode=false
 
-	# Parse command line arguments
-	main_args=()
-	while [[ $# -gt 0 ]]; do
-		case $1 in
-		--health-check | -h)
-			health_check_mode=true
-			shift
-			;;
-		*)
-			main_args+=("$1")
-			shift
-			;;
-		esac
-	done
-
-	if [[ "$health_check_mode" == "true" ]]; then
-		if ! health_check; then
-			return 1
-		fi
-		return 0
-	fi
-
 	if [[ -z "${SEND_TO_SLACK_ROOT}" ]]; then
 		script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
@@ -821,6 +915,30 @@ main() {
 			echo "main:: cannot locate parse-payload.sh in ${SEND_TO_SLACK_ROOT}" >&2
 			return 1
 		fi
+	fi
+
+	log_runtime_identity "${SEND_TO_SLACK_ROOT}"
+
+	# Parse command line arguments
+	main_args=()
+	while [[ $# -gt 0 ]]; do
+		case $1 in
+		--health-check | -h)
+			health_check_mode=true
+			shift
+			;;
+		*)
+			main_args+=("$1")
+			shift
+			;;
+		esac
+	done
+
+	if [[ "$health_check_mode" == "true" ]]; then
+		if ! health_check; then
+			return 1
+		fi
+		return 0
 	fi
 
 	export SEND_TO_SLACK_ROOT
@@ -862,6 +980,11 @@ main() {
 
 	local parsed_payload_file
 	parsed_payload_file=$(mktemp /tmp/parsed-payload.XXXXXX)
+	if ! chmod 700 "$parsed_payload_file"; then
+		echo "main:: failed to secure parsed payload file ${parsed_payload_file}" >&2
+		rm -f "${parsed_payload_file}"
+		return 1
+	fi
 	if ! parse_payload "${input_payload}" >"${parsed_payload_file}"; then
 		echo "main:: failed to parse payload" >&2
 		rm -f "${parsed_payload_file}"

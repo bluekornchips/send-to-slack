@@ -5,6 +5,7 @@
 # Ref: https://concourse-ci.org/implementing-resource-types.html#resource-in
 #
 set -eo pipefail
+umask 077
 
 # Redirect stdout to stderr for logging, required for Concourse to capture output.
 exec 3>&1
@@ -26,6 +27,11 @@ main() {
 	local version
 
 	payload=$(mktemp /tmp/resource-in.XXXXXX)
+	if ! chmod 700 "$payload"; then
+		echo "in:: failed to secure temp payload ${payload}" >&2
+		rm -f "${payload}"
+		return 1
+	fi
 	trap 'rm -f "${payload}"' EXIT RETURN
 
 	cat >"${payload}" <&0

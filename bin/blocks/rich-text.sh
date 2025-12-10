@@ -4,6 +4,7 @@
 # Ref: https://docs.slack.dev/reference/block-kit/blocks/rich-text-block
 #
 set -eo pipefail
+umask 077
 
 BLOCK_TYPE="rich_text"
 MAX_RICH_TEXT_CHARS=4000
@@ -26,6 +27,11 @@ handle_oversize_text() {
 
 	local file_path
 	file_path=$(mktemp /tmp/send-to-slack-oversize-rich-text-XXXXXX.txt)
+	if ! chmod 700 "$file_path"; then
+		echo "handle_oversize_text:: failed to secure temp file ${file_path}" >&2
+		rm -f "$file_path"
+		return 1
+	fi
 	trap 'rm -f "$file_path"' RETURN EXIT
 
 	# Write the extracted text to the file
@@ -86,6 +92,11 @@ create_rich_text() {
 
 	local input_json
 	input_json=$(mktemp /tmp/send-to-slack-XXXXXX)
+	if ! chmod 700 "$input_json"; then
+		echo "create_rich_text:: failed to secure temp file ${input_json}" >&2
+		rm -f "$input_json"
+		return 1
+	fi
 	trap 'rm -f "$input_json"' RETURN EXIT
 	echo "$input" >"$input_json"
 

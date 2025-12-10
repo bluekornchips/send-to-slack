@@ -5,6 +5,7 @@
 # Ref: https://docs.slack.dev/messaging/working-with-files/#upload
 #
 set -eo pipefail
+umask 077
 
 # Validate file size against Slack's 1 GB limit
 # Ref: https://docs.slack.dev/messaging/working-with-files
@@ -543,6 +544,11 @@ file_upload() {
 
 	local upload_payload_file
 	upload_payload_file=$(mktemp /tmp/send-to-slack-XXXXXX)
+	if ! chmod 700 "$upload_payload_file"; then
+		echo "file_upload:: failed to secure upload payload file ${upload_payload_file}" >&2
+		rm -f "$upload_payload_file"
+		return 1
+	fi
 	trap 'rm -f "$upload_payload_file"' RETURN EXIT
 
 	jq -n \

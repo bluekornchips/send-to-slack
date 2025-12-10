@@ -4,6 +4,7 @@
 # Ref: https://docs.slack.dev/reference/block-kit/blocks/table-block/
 #
 set -eo pipefail
+umask 077
 
 # Constants
 BLOCK_TYPE="table"
@@ -35,6 +36,11 @@ create_table() {
 
 	local input_json
 	input_json=$(mktemp /tmp/send-to-slack-XXXXXX)
+	if ! chmod 700 "$input_json"; then
+		echo "create_table:: failed to secure temp file ${input_json}" >&2
+		rm -f "$input_json"
+		return 1
+	fi
 	trap 'rm -f "$input_json"' RETURN EXIT
 	echo "$input" >"$input_json"
 

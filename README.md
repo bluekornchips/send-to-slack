@@ -78,6 +78,24 @@ echo '{
     "channel": "notifications",
     "blocks": [
       {
+        "type": "section",
+        "text": {
+          "type": "plain_text",
+          "text": "Hello, world!"
+        }
+      }
+    ]
+  }
+}' | send-to-slack
+# or
+echo '{
+  "source": {
+    "slack_bot_user_oauth_token": "xoxb-your-token"
+  },
+  "params": {
+    "channel": "notifications",
+    "blocks": [
+      {
         "section": {
           "type": "text",
           "text": {
@@ -89,6 +107,12 @@ echo '{
     ]
   }
 }' | send-to-slack
+```
+
+Blocks can also be provided in a payload file:
+
+```bash
+send-to-slack --file payload.json
 ```
 
 If running from the repository without installation, use `./send-to-slack.sh` instead.
@@ -113,6 +137,7 @@ If running from the repository without installation, use `./send-to-slack.sh` in
 - <strong>Bash 4.0</strong> or later
 - `jq` - [jqlang](https://github.com/jqlang/jq) for JSON processing
 - `curl` - [curl](https://curl.se/) for HTTP requests
+- `gettext` - [GNU gettext](https://www.gnu.org/software/gettext/) for msgfmt tooling
 
 ### Interactive Components Dependencies
 
@@ -138,6 +163,8 @@ The program reads JSON payload from `stdin` and sends messages to Slack. The pay
 
 - `source` - Configuration object containing authentication credentials
 - `params` - Parameters object containing message configuration
+
+Blocks can be provided in Slack's native format (each block includes its `type` field) or in the tool's wrapped format that keys blocks by their type (e.g., `{"section": {...}}`). Both formats are accepted across the CLI and examples.
 
 ### Payload Structure
 
