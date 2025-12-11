@@ -404,6 +404,28 @@ mock_curl_permalink_failure() {
 	rm -f "$input_payload"
 }
 
+@test "crosspost_notification:: accepts single channel string" {
+	DRY_RUN="true"
+	NOTIFICATION_PERMALINK="https://workspace.slack.com/archives/C123/p123"
+	local input_payload
+	input_payload=$(mktemp test-crosspost.XXXXXX)
+	jq -n '{
+		source: { slack_bot_user_oauth_token: "test-token" },
+		params: {
+			channel: "#primary",
+			blocks: [],
+			crosspost: {
+				channels: "#channel1"
+			}
+		}
+	}' >"$input_payload"
+
+	run crosspost_notification "$input_payload"
+	[[ "$status" -eq 0 ]]
+
+	rm -f "$input_payload"
+}
+
 ########################################################
 # Health Check Tests
 ########################################################

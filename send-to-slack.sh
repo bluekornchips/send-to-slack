@@ -291,6 +291,8 @@ crosspost_notification() {
 	local default_text="This is an automated crosspost."
 
 	channels_json=$(jq '.params.crosspost.channels // []' "$input_payload")
+	# Normalize channels: accept a single string or an array
+	channels_json=$(echo "${channels_json}" | jq 'if type == "string" then [.] elif type == "array" then . else [] end')
 	text=$(jq -r '.params.crosspost.text // ""' "$input_payload")
 
 	if [[ -z "${channels_json}" ]] || [[ "${channels_json}" == "[]" ]]; then
