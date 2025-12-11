@@ -539,6 +539,7 @@ file_upload() {
 	echo "file_upload:: upload URL obtained, file_id: $FILE_ID" >&2
 
 	if ! _post_file_contents; then
+		cleanup_upload_payload_file
 		return 1
 	fi
 
@@ -549,7 +550,12 @@ file_upload() {
 		rm -f "$upload_payload_file"
 		return 1
 	fi
-	trap 'rm -f "$upload_payload_file"' RETURN EXIT
+	cleanup_upload_payload_file() {
+		if [[ -n "${upload_payload_file:-}" && -f "$upload_payload_file" ]]; then
+			rm -f "$upload_payload_file"
+		fi
+	}
+	trap 'cleanup_upload_payload_file' EXIT
 
 	jq -n \
 		--arg file_id "$FILE_ID" \
@@ -569,6 +575,7 @@ file_upload() {
 
 	local file_metadata
 	if ! file_metadata=$(_complete_upload); then
+		cleanup_upload_payload_file
 		return 1
 	fi
 
@@ -593,6 +600,7 @@ file_upload() {
 
 	if [[ -z "$permalink" || "$permalink" == "null" || "$permalink" == "empty" ]]; then
 		echo "file_upload:: failed to get permalink from uploaded file: $FILE_PATH (file_id: $file_id_from_metadata)" >&2
+		cleanup_upload_payload_file
 		return 1
 	fi
 
@@ -613,6 +621,8 @@ file_upload() {
 		}')
 
 	echo "$rich_text_block"
+
+	cleanup_upload_payload_file
 
 	return 0
 }

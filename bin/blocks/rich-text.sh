@@ -32,7 +32,7 @@ handle_oversize_text() {
 		rm -f "$file_path"
 		return 1
 	fi
-	trap 'rm -f "$file_path"' RETURN EXIT
+	trap 'rm -f "$file_path"' EXIT
 
 	# Write the extracted text to the file
 	echo "$extracted_text" >"$file_path"
@@ -66,7 +66,10 @@ handle_oversize_text() {
 	)"
 
 	# Upload the file
-	block=$("$upload_script_path" <<<"$new_block_input_json")
+	local block
+	if ! block=$("$upload_script_path" <<<"$new_block_input_json"); then
+		return 1
+	fi
 
 	echo "$block"
 
@@ -96,7 +99,7 @@ create_rich_text() {
 		rm -f "$input_json"
 		return 1
 	fi
-	trap 'rm -f "$input_json"' RETURN EXIT
+	trap 'rm -f "$input_json"' EXIT
 	echo "$input" >"$input_json"
 
 	if ! jq . "$input_json" >/dev/null 2>&1; then
@@ -141,8 +144,10 @@ create_rich_text() {
 	if ((text_length > MAX_RICH_TEXT_CHARS)); then
 		echo "create_rich_text:: text length ($text_length) exceeds maximum of $MAX_RICH_TEXT_CHARS characters" >&2
 		echo "create_rich_text:: See rich text block limits: $DOC_URL_RICH_TEXT_BLOCK" >&2
-		handle_oversize_text "$extracted_text"
-		return $?
+		if ! handle_oversize_text "$extracted_text"; then
+			return 1
+		fi
+		return 0
 	fi
 
 	block=$(jq -n \

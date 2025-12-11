@@ -28,6 +28,20 @@ ERROR_CODES_TRUE_FAILURES=(
 	"invalid_blocks"
 	"invalid_attachments")
 ERROR_CODES_RETRYABLE=("rate_limited")
+ERROR_CODES_TRUE_FAILURES_PATTERN="invalid_auth|channel_not_found|not_in_channel|missing_scope|invalid_blocks|invalid_attachments"
+ERROR_CODES_RETRYABLE_PATTERN="rate_limited"
+
+error_code_in_list() {
+	local code="$1"
+	shift
+	local item
+	for item in "$@"; do
+		if [[ "$code" == "$item" ]]; then
+			return 0
+		fi
+	done
+	return 1
+}
 
 ########################################################
 # Documentation URLs
@@ -365,30 +379,32 @@ crosspost_notification() {
 				}
 			}')
 
-		# Write payload to temp file for parsing
-		local temp_payload
-		temp_payload=$(mktemp /tmp/crosspost-payload.XXXXXX)
-		if ! chmod 700 "$temp_payload"; then
-			echo "crosspost_notification:: failed to secure temp payload ${temp_payload}" >&2
-			rm -f "$temp_payload"
-			return 1
-		fi
-		trap 'rm -f "$temp_payload"' RETURN EXIT
-		echo "$crosspost_payload" >"$temp_payload"
+		# Use a subshell to isolate temp file traps and ensure cleanup without clobbering outer traps
+		# This is a cool pattern, I think. Sub shells are sick.
+		if ! (
+			set -eo pipefail
+			temp_payload=$(mktemp /tmp/crosspost-payload.XXXXXX)
+			if ! chmod 700 "$temp_payload"; then
+				echo "crosspost_notification:: failed to secure temp payload ${temp_payload}" >&2
+				exit 1
+			fi
+			trap 'rm -f "$temp_payload"' EXIT
+			echo "$crosspost_payload" >"$temp_payload"
 
-		# Parse the payload
-		local parsed_payload
-		if ! parsed_payload=$(parse_payload "$temp_payload"); then
-			echo "crosspost_notification:: failed to parse payload for channel $channel" >&2
-			rm -f "$temp_payload"
-			continue
-		fi
+			# Parse the payload
+			local parsed_payload
+			if ! parsed_payload=$(parse_payload "$temp_payload"); then
+				echo "crosspost_notification:: failed to parse payload for channel $channel" >&2
+				exit 1
+			fi
 
-		rm -f "$temp_payload"
-
-		# Send the notification
-		if ! send_notification "$parsed_payload"; then
-			echo "crosspost_notification:: failed to send notification to channel $channel" >&2
+			# Send the notification
+			if ! send_notification "$parsed_payload"; then
+				echo "crosspost_notification:: failed to send notification to channel $channel" >&2
+				exit 1
+			fi
+		); then
+			echo "crosspost_notification:: processing failed for channel $channel" >&2
 			continue
 		fi
 	done
@@ -693,26 +709,20 @@ send_notification() {
 			error_code=$(echo "$response" | jq -r '.error // "unknown"' 2>/dev/null)
 
 			#error retryable or not
-			case "$error_code" in
-			"${ERROR_CODES_RETRYABLE[@]}")
+			if error_code_in_list "$error_code" "${ERROR_CODES_RETRYABLE[@]}"; then
 				echo "send_notification:: Rate limited, will retry" >&2
 				last_exit_code=1
-				;;
-			"${ERROR_CODES_TRUE_FAILURES[@]}")
-				# fail immediately
+			elif error_code_in_list "$error_code" "${ERROR_CODES_TRUE_FAILURES[@]}"; then
 				handle_slack_api_error "$response" "send_notification"
 				echo "send_notification:: Full request payload:" >&2
 				jq . <<<"$payload" >&2
 				return 1
-				;;
-			*)
-				#retrys okay
+			else
 				echo "send_notification:: Slack API error: $error_code, will retry" >&2
 				echo "send_notification:: Error response:" >&2
 				echo "$response" | jq . >&2 2>/dev/null || echo "$response" >&2
 				last_exit_code=1
-				;;
-			esac
+			fi
 		else
 			break
 		fi
