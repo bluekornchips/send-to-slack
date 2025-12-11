@@ -94,7 +94,7 @@ teardown() {
 
 	# Mock the file upload script to avoid actual API calls
 	local mock_script
-	mock_script=$(mktemp mock_file_upload.XXXXXX.sh)
+	mock_script=$(mktemp "${TMPDIR:-/tmp}/mock_file_upload.XXXXXX")
 	cat >"$mock_script" <<'EOF'
 #!/bin/bash
 echo '{"type": "section", "text": {"type": "mrkdwn", "text": "<http://example.com/file.txt|oversized-rich-text.txt>"}}'

@@ -84,15 +84,14 @@ EOF
 
 	echo "v0.0.commit" >"${repo_root}/VERSION"
 
-	(
-		cd "$repo_root" || exit 1
-		git init >/dev/null 2>&1
-		git config user.email "test@example.com"
-		git config user.name "Test User"
-		git add .
-		git commit -m "test commit" >/dev/null 2>&1
-		commit_ref=$(git rev-parse HEAD)
-	)
+	pushd "$repo_root" >/dev/null || exit 1
+	git init >/dev/null 2>&1
+	git config user.email "test@example.com"
+	git config user.name "Test User"
+	git add .
+	git commit -m "test commit" >/dev/null 2>&1
+	commit_ref=$(git rev-parse HEAD)
+	popd >/dev/null || true
 
 	run env SEND_TO_SLACK_REPO_URL="$repo_root" HOME="$TEMP_HOME" "$SCRIPT" --commit "$commit_ref" --path "$clone_prefix"
 	[[ "$status" -eq 0 ]]

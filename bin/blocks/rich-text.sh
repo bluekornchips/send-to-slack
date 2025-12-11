@@ -26,7 +26,7 @@ handle_oversize_text() {
 	local extracted_text="$1"
 
 	local file_path
-	file_path=$(mktemp /tmp/send-to-slack-oversize-rich-text-XXXXXX.txt)
+	file_path=$(mktemp /tmp/send-to-slack-oversize-rich-text.XXXXXX)
 	if ! chmod 700 "$file_path"; then
 		echo "handle_oversize_text:: failed to secure temp file ${file_path}" >&2
 		rm -f "$file_path"
@@ -41,11 +41,10 @@ handle_oversize_text() {
 
 	local upload_script_path
 	if [[ "$UPLOAD_FILE_SCRIPT" = /* ]]; then
-		# Absolute path, use as-is
 		upload_script_path="$UPLOAD_FILE_SCRIPT"
 	else
-		# Relative path, prepend SEND_TO_SLACK_ROOT
-		upload_script_path="${SEND_TO_SLACK_ROOT}/${UPLOAD_FILE_SCRIPT}"
+		local base_root="${SEND_TO_SLACK_ROOT:-.}"
+		upload_script_path="${base_root%/}/${UPLOAD_FILE_SCRIPT}"
 	fi
 
 	if [[ ! -f "$upload_script_path" ]]; then

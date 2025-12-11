@@ -810,14 +810,6 @@ process_input() {
 			echo "process_input:: input file does not exist: ${input_file}" >&2
 			return 1
 		fi
-		if [[ ! -r "${input_file}" ]]; then
-			echo "process_input:: input file is not readable: ${input_file}" >&2
-			return 1
-		fi
-		if [[ ! -s "${input_file}" ]]; then
-			echo "process_input:: input file is empty: ${input_file}" >&2
-			return 1
-		fi
 		use_stdin="false"
 	else
 		if [[ -t 0 ]]; then
@@ -836,7 +828,11 @@ process_input() {
 
 	# Read from stdin or file and write to temp file
 	if [[ "${use_stdin}" == "true" ]]; then
-		cat >"${input_payload}"
+		if ! cat >"${input_payload}"; then
+			echo "process_input:: failed to read from stdin" >&2
+			rm -f "${input_payload}"
+			return 1
+		fi
 		if [[ ! -f "${input_payload}" ]]; then
 			echo "process_input:: input file was not created" >&2
 			rm -f "${input_payload}"
@@ -848,7 +844,12 @@ process_input() {
 			return 1
 		fi
 	else
-		cp "${input_file}" "${input_payload}"
+		if ! cat -- "${input_file}" >"${input_payload}"; then
+			echo "process_input:: failed to read input file: ${input_file}" >&2
+			ls -l "${input_file}" >&2
+			rm -f "${input_payload}"
+			return 1
+		fi
 		if [[ ! -f "${input_payload}" ]]; then
 			echo "process_input:: failed to copy input file to temp file" >&2
 			rm -f "${input_payload}"
