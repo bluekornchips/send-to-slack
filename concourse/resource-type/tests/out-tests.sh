@@ -7,7 +7,7 @@ SCRIPT="$GIT_ROOT/concourse/resource-type/scripts/out.sh"
 [[ ! -f "$SCRIPT" ]] && echo "Script not found: $SCRIPT" >&2 && return 1
 
 setup() {
-	SEND_TO_SLACK_SCRIPT="$(mktemp /tmp/send-to-slack.XXXXXX)"
+	SEND_TO_SLACK_SCRIPT="$(mktemp -t out-tests.send-to-slack.XXXXXX)"
 
 	export SEND_TO_SLACK_SCRIPT
 

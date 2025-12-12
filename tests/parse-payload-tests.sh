@@ -38,7 +38,7 @@ setup() {
 	SEND_TO_SLACK_ROOT="$GIT_ROOT"
 	export SEND_TO_SLACK_ROOT
 
-	TEST_PAYLOAD_FILE=$(mktemp test-payload.XXXXXX)
+	TEST_PAYLOAD_FILE=$(mktemp parse-payload-tests.test-payload.XXXXXX)
 	export TEST_PAYLOAD_FILE
 	create_test_payload
 
@@ -357,7 +357,7 @@ create_test_payload() {
 
 @test "parse_payload:: invalid json input" {
 	local invalid_file
-	invalid_file=$(mktemp invalid-json.XXXXXX)
+	invalid_file=$(mktemp parse-payload-tests.invalid-json.XXXXXX)
 	trap 'rm -f "$invalid_file" 2>/dev/null || true' EXIT
 	echo "invalid json" >"$invalid_file"
 
@@ -515,7 +515,7 @@ create_test_payload() {
 	# Call parse_payload directly to check exported variables
 	# Capture output to temp file to avoid subshell issues
 	local output_file
-	output_file=$(mktemp output.XXXXXX)
+	output_file=$(mktemp parse-payload-tests.output.XXXXXX)
 
 	if ! parse_payload "$TEST_PAYLOAD_FILE" >"$output_file" 2>&1; then
 		cat "$output_file"
@@ -574,7 +574,7 @@ create_test_payload() {
 
 @test "parse_payload:: params.from_file" {
 	local payload_file
-	payload_file=$(mktemp params-file.XXXXXX)
+	payload_file=$(mktemp parse-payload-tests.params-file.XXXXXX)
 	trap 'rm -f "$payload_file" 2>/dev/null || true' EXIT
 
 	# File contains only params (source is preserved from test payload)
@@ -628,7 +628,7 @@ create_test_payload() {
 
 @test "parse_payload:: params.from_file invalid json" {
 	local payload_file
-	payload_file=$(mktemp invalid-params-file.XXXXXX)
+	payload_file=$(mktemp parse-payload-tests.invalid-params-file.XXXXXX)
 	trap 'rm -f "$payload_file" 2>/dev/null || true' EXIT
 	echo "invalid json" >"$payload_file"
 

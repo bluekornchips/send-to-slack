@@ -24,18 +24,8 @@ test-all:
 		./tests/*-tests.sh \
 		./tests/blocks/*tests.sh
 
-test-docker:
-	clear && DOCKER_IMAGE_TAG=local MAKE_COMMAND="make test-all" ./tests/run-tests-in-docker.sh
-
-test-docker-version:
-	clear && DOCKER_IMAGE_TAG=$(TARGET_VERSION) MAKE_COMMAND="TARGET_VERSION=$(TARGET_VERSION) make test-all" ./tests/run-tests-in-docker.sh
-
-# quality checks
-format:
-	find . -name "*.sh" -type f -exec shfmt -w {} \;
-
-lint:
-	find . -name "*.sh" -type f -print0 | xargs -0 shellcheck --shell=bash
+test-in-docker:
+	clear && DOCKER_IMAGE_TAG=local MAKE_COMMAND="make test" ./tests/run-tests-in-docker.sh
 
 # installation
 install:

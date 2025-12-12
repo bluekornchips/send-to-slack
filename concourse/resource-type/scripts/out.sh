@@ -34,14 +34,14 @@ main() {
 	local input_file
 
 	# Create temporary files
-	SEND_TO_SLACK_OUTPUT=$(mktemp /tmp/resource-out.XXXXXX)
+	SEND_TO_SLACK_OUTPUT=$(mktemp -t resource-out.XXXXXX)
 	if ! chmod 700 "$SEND_TO_SLACK_OUTPUT"; then
 		echo "out:: failed to secure output file ${SEND_TO_SLACK_OUTPUT}" >&2
 		rm -f "${SEND_TO_SLACK_OUTPUT}"
 		return 1
 	fi
 	trap 'rm -f "${SEND_TO_SLACK_OUTPUT}"' EXIT RETURN
-	input_file=$(mktemp /tmp/resource-in.XXXXXX)
+	input_file=$(mktemp -t resource-in.XXXXXX)
 	if ! chmod 700 "$input_file"; then
 		echo "out:: failed to secure input file ${input_file}" >&2
 		rm -f "${input_file}"

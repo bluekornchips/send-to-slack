@@ -4,6 +4,7 @@ RUN apk add --no-cache bash jq curl ca-certificates gettext \
 	&& addgroup -S slacker \
 	&& adduser -S -G slacker -h /home/slacker -s /bin/bash slacker \
 	&& chmod 700 /home/slacker \
+	&& chmod 1777 /tmp \
 	&& mkdir -p /opt/resource
 
 WORKDIR /opt/resource

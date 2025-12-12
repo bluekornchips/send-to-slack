@@ -8,7 +8,7 @@ SCRIPT="$GIT_ROOT/concourse/resource-type/scripts/in.sh"
 
 setup() {
 	test_timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-	TEST_PAYLOAD_FILE=$(mktemp /tmp/in_payload.XXXXXX)
+	TEST_PAYLOAD_FILE=$(mktemp -t in-tests.in_payload.XXXXXX)
 
 	export test_timestamp
 	export TEST_PAYLOAD_FILE

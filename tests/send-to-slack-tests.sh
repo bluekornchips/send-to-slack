@@ -3,6 +3,12 @@
 # Test file for send-to-slack.sh
 #
 
+cleanup() {
+	rm -rf "${TEST_PAYLOAD_FILE:-}" "${input_payload:-}" "${attempt_file:-}" "${unreadable_file:-}" "${empty_file:-}"
+	rm -rf "${BATS_TEST_TMPDIR:-/tmp}"/send-to-slack-tests.* ./send-to-slack-tests.*
+}
+trap cleanup EXIT
+
 setup_file() {
 	GIT_ROOT="$(git rev-parse --show-toplevel || echo "")"
 	if [[ -z "$GIT_ROOT" ]]; then
@@ -52,7 +58,7 @@ setup() {
 		}
 	]')"
 
-	TEST_PAYLOAD_FILE=$(mktemp test-payload.XXXXXX)
+	TEST_PAYLOAD_FILE=$(mktemp send-to-slack-tests.test-payload.XXXXXX)
 
 	export SEND_TO_SLACK_ROOT
 	export SLACK_BOT_USER_OAUTH_TOKEN
@@ -72,6 +78,7 @@ teardown() {
 	[[ -n "$attempt_file" ]] && rm -f "$attempt_file"
 	[[ -n "$unreadable_file" ]] && rm -f "$unreadable_file"
 	[[ -n "$empty_file" ]] && rm -f "$empty_file"
+	cleanup_paths
 	return 0
 }
 
@@ -303,7 +310,7 @@ mock_curl_permalink_failure() {
 
 @test "crosspost_notification:: skips when crosspost is empty" {
 	local input_payload
-	input_payload=$(mktemp test-crosspost.XXXXXX)
+	input_payload=$(mktemp send-to-slack-tests.test-crosspost.XXXXXX)
 	jq -n '{
 		source: { slack_bot_user_oauth_token: "test-token" },
 		params: { channel: "#test", blocks: [] }
@@ -318,7 +325,7 @@ mock_curl_permalink_failure() {
 
 @test "crosspost_notification:: skips when channels not set" {
 	local input_payload
-	input_payload=$(mktemp test-crosspost.XXXXXX)
+	input_payload=$(mktemp send-to-slack-tests.test-crosspost.XXXXXX)
 	jq -n '{
 		source: { slack_bot_user_oauth_token: "test-token" },
 		params: {
@@ -341,7 +348,7 @@ mock_curl_permalink_failure() {
 	DRY_RUN="true"
 	NOTIFICATION_PERMALINK="https://workspace.slack.com/archives/C123/p123"
 	local input_payload
-	input_payload=$(mktemp test-crosspost.XXXXXX)
+	input_payload=$(mktemp send-to-slack-tests.test-crosspost.XXXXXX)
 	jq -n '{
 		source: { slack_bot_user_oauth_token: "test-token" },
 		params: {
@@ -363,7 +370,7 @@ mock_curl_permalink_failure() {
 	DRY_RUN="true"
 	NOTIFICATION_PERMALINK="https://workspace.slack.com/archives/C123/p123"
 	local input_payload
-	input_payload=$(mktemp test-crosspost.XXXXXX)
+	input_payload=$(mktemp send-to-slack-tests.test-crosspost.XXXXXX)
 	jq -n '{
 		source: { slack_bot_user_oauth_token: "test-token" },
 		params: {
@@ -386,7 +393,7 @@ mock_curl_permalink_failure() {
 	DRY_RUN="true"
 	NOTIFICATION_PERMALINK="https://workspace.slack.com/archives/C123/p123"
 	local input_payload
-	input_payload=$(mktemp test-crosspost.XXXXXX)
+	input_payload=$(mktemp send-to-slack-tests.test-crosspost.XXXXXX)
 	jq -n '{
 		source: { slack_bot_user_oauth_token: "test-token" },
 		params: {
@@ -408,7 +415,7 @@ mock_curl_permalink_failure() {
 	DRY_RUN="true"
 	NOTIFICATION_PERMALINK="https://workspace.slack.com/archives/C123/p123"
 	local input_payload
-	input_payload=$(mktemp test-crosspost.XXXXXX)
+	input_payload=$(mktemp send-to-slack-tests.test-crosspost.XXXXXX)
 	jq -n '{
 		source: { slack_bot_user_oauth_token: "test-token" },
 		params: {
@@ -429,6 +436,24 @@ mock_curl_permalink_failure() {
 ########################################################
 # Health Check Tests
 ########################################################
+
+@test "version:: --version prints version and exits" {
+	run "$SCRIPT" --version
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "^send-to-slack, (https://github.com/"
+	echo "$output" | grep -q "^version: "
+	echo "$output" | grep -q "^commit: "
+	echo "$output" | grep -v -q "main::"
+}
+
+@test "version:: -v prints version and exits" {
+	run "$SCRIPT" -v
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "^send-to-slack, (https://github.com/"
+	echo "$output" | grep -q "^version: "
+	echo "$output" | grep -q "^commit: "
+	echo "$output" | grep -v -q "main::"
+}
 
 @test "health_check:: passes when dependencies are available" {
 	unset SLACK_BOT_USER_OAUTH_TOKEN
@@ -461,20 +486,13 @@ mock_curl_permalink_failure() {
 	echo "$output" | grep -q "health_check"
 }
 
-@test "health_check:: -h flag works" {
-	unset SLACK_BOT_USER_OAUTH_TOKEN
-	run "$SCRIPT" -h
-	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "health_check"
-}
-
 ########################################################
 # Retry Logic Tests
 ########################################################
 
 @test "retry_with_backoff:: succeeds on first attempt" {
 	local attempt_file
-	attempt_file=$(mktemp retry-attempt.XXXXXX)
+	attempt_file=$(mktemp send-to-slack-tests.retry-attempt.XXXXXX)
 	echo "0" >"$attempt_file"
 
 	test_command() {
@@ -498,7 +516,7 @@ mock_curl_permalink_failure() {
 
 @test "retry_with_backoff:: retries on failure and succeeds" {
 	local attempt_file
-	attempt_file=$(mktemp retry-attempt.XXXXXX)
+	attempt_file=$(mktemp send-to-slack-tests.retry-attempt.XXXXXX)
 	echo "0" >"$attempt_file"
 
 	test_command() {
@@ -528,7 +546,7 @@ mock_curl_permalink_failure() {
 
 @test "retry_with_backoff:: exhausts all retries on persistent failure" {
 	local attempt_file
-	attempt_file=$(mktemp retry-attempt.XXXXXX)
+	attempt_file=$(mktemp send-to-slack-tests.retry-attempt.XXXXXX)
 	echo "0" >"$attempt_file"
 
 	test_command() {
@@ -558,7 +576,7 @@ mock_curl_permalink_failure() {
 
 @test "retry_with_backoff:: respects RETRY_MAX_ATTEMPTS" {
 	local attempt_file
-	attempt_file=$(mktemp retry-attempt.XXXXXX)
+	attempt_file=$(mktemp send-to-slack-tests.retry-attempt.XXXXXX)
 	echo "0" >"$attempt_file"
 
 	test_command() {
@@ -587,7 +605,7 @@ mock_curl_permalink_failure() {
 
 @test "retry_with_backoff:: uses exponential backoff" {
 	local attempt_file
-	attempt_file=$(mktemp retry-attempt.XXXXXX)
+	attempt_file=$(mktemp send-to-slack-tests.retry-attempt.XXXXXX)
 	echo "0" >"$attempt_file"
 
 	test_command() {
@@ -619,7 +637,7 @@ mock_curl_permalink_failure() {
 
 @test "retry_with_backoff:: respects RETRY_MAX_DELAY" {
 	local attempt_file
-	attempt_file=$(mktemp retry-attempt.XXXXXX)
+	attempt_file=$(mktemp send-to-slack-tests.retry-attempt.XXXXXX)
 	echo "0" >"$attempt_file"
 
 	test_command() {
@@ -653,7 +671,7 @@ mock_curl_permalink_failure() {
 
 @test "retry_with_backoff:: uses default RETRY_MAX_ATTEMPTS when not specified" {
 	local attempt_file
-	attempt_file=$(mktemp retry-attempt.XXXXXX)
+	attempt_file=$(mktemp send-to-slack-tests.retry-attempt.XXXXXX)
 	echo "0" >"$attempt_file"
 
 	test_command() {
@@ -797,7 +815,7 @@ mock_curl_permalink_failure() {
 
 @test "main:: fails when file is empty" {
 	local empty_file
-	empty_file=$(mktemp empty.XXXXXX)
+	empty_file=$(mktemp send-to-slack-tests.empty.XXXXXX)
 	touch "$empty_file"
 
 	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
@@ -815,7 +833,7 @@ mock_curl_permalink_failure() {
 	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
 
 	local stdin_copy
-	stdin_copy=$(mktemp payload-stdin.XXXXXX)
+	stdin_copy=$(mktemp send-to-slack-tests.payload-stdin.XXXXXX)
 	trap 'rm -f "$stdin_copy"' RETURN
 	cp "$TEST_PAYLOAD_FILE" "$stdin_copy"
 

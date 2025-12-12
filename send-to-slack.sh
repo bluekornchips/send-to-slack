@@ -28,20 +28,6 @@ ERROR_CODES_TRUE_FAILURES=(
 	"invalid_blocks"
 	"invalid_attachments")
 ERROR_CODES_RETRYABLE=("rate_limited")
-ERROR_CODES_TRUE_FAILURES_PATTERN="invalid_auth|channel_not_found|not_in_channel|missing_scope|invalid_blocks|invalid_attachments"
-ERROR_CODES_RETRYABLE_PATTERN="rate_limited"
-
-error_code_in_list() {
-	local code="$1"
-	shift
-	local item
-	for item in "$@"; do
-		if [[ "$code" == "$item" ]]; then
-			return 0
-		fi
-	done
-	return 1
-}
 
 ########################################################
 # Documentation URLs
@@ -65,7 +51,7 @@ DOC_URL_SCOPES="https://api.slack.com/scopes"
 #
 # Returns:
 # - 0 on success, 1 on missing
-get_runtime_version() {
+get_version() {
 	local root_path="$1"
 	local candidates
 	local version_path
@@ -102,7 +88,7 @@ get_runtime_version() {
 #
 # Returns:
 # - 0 on success, 1 on missing
-get_runtime_commit() {
+get_commit() {
 	local root_path="$1"
 	local commit_value
 
@@ -122,34 +108,33 @@ get_runtime_commit() {
 	return 1
 }
 
-# Log runtime version/commit information
+# Print version information for CLI output
 #
 # Inputs:
 # - $1 - root_path: Base directory for repository or installation
 #
 # Outputs:
-# - Logs version and commit to stdout
+# - Writes version info to stdout
 #
 # Returns:
 # - 0 always
-log_runtime_identity() {
+print_version() {
 	local root_path="$1"
-	local runtime_version
-	local runtime_commit
+	local version
+	local commit
+	local github_url="https://github.com/bluekornchips/send-to-slack"
 
-	if [[ -z "$root_path" ]]; then
-		return 0
+	if ! version=$(get_version "$root_path"); then
+		version="unknown"
 	fi
 
-	if ! runtime_version=$(get_runtime_version "$root_path"); then
-		runtime_version="unknown"
+	if ! commit=$(get_commit "$root_path"); then
+		commit="unknown"
 	fi
 
-	if ! runtime_commit=$(get_runtime_commit "$root_path"); then
-		runtime_commit="unknown"
-	fi
-
-	echo "main:: running send-to-slack version=${runtime_version} commit=${runtime_commit}"
+	echo "send-to-slack, (${github_url})"
+	echo "version: ${version}"
+	echo "commit: ${commit}"
 
 	return 0
 }
@@ -379,32 +364,30 @@ crosspost_notification() {
 				}
 			}')
 
-		# Use a subshell to isolate temp file traps and ensure cleanup without clobbering outer traps
-		# This is a cool pattern, I think. Sub shells are sick.
-		if ! (
-			set -eo pipefail
-			temp_payload=$(mktemp /tmp/crosspost-payload.XXXXXX)
-			if ! chmod 700 "$temp_payload"; then
-				echo "crosspost_notification:: failed to secure temp payload ${temp_payload}" >&2
-				exit 1
-			fi
-			trap 'rm -f "$temp_payload"' EXIT
-			echo "$crosspost_payload" >"$temp_payload"
+		# Write payload to temp file for parsing
+		local temp_payload
+		temp_payload=$(mktemp -t send-to-slack.crosspost-payload.XXXXXX)
+		if ! chmod 700 "$temp_payload"; then
+			echo "crosspost_notification:: failed to secure temp payload ${temp_payload}" >&2
+			rm -f "$temp_payload"
+			return 1
+		fi
+		trap 'rm -f "$temp_payload"' RETURN EXIT
+		echo "$crosspost_payload" >"$temp_payload"
 
-			# Parse the payload
-			local parsed_payload
-			if ! parsed_payload=$(parse_payload "$temp_payload"); then
-				echo "crosspost_notification:: failed to parse payload for channel $channel" >&2
-				exit 1
-			fi
+		# Parse the payload
+		local parsed_payload
+		if ! parsed_payload=$(parse_payload "$temp_payload"); then
+			echo "crosspost_notification:: failed to parse payload for channel $channel" >&2
+			rm -f "$temp_payload"
+			continue
+		fi
 
-			# Send the notification
-			if ! send_notification "$parsed_payload"; then
-				echo "crosspost_notification:: failed to send notification to channel $channel" >&2
-				exit 1
-			fi
-		); then
-			echo "crosspost_notification:: processing failed for channel $channel" >&2
+		rm -f "$temp_payload"
+
+		# Send the notification
+		if ! send_notification "$parsed_payload"; then
+			echo "crosspost_notification:: failed to send notification to channel $channel" >&2
 			continue
 		fi
 	done
@@ -709,20 +692,26 @@ send_notification() {
 			error_code=$(echo "$response" | jq -r '.error // "unknown"' 2>/dev/null)
 
 			#error retryable or not
-			if error_code_in_list "$error_code" "${ERROR_CODES_RETRYABLE[@]}"; then
+			case "$error_code" in
+			"${ERROR_CODES_RETRYABLE[@]}")
 				echo "send_notification:: Rate limited, will retry" >&2
 				last_exit_code=1
-			elif error_code_in_list "$error_code" "${ERROR_CODES_TRUE_FAILURES[@]}"; then
+				;;
+			"${ERROR_CODES_TRUE_FAILURES[@]}")
+				# fail immediately
 				handle_slack_api_error "$response" "send_notification"
 				echo "send_notification:: Full request payload:" >&2
 				jq . <<<"$payload" >&2
 				return 1
-			else
+				;;
+			*)
+				#retrys okay
 				echo "send_notification:: Slack API error: $error_code, will retry" >&2
 				echo "send_notification:: Error response:" >&2
 				echo "$response" | jq . >&2 2>/dev/null || echo "$response" >&2
 				last_exit_code=1
-			fi
+				;;
+			esac
 		else
 			break
 		fi
@@ -829,7 +818,7 @@ process_input() {
 		use_stdin="true"
 	fi
 
-	input_payload=$(mktemp /tmp/resource-in.XXXXXX)
+	input_payload=$(mktemp -t send-to-slack.resource-in.XXXXXX)
 	if ! chmod 700 "$input_payload"; then
 		echo "process_input:: failed to secure temp input ${input_payload}" >&2
 		rm -f "$input_payload"
@@ -930,13 +919,15 @@ main() {
 		fi
 	fi
 
-	log_runtime_identity "${SEND_TO_SLACK_ROOT}"
-
 	# Parse command line arguments
 	main_args=()
 	while [[ $# -gt 0 ]]; do
 		case $1 in
-		--health-check | -h)
+		-v | --version)
+			print_version "${SEND_TO_SLACK_ROOT}"
+			return 0
+			;;
+		--health-check)
 			health_check_mode=true
 			shift
 			;;
@@ -946,6 +937,12 @@ main() {
 			;;
 		esac
 	done
+
+	local version
+	if ! version=$(get_version "${SEND_TO_SLACK_ROOT}"); then
+		version="unknown"
+	fi
+	echo "main:: send-to-slack ${version}"
 
 	if [[ "$health_check_mode" == "true" ]]; then
 		if ! health_check; then
@@ -992,7 +989,7 @@ main() {
 	fi
 
 	local parsed_payload_file
-	parsed_payload_file=$(mktemp /tmp/parsed-payload.XXXXXX)
+	parsed_payload_file=$(mktemp -t send-to-slack.parsed-payload.XXXXXX)
 	if ! chmod 700 "$parsed_payload_file"; then
 		echo "main:: failed to secure parsed payload file ${parsed_payload_file}" >&2
 		rm -f "${parsed_payload_file}"

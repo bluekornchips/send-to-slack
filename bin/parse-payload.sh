@@ -74,7 +74,6 @@ _validate_block_script() {
 create_block() {
 	local block_input="$1"
 	local block_type="$2"
-	BUILD_PIPELINE_INSTANCE_VARS="${BUILD_PIPELINE_INSTANCE_VARS:-}"
 
 	if [[ -z "$block_input" ]]; then
 		echo "create_block:: input is required" >&2

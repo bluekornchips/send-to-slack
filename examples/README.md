@@ -7,6 +7,7 @@ This directory contains complete configuration examples for all supported Slack 
 - [acceptance.yaml](acceptance.yaml) - Acceptance test examples
 - [actions.yaml](actions.yaml) - Interactive action blocks
 - [context.yaml](context.yaml) - Context block examples
+- [crosspost.yaml](crosspost.yaml) - Crossposting to multiple channels with permalinks
 - [divider.yaml](divider.yaml) - Divider block examples
 - [file-blocks.yaml](file-blocks.yaml) - File block variations
 - [file-upload.yaml](file-upload.yaml) - File upload examples
@@ -15,8 +16,25 @@ This directory contains complete configuration examples for all supported Slack 
 - [markdown.yaml](markdown.yaml) - Markdown block examples
 - [rich-text.yaml](rich-text.yaml) - Rich text block examples
 - [section.yaml](section.yaml) - Section block examples
+- [slack-native.yaml](slack-native.yaml) - Using Slack's native `type` format end to end
 - [table.yaml](table.yaml) - Table block examples
 - [video.yaml](video.yaml) - Video block examples
+
+## Formats
+
+The tool accepts both the keyed format (`{ "section": { ... } }`) and Slack's native `type` format (`{ "type": "section", ... }`). Most examples use the keyed format for readability; `slack-native.yaml` shows the native format across all block types.
+
+## Running the Examples
+
+These files are Concourse pipelines that use the `sunflowersoftware/send-to-slack` resource type. Provide your Slack token and channel when setting a pipeline, for example:
+
+```bash
+fly -t <target> set-pipeline \
+  -p send-to-slack-demo \
+  -c examples/acceptance.yaml \
+  -v SLACK_BOT_USER_OAUTH_TOKEN=<token> \
+  -v channel=<channel>
+```
 
 ## Supported Block Types
 

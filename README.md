@@ -67,10 +67,11 @@ When running directly from the repository, the script will automatically detect 
 
 ## Quick Start
 
-After installation, send a message to Slack by piping a JSON payload to the command:
+Send a Slack message by piping JSON to the tool:
 
 ```bash
-echo '{
+cat <<'EOF' | send-to-slack
+{
   "source": {
     "slack_bot_user_oauth_token": "xoxb-your-token"
   },
@@ -86,9 +87,15 @@ echo '{
       }
     ]
   }
-}' | send-to-slack
-# or
-echo '{
+}
+EOF
+```
+
+The tool also accepts the keyed format:
+
+```bash
+cat <<'EOF' | send-to-slack
+{
   "source": {
     "slack_bot_user_oauth_token": "xoxb-your-token"
   },
@@ -106,29 +113,37 @@ echo '{
       }
     ]
   }
-}' | send-to-slack
+}
+EOF
 ```
 
-Blocks can also be provided in a payload file:
+Blocks can also be provided from a file:
 
 ```bash
 send-to-slack --file payload.json
 ```
 
-If running from the repository without installation, use `./send-to-slack.sh` instead.
+When running directly from the repository, use `./send-to-slack.sh` instead of `send-to-slack`.
+
+## CLI Usage
+
+- Reads JSON from stdin when no file is provided.
+- Use `-f`, `-file`, or `--file` to point at a payload file.
+- Use `-v` or `--version` to display version information and exit.
+- Use `--health-check` to validate required dependencies without sending a message.
+- Emits Concourse-style JSON (`version`, `metadata`) to stdout unless `SEND_TO_SLACK_OUTPUT` is set.
 
 ## Features
 
-- Slack Block Kit support for rich message formatting
-- File upload capabilities with automatic block type detection
-- Legacy attachment support for colored blocks and tables
-- Multiple input methods: JSON payload, raw JSON string, or file-based configuration
-- Comprehensive error handling and validation
-- Dry-run mode for testing configurations
-- Thread reply support for organizing conversations
-- Thread creation for multi-block messages
-- Interactive button components with Python server integration
-- Concourse CI resource type support
+- Slack Block Kit with either native `type` blocks or keyed format
+- File upload support with automatic image or rich-text block creation
+- Crossposting with permalinks and optional custom text
+- Thread replies and thread creation for multi-block messages
+- Input flexibility: stdin, `-f|--file`, `params.raw`, or `params.from_file`
+- Dry-run mode, dependency health check, and rich validation output
+- Legacy attachments for colored blocks and tables where Slack allows
+- Interactive button components with the optional Python server
+- Concourse CI resource type support for pipeline notifications
 
 ## Requirements
 
@@ -159,12 +174,7 @@ See [Slack API Scopes](https://api.slack.com/scopes) for complete documentation.
 
 ## Usage
 
-The program reads JSON payload from `stdin` and sends messages to Slack. The payload structure consists of:
-
-- `source` - Configuration object containing authentication credentials
-- `params` - Parameters object containing message configuration
-
-Blocks can be provided in Slack's native format (each block includes its `type` field) or in the tool's wrapped format that keys blocks by their type (e.g., `{"section": {...}}`). Both formats are accepted across the CLI and examples.
+`send-to-slack` expects a JSON payload. Provide it on stdin or with `-f|--file`. You can also embed the payload through `params.raw` (stringified JSON) or `params.from_file` (path to a JSON file). When the `source` object is missing, the tool falls back to the environment variables `SLACK_BOT_USER_OAUTH_TOKEN`, `CHANNEL`, and `DRY_RUN`.
 
 ### Payload Structure
 
@@ -175,28 +185,70 @@ Blocks can be provided in Slack's native format (each block includes its `type` 
   },
   "params": {
     "channel": "channel-name-or-id",
-    "blocks": [...],
+    "blocks": [],
     "text": "optional fallback text",
-    "dry_run": false
+    "dry_run": false,
+    "thread_ts": "1763161862.880069",
+    "create_thread": false,
+    "crosspost": {
+      "channels": ["#channel1", "#channel2"],
+      "text": "See the original message"
+    },
+    "raw": "{\"source\": {...}, \"params\": {...}}",
+    "from_file": "./payload.json"
   }
 }
 ```
 
 ### Required Parameters
 
-- `source.slack_bot_user_oauth_token` - Slack bot OAuth token
-- `params.channel` - Slack channel name or ID
+- `source.slack_bot_user_oauth_token` or `SLACK_BOT_USER_OAUTH_TOKEN`
+- `params.channel` or `CHANNEL`
+- `params.blocks`
 
 ### Optional Parameters
 
-- `params.blocks` - Array of block configurations (see [examples/](examples/) for block types)
 - `params.text` - Fallback text for notifications (max 40,000 characters)
 - `params.dry_run` - Set to `true` to validate without sending (default: `false`)
-- `params.thread_ts` - Thread timestamp for replying to existing threads (see [Threading](#threading) section)
-- `params.create_thread` - Set to `true` to create a new thread (see [Threading](#threading) section)
-- `params.crosspost` - Crosspost configuration object (see [Crossposting](#crossposting) section)
+- `params.thread_ts` - Thread timestamp or Slack message permalink (see Threading)
+- `params.create_thread` - Set to `true` to create a new thread (see Threading)
+- `params.crosspost` - Crosspost configuration (see Crossposting)
+- `params.raw` - JSON string that replaces the `params` object
+- `params.from_file` - Path to JSON that replaces the `params` object
+- `params.blocks` - Array of block configurations
+
+### Block Formats
+
+Blocks can be provided in either format:
+
+- Native Slack format:
+
+```json
+{ "type": "section", "text": { "type": "plain_text", "text": "Hello" } }
+```
+
+- Keyed format:
+
+```json
+{
+  "section": {
+    "type": "text",
+    "text": { "type": "plain_text", "text": "Hello" }
+  }
+}
+```
+
+Named colors on a block (`danger`, `success`, `warning`) or a `table` block are wrapped in legacy attachments automatically.
+
+### Message Limits
+
+- Maximum 50 blocks per message (including blocks inside attachments)
+- Maximum 20 attachments per message
+- Maximum 40,000 characters for `text` fields
 
 ## Threading
+
+`create_thread` and `thread_ts` are mutually exclusive. `thread_ts` can be supplied as either a Slack timestamp or a permalink; the tool converts permalinks automatically. When `create_thread` is `true` and multiple blocks are present, the first block is sent as the parent message and the remaining blocks are sent as the thread reply.
 
 ### Replying to Existing Threads
 
@@ -249,8 +301,8 @@ Add a `crosspost` object to your `params` section:
 
 ### Crosspost Parameters
 
-- `crosspost.channels` (required) - Array of channel names or IDs to crosspost to
-- `crosspost.text` (required) - Text to include in the crosspost message
+- `crosspost.channels` (required) - Channel name or ID; accepts a string or array
+- `crosspost.text` (optional) - Text to include in the crosspost message, defaults to `This is an automated crosspost.`
 
 ### How It Works
 
@@ -260,6 +312,15 @@ Add a `crosspost` object to your `params` section:
    - A rich-text block containing `crosspost.text` followed by the permalink
    - The message is sent to the specified channel
 4. If a crosspost fails for a specific channel, the error is logged but processing continues for remaining channels
+
+## File Uploads
+
+Use the `file` block type to upload files through Slack's `files.getUploadURLExternal` flow.
+
+- Required: `path` to the file and a resolvable `channel` (from `params.channel` or `CHANNEL`)
+- Optional: `title` (defaults to filename) and `interpolate_file_contents_to_var` to export file contents to an environment variable
+- Files up to 1 GB are supported
+- Image files (png, jpg, jpeg, gif) create image blocks; other files create rich-text blocks that link to the uploaded file
 
 ## Supported Block Types
 
@@ -295,12 +356,10 @@ The Builder allows you to:
 
 1. Design in Block Kit Builder: Open the [Block Kit Builder](https://app.slack.com/block-kit-builder) and design your message layout visually
 2. Export JSON: Copy the generated JSON from the Builder
-3. Convert to Tool Format: Transform the Builder's format to match this tool's payload structure:
-   - Builder exports blocks directly in a `blocks` array
-   - This tool expects blocks wrapped in `params.blocks` with block type keys (e.g., `{"section": {...}}`)
-4. Use in Tool: Include the converted blocks in your payload
+3. Choose a format: You can paste the native `type` objects directly or wrap them in the keyed format (e.g., `{"section": {...}}`) inside `params.blocks`
+4. Use in Tool: Include the blocks in your payload and run `send-to-slack`
 
-The Block Kit Builder exports blocks in Slack's native format. When used with our `send-to-slack` tool, you'll need to wrap blocks in the tool's expected format (see [README.md](../README.md#block-kit-builder) for conversion details).
+The Block Kit Builder exports blocks in Slack's native format, which the tool accepts directly.
 
 ## Development
 

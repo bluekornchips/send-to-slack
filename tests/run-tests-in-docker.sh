@@ -107,22 +107,40 @@ build_image() {
 
 # Run tests in the Docker container
 #
+# Creates an isolated copy of the workspace to prevent git operations
+# inside the container from affecting the actual repository.
+#
 # Returns:
 # - 0 on success
 # - 1 on failure
 run_tests() {
 	local workspace_dir
+	local temp_workspace
 	local docker_cmd
 	local docker_flags
+	local exit_code
 
 	if [[ -z "$DOCKER_IMAGE_NAME" ]] || [[ -z "$DOCKER_IMAGE_TAG" ]]; then
 		echo "run_tests:: DOCKER_IMAGE_NAME and DOCKER_IMAGE_TAG are required" >&2
 		return 1
 	fi
 
-	workspace_dir="${GIT_ROOT}"
-	docker_cmd="cd /workspace && ${MAKE_COMMAND}"
+	# Create isolated workspace copy to prevent container git ops from affecting host repo
+	temp_workspace="$(mktemp -d)"
+	trap 'rm -rf "$temp_workspace"' EXIT
 
+	echo "Creating isolated workspace copy at ${temp_workspace}"
+	# Copy workspace excluding .git directory to isolate from host repository
+	rsync -a --exclude='.git' "${GIT_ROOT}/" "${temp_workspace}/"
+
+	workspace_dir="${temp_workspace}"
+	docker_cmd="$(
+		cat <<EOF
+cd /workspace && git init -q && git config user.email 'test@test.com' && git config user.name 'Test' && git add -A && git commit -q -m 'test' && ${MAKE_COMMAND}
+EOF
+	)"
+
+	echo "docker_cmd: $docker_cmd"
 	docker_flags=(
 		--rm
 		-i

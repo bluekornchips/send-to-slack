@@ -25,6 +25,8 @@ tests/
 *-payload.json
 test-payload.*
 resource-out.json
+parse-payload-tests.test-payload.*
+acceptance-tests.test-upload*
 
 # Build and development tools
 Makefile

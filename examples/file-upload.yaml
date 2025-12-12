@@ -74,7 +74,7 @@ jobs:
 
       - put: slack-notification
         params:
-          channel: ((slack_data_channel))
+          channel: ((channel))
           blocks:
             - file:
                 path: output/data1.csv
@@ -86,7 +86,7 @@ jobs:
                 path: output/summary.txt
                 title: "Summary"
 
-  # Upload file without channel
+  # Upload file without message text
   - name: upload-private-file
     public: true
     plan:
@@ -111,6 +111,7 @@ jobs:
 
       - put: slack-notification
         params:
+          channel: ((channel))
           blocks:
             - file:
                 path: output/archive.tar.gz
@@ -141,7 +142,7 @@ jobs:
 
       - put: slack-notification
         params:
-          channel: ((slack_notifications_channel))
+          channel: ((channel))
           text: |
             Build completed successfully
 

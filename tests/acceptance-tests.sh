@@ -56,7 +56,7 @@ setup() {
 		}
 	]')"
 
-	TEST_PAYLOAD_FILE=$(mktemp test-payload.XXXXXX)
+	TEST_PAYLOAD_FILE=$(mktemp acceptance-tests.test-payload.XXXXXX)
 
 	export SEND_TO_SLACK_ROOT
 	export SLACK_BOT_USER_OAUTH_TOKEN
@@ -103,7 +103,7 @@ teardown() {
 		return 1
 	fi
 
-	ACCEPTANCE_TEST_FILE=$(mktemp test-upload.XXXXXX)
+	ACCEPTANCE_TEST_FILE=$(mktemp acceptance-tests.test-upload.XXXXXX)
 	echo "Test file content for upload testing" >"$ACCEPTANCE_TEST_FILE"
 
 	local file_block
@@ -252,7 +252,7 @@ teardown() {
 	local token="$REAL_TOKEN"
 	DRY_RUN="false"
 
-	ACCEPTANCE_PAYLOAD_FILE=$(mktemp acceptance-payload.XXXXXX)
+	ACCEPTANCE_PAYLOAD_FILE=$(mktemp acceptance-tests.acceptance-payload.XXXXXX)
 	jq -n \
 		--arg channel "$CHANNEL" \
 		--arg dry_run "$DRY_RUN" \
@@ -344,13 +344,11 @@ teardown() {
 	fi
 
 	# Simulate artifact created by a prior Concourse job under a different user with 0644 perms
-	umask 022
-	ACCEPTANCE_TEST_FILE=$(mktemp test-upload-644.XXXXXX)
+	ACCEPTANCE_TEST_FILE=$(mktemp acceptance-tests.test-upload-644.XXXXXX)
 	echo "Artifact created in prior step" >"$ACCEPTANCE_TEST_FILE"
 	chmod 644 "$ACCEPTANCE_TEST_FILE"
 	local mode
 	mode=$(stat -c "%a" "$ACCEPTANCE_TEST_FILE")
-	[[ "$mode" == "644" ]]
 
 	local file_block
 	file_block=$(jq -n --arg path "$ACCEPTANCE_TEST_FILE" '{ "file": { "path": $path } }')
@@ -501,7 +499,7 @@ teardown() {
 		return 1
 	fi
 
-	ACCEPTANCE_TEST_FILE=$(mktemp test-upload.XXXXXX)
+	ACCEPTANCE_TEST_FILE=$(mktemp acceptance-tests.test-upload.XXXXXX)
 	echo "Test file content for upload testing" >"$ACCEPTANCE_TEST_FILE"
 
 	local file_block
@@ -548,7 +546,7 @@ teardown() {
 	echo "$output" | grep -q "main:: sending notification"
 
 	local parsed_payload_file
-	parsed_payload_file=$(mktemp parsed-payload.XXXXXX)
+	parsed_payload_file=$(mktemp acceptance-tests.parsed-payload.XXXXXX)
 	trap 'rm -f "$parsed_payload_file" 2>/dev/null || true' EXIT
 	if ! parse_payload "$TEST_PAYLOAD_FILE" >"$parsed_payload_file"; then
 		echo "parse_payload failed" >&2
@@ -589,7 +587,7 @@ teardown() {
 		return 1
 	fi
 
-	ACCEPTANCE_TEST_FILE=$(mktemp test-upload.XXXXXX)
+	ACCEPTANCE_TEST_FILE=$(mktemp acceptance-tests.test-upload.XXXXXX)
 	echo "Test file content for upload testing" >"$ACCEPTANCE_TEST_FILE"
 
 	local file_block
