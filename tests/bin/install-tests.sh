@@ -149,7 +149,9 @@ run_installer() {
 	run_installer --help
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "usage:"
-	echo "$output" | grep -q "Install send-to-slack from GitHub tarball to /usr/local"
+	echo "$output" | grep -q "Install send-to-slack from GitHub tarball"
+	echo "$output" | grep -q "Installs to ~/.local when run without sudo"
+	echo "$output" | grep -q "Installs to /usr/local when run with sudo"
 	echo "$output" | grep -Fq -- "-h, --help"
 }
 

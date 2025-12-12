@@ -12,11 +12,21 @@ Measure twice, send once.
 
 ### Quick Install
 
-Install to `/usr/local`:
+Install to `~/.local` (default, no sudo required):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/bin/install.sh | bash
 ```
+
+Installs to `~/.local/bin/send-to-slack` and supporting files to `~/.local/lib/send-to-slack/`.
+
+**System installation (requires sudo):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/bin/install.sh | sudo bash
+```
+
+Installs to `/usr/local/bin/send-to-slack` and supporting files to `/usr/local/lib/send-to-slack/`.
 
 ### From Source
 
@@ -36,19 +46,25 @@ echo 'alias send-to-slack="path/to/send-to-slack/bin/send-to-slack.sh"' >> ~/.ba
 
 ### Uninstallation
 
-Use the uninstall script to remove all installed files:
+Use the uninstall script to remove all installed files. For user-local installations:
 
 ```bash
-sudo ./uninstall.sh /usr/local
+./bin/uninstall.sh ~/.local
 ```
 
-Or use `--force` flag:
+For system installations:
 
 ```bash
-sudo ./uninstall.sh --force /usr/local
+sudo ./bin/uninstall.sh /usr/local
 ```
 
-The uninstall script uses the installation manifest at `$prefix/share/send-to-slack/install_manifest.txt` to remove all files that were installed.
+Or use `--force` flag for protected prefixes:
+
+```bash
+sudo ./bin/uninstall.sh --force /usr/local
+```
+
+The uninstall script uses the installation manifest at `$prefix/lib/send-to-slack/install_manifest.txt` to remove all files that were installed.
 
 ## Container Image
 

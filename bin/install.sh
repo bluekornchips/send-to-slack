@@ -31,7 +31,6 @@ if [[ -n "${POSIXLY_CORRECT+1}" ]]; then
 fi
 
 VERSION_FILE_NAME="VERSION"
-DEFAULT_INSTALL_PATH="/usr/local"
 DEFAULT_REPO_URL="https://github.com/bluekornchips/send-to-slack"
 DEFAULT_REPO_BRANCH="main"
 CLEANUP_ROOT=""
@@ -63,7 +62,9 @@ usage() {
 	cat <<EOF >&2
 usage: $0 [OPTIONS]
 
-Install send-to-slack from GitHub tarball to /usr/local.
+Install send-to-slack from GitHub tarball.
+- Installs to ~/.local when run without sudo (default)
+- Installs to /usr/local when run with sudo
 
 OPTIONS:
   -h, --help         Show this help message
@@ -72,8 +73,11 @@ ENVIRONMENT VARIABLES:
   SEND_TO_SLACK_REPO_URL    Override repository URL (default: ${DEFAULT_REPO_URL})
 
 EXAMPLES:
-  # Install latest from main branch
+  # Install to ~/.local (no sudo required)
   curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/bin/install.sh | bash
+
+  # Install to /usr/local (requires sudo)
+  curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/bin/install.sh | sudo bash
 EOF
 }
 
@@ -110,6 +114,33 @@ require_commands() {
 	done
 
 	return 0
+}
+
+# Check if running as root
+#
+# Returns:
+# - 0 if running as root
+# - 1 if not running as root
+is_root() {
+	if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+		return 0
+	fi
+	return 1
+}
+
+# Determine installation prefix based on whether running as root
+#
+# Outputs:
+# - Writes installation prefix to stdout
+#
+# Returns:
+# - 0 always
+determine_install_prefix() {
+	if is_root; then
+		echo "/usr/local"
+	else
+		echo "${HOME}/.local"
+	fi
 }
 
 # Download URL with retry and timeout
@@ -378,6 +409,7 @@ parse_args() {
 # - 1 on failure
 main() {
 	local parse_result
+	local install_prefix
 
 	parse_result=0
 	parse_args "$@" || parse_result=$?
@@ -391,12 +423,15 @@ main() {
 		abort "Invalid arguments. See usage above."
 	fi
 
-	if ! install_latest_main "$DEFAULT_INSTALL_PATH"; then
+	# Determine install prefix based on whether running as root
+	install_prefix=$(determine_install_prefix)
+
+	if ! install_latest_main "$install_prefix"; then
 		abort "Installation failed. See error messages above for details."
 	fi
 
-	echo "Installed send-to-slack to ${DEFAULT_INSTALL_PATH}/bin/send-to-slack"
-	echo "Supporting files installed to ${DEFAULT_INSTALL_PATH}/lib/send-to-slack/"
+	echo "Installed send-to-slack to ${install_prefix}/bin/send-to-slack"
+	echo "Supporting files installed to ${install_prefix}/lib/send-to-slack/"
 	echo "Resolved reference: ${RESOLVED_REF}"
 
 	return 0
