@@ -12,7 +12,7 @@ setup_file() {
 		exit 1
 	fi
 
-	SCRIPT="$GIT_ROOT/bin/blocks/header.sh"
+	SCRIPT="$GIT_ROOT/lib/blocks/header.sh"
 	EXAMPLES_FILE="$GIT_ROOT/examples/header.yaml"
 
 	if [[ ! -f "$SCRIPT" ]]; then
@@ -30,7 +30,7 @@ setup_file() {
 		export REAL_TOKEN
 	fi
 
-	SEND_TO_SLACK_SCRIPT="$GIT_ROOT/send-to-slack.sh"
+	SEND_TO_SLACK_SCRIPT="$GIT_ROOT/bin/send-to-slack.sh"
 
 	export GIT_ROOT
 	export SCRIPT

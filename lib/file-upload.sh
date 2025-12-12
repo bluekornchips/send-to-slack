@@ -543,7 +543,7 @@ file_upload() {
 	fi
 
 	local upload_payload_file
-	upload_payload_file=$(mktemp -t file-upload.sh.payload.XXXXXX)
+	upload_payload_file=$(mktemp /tmp/file-upload.sh.payload.XXXXXX)
 	if ! chmod 700 "$upload_payload_file"; then
 		echo "file_upload:: failed to secure upload payload file ${upload_payload_file}" >&2
 		rm -f "$upload_payload_file"

@@ -23,7 +23,7 @@ setup_file() {
 
 	export CHANNEL
 
-	SEND_TO_SLACK_SCRIPT="$GIT_ROOT/send-to-slack.sh"
+	SEND_TO_SLACK_SCRIPT="$GIT_ROOT/bin/send-to-slack.sh"
 
 	if [[ -n "$SLACK_BOT_USER_OAUTH_TOKEN" ]]; then
 		REAL_TOKEN="$SLACK_BOT_USER_OAUTH_TOKEN"
@@ -39,7 +39,7 @@ setup() {
 	SEND_TO_SLACK_ROOT="$GIT_ROOT"
 	export SEND_TO_SLACK_ROOT
 
-	source "$GIT_ROOT/bin/parse-payload.sh"
+	source "$GIT_ROOT/lib/parse-payload.sh"
 	source "$SEND_TO_SLACK_SCRIPT"
 }
 

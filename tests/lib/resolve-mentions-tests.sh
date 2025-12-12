@@ -4,7 +4,7 @@
 # Tests user, channel, group, and DM resolution with real Slack API calls
 #
 GIT_ROOT="$(git rev-parse --show-toplevel || echo "")"
-RESOLVE_SCRIPT="$GIT_ROOT/bin/resolve-mentions.sh"
+RESOLVE_SCRIPT="$GIT_ROOT/lib/resolve-mentions.sh"
 
 [[ ! -f "$RESOLVE_SCRIPT" ]] && echo "Script not found: $RESOLVE_SCRIPT" >&2 && return 1
 

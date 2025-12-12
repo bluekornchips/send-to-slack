@@ -6,13 +6,12 @@ SYSTEM_PREFIX := /usr/local
 test:
 	clear && bats --timing --verbose-run \
 		./concourse/resource-type/tests/*tests.sh \
-		./tests/docker-tests.sh \
-		./tests/file-upload-tests.sh \
-		./tests/install-tests.sh \
-		./tests/parse-payload-tests.sh \
-		./tests/resolve-mentions-tests.sh \
-		./tests/send-to-slack-tests.sh \
-		./tests/blocks/*tests.sh
+		./tests/lib/file-upload-tests.sh \
+		./tests/bin/install-tests.sh \
+		./tests/lib/parse-payload-tests.sh \
+		./tests/lib/resolve-mentions-tests.sh \
+		./tests/bin/send-to-slack-tests.sh \
+		./tests/lib/blocks/*tests.sh
 
 test-smoke:
 	clear && SMOKE_TEST=true bats --timing --verbose-run \
@@ -26,18 +25,12 @@ test-all:
 	clear && SMOKE_TEST=true ACCEPTANCE_TEST=true \
 		bats --timing --verbose-run \
 		./concourse/resource-type/tests/*tests.sh \
-		./tests/*-tests.sh \
-		./tests/blocks/*tests.sh
+		./tests/lib/*-tests.sh \
+		./tests/bin/*-tests.sh \
+		./tests/lib/blocks/*tests.sh
 
 test-in-docker:
 	clear && DOCKER_IMAGE_TAG=local MAKE_COMMAND="make test" ./tests/run-tests-in-docker.sh
-
-# installation
-install:
-	@sudo ./install.sh $(SYSTEM_PREFIX)
-
-uninstall:
-	@sudo ./uninstall.sh $(SYSTEM_PREFIX)
 
 # concourse
 check-docker-deps:

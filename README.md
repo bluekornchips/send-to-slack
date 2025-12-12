@@ -12,18 +12,26 @@ Measure twice, send once.
 
 ### Quick Install
 
-Install to `~/.local`:
+Install to `/usr/local`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/bin/install.sh | bash
 ```
 
 ### From Source
 
+For development or testing without installation, you can use the script directly from the repository:
+
 ```bash
 git clone https://github.com/bluekornchips/send-to-slack.git
 cd send-to-slack
-./install.sh
+alias send-to-slack="$(pwd)/bin/send-to-slack.sh"
+```
+
+Or add the alias to your shell rc file:
+
+```bash
+echo 'alias send-to-slack="path/to/send-to-slack/bin/send-to-slack.sh"' >> ~/.bashrc
 ```
 
 ### Uninstallation
@@ -31,13 +39,13 @@ cd send-to-slack
 Use the uninstall script to remove all installed files:
 
 ```bash
-./uninstall.sh ~/.local
+sudo ./uninstall.sh /usr/local
 ```
 
-For protected prefixes (like `/usr/local`), use `--force`:
+Or use `--force` flag:
 
 ```bash
-./uninstall.sh --force /usr/local
+sudo ./uninstall.sh --force /usr/local
 ```
 
 The uninstall script uses the installation manifest at `$prefix/share/send-to-slack/install_manifest.txt` to remove all files that were installed.
@@ -55,7 +63,7 @@ docker pull sunflowersoftware/send-to-slack
 For development or testing without installation, you can use the script directly:
 
 ```bash
-./send-to-slack.sh
+./bin/send-to-slack.sh
 ```
 
 When running directly from the repository, the script will automatically detect its location and find source files.
@@ -118,7 +126,7 @@ Blocks can also be provided from a file:
 send-to-slack --file payload.json
 ```
 
-When running directly from the repository, use `./send-to-slack.sh` instead of `send-to-slack`.
+When running directly from the repository, use `./bin/send-to-slack.sh` instead of `send-to-slack`.
 
 ## CLI Usage
 
@@ -145,6 +153,47 @@ The following environment variables control tool behavior:
 - `SHOW_PAYLOAD` - Set to `false` to exclude payload from metadata (default: `true`)
 - `SKIP_SLACK_API_CHECK` - Set to `true` to skip API connectivity check in health check mode
 
+## Debug Mode
+
+Enable debug mode by setting `params.debug: true` in your payload. When enabled, debug mode provides enhanced visibility for troubleshooting:
+
+### Features
+
+- Sanitized Payload Logging: Logs the input payload to stderr with sensitive authentication tokens redacted as `[REDACTED]`. This allows you to inspect the payload structure without exposing credentials.
+- Automatic Metadata Override: Forces `SHOW_METADATA` and `SHOW_PAYLOAD` to `true`, ensuring full metadata output regardless of environment variable settings.
+
+### Usage
+
+```json
+{
+  "source": {
+    "slack_bot_user_oauth_token": "xoxb-your-token"
+  },
+  "params": {
+    "channel": "notifications",
+    "debug": true,
+    "blocks": [...]
+  }
+}
+```
+
+When debug mode is enabled, you'll see output like:
+
+```
+parse_payload:: input payload (sanitized):
+{
+  "source": {
+    "slack_bot_user_oauth_token": "[REDACTED]"
+  },
+  "params": {
+    "channel": "notifications",
+    "blocks": [...]
+  }
+}
+```
+
+Debug mode redacts authentication tokens but still logs the payload structure.
+
 ## Features
 
 - Slack Block Kit with either native `type` blocks or keyed format
@@ -153,6 +202,7 @@ The following environment variables control tool behavior:
 - Thread replies and thread creation for multi-block messages
 - Input flexibility: stdin, `-f|--file`, `params.raw`, or `params.from_file`
 - Dry-run mode, dependency health check, and rich validation output
+- Debug mode with sanitized payload logging for troubleshooting
 - Legacy attachments for colored blocks and tables where Slack allows
 - Interactive button components with the optional Python server
 - Concourse CI resource type support for pipeline notifications
@@ -161,7 +211,7 @@ The following environment variables control tool behavior:
 
 ### Runtime Dependencies
 
-- <strong>Bash 4.0</strong> or later
+- <strong>Bash 3.1</strong> or later (scripts include version checks and will fail fast with clear error messages)
 - `jq` - [jqlang](https://github.com/jqlang/jq) for JSON processing
 - `curl` - [curl](https://curl.se/) for HTTP requests
 - `gettext` - [GNU gettext](https://www.gnu.org/software/gettext/) for msgfmt tooling
@@ -200,6 +250,7 @@ See [Slack API Scopes](https://api.slack.com/scopes) for complete documentation.
     "blocks": [],
     "text": "optional fallback text",
     "dry_run": false,
+    "debug": false,
     "thread_ts": "1763161862.880069",
     "create_thread": false,
     "crosspost": {
@@ -220,6 +271,9 @@ See [Slack API Scopes](https://api.slack.com/scopes) for complete documentation.
 
 ### Optional Parameters
 
+- `params.debug` - Set to `true` to enable debug mode (default: `false`). When enabled:
+  - Logs sanitized input payload (with auth tokens redacted) to stderr for debugging
+  - Overrides `SHOW_METADATA` and `SHOW_PAYLOAD` to `true` regardless of environment variable settings
 - `params.text` - Fallback text for notifications (max 40,000 characters)
 - `params.dry_run` - Set to `true` to validate without sending (default: `false`)
 - `params.thread_ts` - Thread timestamp or Slack message permalink (see Threading)
@@ -382,13 +436,6 @@ make test            # Run all tests
 make test-all        # Run all tests (with smoke and acceptance flags)
 make test-smoke      # Run smoke tests only
 make test-acceptance # Run acceptance tests only
-```
-
-### Code Quality
-
-```bash
-make format  # Format shell scripts
-make lint    # Lint shell scripts
 ```
 
 ### Local Concourse Development

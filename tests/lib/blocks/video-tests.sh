@@ -10,7 +10,7 @@ setup_file() {
 		exit 1
 	fi
 
-	SCRIPT="$GIT_ROOT/bin/blocks/video.sh"
+	SCRIPT="$GIT_ROOT/lib/blocks/video.sh"
 	EXAMPLES_FILE="$GIT_ROOT/examples/video.yaml"
 
 	if [[ ! -f "$SCRIPT" ]]; then

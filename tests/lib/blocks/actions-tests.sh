@@ -10,9 +10,9 @@ setup_file() {
 		exit 1
 	fi
 
-	SCRIPT="$GIT_ROOT/bin/blocks/actions.sh"
+	SCRIPT="$GIT_ROOT/lib/blocks/actions.sh"
 	EXAMPLES_FILE="$GIT_ROOT/examples/actions.yaml"
-	SEND_TO_SLACK_SCRIPT="$GIT_ROOT/send-to-slack.sh"
+	SEND_TO_SLACK_SCRIPT="$GIT_ROOT/bin/send-to-slack.sh"
 
 	if [[ ! -f "$SCRIPT" ]]; then
 		echo "Script not found: $SCRIPT" >&2

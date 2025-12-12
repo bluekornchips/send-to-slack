@@ -10,7 +10,7 @@ setup_file() {
 		exit 1
 	fi
 
-	SCRIPT="$GIT_ROOT/bin/blocks/divider.sh"
+	SCRIPT="$GIT_ROOT/lib/blocks/divider.sh"
 	EXAMPLES_FILE="$GIT_ROOT/examples/divider.yaml"
 
 	if [[ ! -f "$SCRIPT" ]]; then

@@ -10,7 +10,7 @@ setup_file() {
 		exit 1
 	fi
 
-	SCRIPT="$GIT_ROOT/bin/blocks/section.sh"
+	SCRIPT="$GIT_ROOT/lib/blocks/section.sh"
 	EXAMPLES_FILE="$GIT_ROOT/examples/section.yaml"
 
 	if [[ ! -f "$SCRIPT" ]]; then
