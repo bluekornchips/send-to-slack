@@ -10,8 +10,8 @@ setup_file() {
 		exit 1
 	fi
 
-	SCRIPT="$GIT_ROOT/bin/file-upload.sh"
-	SEND_TO_SLACK_SCRIPT="$GIT_ROOT/send-to-slack.sh"
+	SCRIPT="$GIT_ROOT/lib/file-upload.sh"
+	SEND_TO_SLACK_SCRIPT="$GIT_ROOT/bin/send-to-slack.sh"
 
 	if [[ ! -f "$SCRIPT" ]]; then
 		echo "Script not found: $SCRIPT" >&2

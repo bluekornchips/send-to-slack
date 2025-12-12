@@ -10,7 +10,7 @@ setup_file() {
 		exit 1
 	fi
 
-	SCRIPT="$GIT_ROOT/bin/blocks/image.sh"
+	SCRIPT="$GIT_ROOT/lib/blocks/image.sh"
 	EXAMPLES_FILE="$GIT_ROOT/examples/image.yaml"
 
 	if [[ ! -f "$SCRIPT" ]]; then

@@ -16,7 +16,7 @@ setup_file() {
 		exit 1
 	fi
 
-	SCRIPT="$GIT_ROOT/send-to-slack.sh"
+	SCRIPT="$GIT_ROOT/bin/send-to-slack.sh"
 	if [[ ! -f "$SCRIPT" ]]; then
 		echo "Script not found: $SCRIPT" >&2
 		exit 1
@@ -40,7 +40,7 @@ setup() {
 	SEND_TO_SLACK_ROOT="$GIT_ROOT"
 
 	# Source parse-payload.sh for parse_payload function
-	source "$SEND_TO_SLACK_ROOT/bin/parse-payload.sh"
+	source "$SEND_TO_SLACK_ROOT/lib/parse-payload.sh"
 
 	SLACK_BOT_USER_OAUTH_TOKEN="test-token"
 	CHANNEL="#test"
@@ -78,7 +78,6 @@ teardown() {
 	[[ -n "$attempt_file" ]] && rm -f "$attempt_file"
 	[[ -n "$unreadable_file" ]] && rm -f "$unreadable_file"
 	[[ -n "$empty_file" ]] && rm -f "$empty_file"
-	cleanup_paths
 	return 0
 }
 
@@ -170,6 +169,125 @@ mock_curl_network_error() {
 
 	create_metadata "$payload"
 	[[ "$METADATA" == "[]" ]]
+}
+
+########################################################
+# Debug mode override tests
+########################################################
+
+@test "main:: params.debug=true overrides SHOW_METADATA to true" {
+	SHOW_METADATA="false"
+	SHOW_PAYLOAD="false"
+	export SHOW_METADATA
+	export SHOW_PAYLOAD
+	local test_payload
+	test_payload=$(jq -n '{
+		source: {
+			slack_bot_user_oauth_token: "xoxb-test-token"
+		},
+		params: {
+			channel: "test-channel",
+			dry_run: true,
+			debug: true,
+			blocks: [{
+				section: {
+					type: "text",
+					text: { type: "plain_text", text: "Test" }
+				}
+			}]
+		}
+	}')
+
+	local input_file
+	input_file=$(mktemp send-to-slack-tests.input.XXXXXX)
+	echo "$test_payload" >"$input_file"
+
+	# Run main function (it will check debug and override)
+	run main --file "$input_file"
+	[[ "$status" -eq 0 ]]
+
+	# Verify SHOW_METADATA was overridden to true
+	echo "$output" | grep -q '"name": "show_metadata"'
+	echo "$output" | grep -q '"value": "true"'
+
+	rm -f "$input_file"
+}
+
+@test "main:: params.debug=true overrides SHOW_PAYLOAD to true" {
+	SHOW_METADATA="true"
+	SHOW_PAYLOAD="false"
+	export SHOW_METADATA
+	export SHOW_PAYLOAD
+	local test_payload
+	test_payload=$(jq -n '{
+		source: {
+			slack_bot_user_oauth_token: "xoxb-test-token"
+		},
+		params: {
+			channel: "test-channel",
+			dry_run: true,
+			debug: true,
+			blocks: [{
+				section: {
+					type: "text",
+					text: { type: "plain_text", text: "Test" }
+				}
+			}]
+		}
+	}')
+
+	local input_file
+	input_file=$(mktemp send-to-slack-tests.input.XXXXXX)
+	echo "$test_payload" >"$input_file"
+
+	# Run main function (it will check debug and override)
+	run main --file "$input_file"
+	[[ "$status" -eq 0 ]]
+
+	# Verify SHOW_PAYLOAD was overridden to true
+	echo "$output" | grep -q '"name": "show_payload"'
+	echo "$output" | grep -q '"value": "true"'
+	# Verify payload is included in metadata
+	echo "$output" | grep -q '"name": "payload"'
+
+	rm -f "$input_file"
+}
+
+@test "main:: params.debug=false does not override SHOW_METADATA or SHOW_PAYLOAD" {
+	SHOW_METADATA="false"
+	SHOW_PAYLOAD="false"
+	export SHOW_METADATA
+	export SHOW_PAYLOAD
+	local test_payload
+	test_payload=$(jq -n '{
+		source: {
+			slack_bot_user_oauth_token: "xoxb-test-token"
+		},
+		params: {
+			channel: "test-channel",
+			dry_run: true,
+			debug: false,
+			blocks: [{
+				section: {
+					type: "text",
+					text: { type: "plain_text", text: "Test" }
+				}
+			}]
+		}
+	}')
+
+	local input_file
+	input_file=$(mktemp send-to-slack-tests.input.XXXXXX)
+	echo "$test_payload" >"$input_file"
+
+	# Run main function
+	run main --file "$input_file"
+	[[ "$status" -eq 0 ]]
+
+	# Verify metadata is empty (no override)
+	echo "$output" | grep -q '"metadata": \[\]'
+
+	rm -f "$input_file"
 }
 
 ########################################################

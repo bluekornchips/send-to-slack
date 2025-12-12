@@ -10,7 +10,7 @@ setup_file() {
 		exit 1
 	fi
 
-	SCRIPT="$GIT_ROOT/send-to-slack.sh"
+	SCRIPT="$GIT_ROOT/bin/send-to-slack.sh"
 	if [[ ! -f "$SCRIPT" ]]; then
 		echo "Script not found: $SCRIPT" >&2
 		exit 1
@@ -39,7 +39,7 @@ setup() {
 
 	SEND_TO_SLACK_ROOT="$GIT_ROOT"
 
-	source "$SEND_TO_SLACK_ROOT/bin/parse-payload.sh"
+	source "$SEND_TO_SLACK_ROOT/lib/parse-payload.sh"
 
 	SLACK_BOT_USER_OAUTH_TOKEN="test-token"
 	MESSAGE="test message"
@@ -348,7 +348,7 @@ teardown() {
 	echo "Artifact created in prior step" >"$ACCEPTANCE_TEST_FILE"
 	chmod 644 "$ACCEPTANCE_TEST_FILE"
 	local mode
-	mode=$(stat -c "%a" "$ACCEPTANCE_TEST_FILE")
+	mode=$(stat -c "%a" "$ACCEPTANCE_TEST_FILE" 2>/dev/null || stat -f "%OLp" "$ACCEPTANCE_TEST_FILE" 2>/dev/null || echo "unknown")
 
 	local file_block
 	file_block=$(jq -n --arg path "$ACCEPTANCE_TEST_FILE" '{ "file": { "path": $path } }')

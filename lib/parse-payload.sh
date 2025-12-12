@@ -18,19 +18,19 @@ WARN_COLOR="#FFC107"    # Yellow
 # Files
 ########################################################
 
-RICH_TEXT_BLOCK_FILE="bin/blocks/rich-text.sh"
-TABLE_BLOCK_FILE="bin/blocks/table.sh"
-SECTION_BLOCK_FILE="bin/blocks/section.sh"
-HEADER_BLOCK_FILE="bin/blocks/header.sh"
-CONTEXT_BLOCK_FILE="bin/blocks/context.sh"
-DIVIDER_BLOCK_FILE="bin/blocks/divider.sh"
-MARKDOWN_BLOCK_FILE="bin/blocks/markdown.sh"
-ACTIONS_BLOCK_FILE="bin/blocks/actions.sh"
-IMAGE_BLOCK_FILE="bin/blocks/image.sh"
-VIDEO_BLOCK_FILE="bin/blocks/video.sh"
+RICH_TEXT_BLOCK_FILE="lib/blocks/rich-text.sh"
+TABLE_BLOCK_FILE="lib/blocks/table.sh"
+SECTION_BLOCK_FILE="lib/blocks/section.sh"
+HEADER_BLOCK_FILE="lib/blocks/header.sh"
+CONTEXT_BLOCK_FILE="lib/blocks/context.sh"
+DIVIDER_BLOCK_FILE="lib/blocks/divider.sh"
+MARKDOWN_BLOCK_FILE="lib/blocks/markdown.sh"
+ACTIONS_BLOCK_FILE="lib/blocks/actions.sh"
+IMAGE_BLOCK_FILE="lib/blocks/image.sh"
+VIDEO_BLOCK_FILE="lib/blocks/video.sh"
 
 # Other scripts
-FILE_UPLOAD_SCRIPT="bin/file-upload.sh"
+FILE_UPLOAD_SCRIPT="lib/file-upload.sh"
 
 DEFAULT_DRY_RUN="false"
 MAX_TEXT_LENGTH=40000
@@ -51,6 +51,46 @@ DOC_URL_BLOCK_KIT_SECTION="https://docs.slack.dev/reference/block-kit/blocks/sec
 DOC_URL_BLOCK_KIT_VIDEO="https://docs.slack.dev/reference/block-kit/blocks/video-block"
 DOC_URL_LEGACY_ATTACHMENTS="https://api.slack.com/reference/messaging/payload#legacy"
 
+# Resolve script path, checking both lib/ and bin/ layouts
+#
+# Arguments:
+#   $1 - script_path: Relative path to script from SEND_TO_SLACK_ROOT (lib/ layout)
+#
+# Outputs:
+#   Writes resolved path to stdout
+#
+# Returns:
+#   0 if script found
+#   1 if script not found
+_resolve_block_script_path() {
+	local script_path="$1"
+	local lib_path="${SEND_TO_SLACK_ROOT}/${script_path}"
+	local bin_path
+
+	# Convert lib/ paths to bin/ paths for installed layout
+	if [[ "$script_path" == lib/blocks/* ]]; then
+		bin_path="${SEND_TO_SLACK_ROOT}/${script_path/lib\/blocks/bin\/blocks}"
+	elif [[ "$script_path" == lib/file-upload.sh ]]; then
+		bin_path="${SEND_TO_SLACK_ROOT}/bin/file-upload.sh"
+	else
+		bin_path="${SEND_TO_SLACK_ROOT}/bin/$(basename "$script_path")"
+	fi
+
+	# Check lib/ layout first (source layout)
+	if [[ -f "$lib_path" ]]; then
+		echo "$lib_path"
+		return 0
+	fi
+
+	# Check bin/ layout (installed layout)
+	if [[ -f "$bin_path" ]]; then
+		echo "$bin_path"
+		return 0
+	fi
+
+	return 1
+}
+
 # Validate that a block script file exists
 #
 # Arguments:
@@ -61,10 +101,10 @@ DOC_URL_LEGACY_ATTACHMENTS="https://api.slack.com/reference/messaging/payload#le
 #   1 if script is missing or not executable
 _validate_block_script() {
 	local script_path="$1"
-	local full_path="${SEND_TO_SLACK_ROOT}/${script_path}"
+	local resolved_path
 
-	if [[ ! -f "$full_path" ]]; then
-		echo "_validate_block_script:: block script not found: $full_path" >&2
+	if ! resolved_path=$(_resolve_block_script_path "$script_path"); then
+		echo "_validate_block_script:: block script not found: ${SEND_TO_SLACK_ROOT}/${script_path} (checked lib/ and bin/ layouts)" >&2
 		return 1
 	fi
 
@@ -111,8 +151,11 @@ create_block() {
 		return 1
 	fi
 
+	local resolved_script_path
+	resolved_script_path=$(_resolve_block_script_path "$script_path")
+
 	local script_exit_code=0
-	block=$("$SEND_TO_SLACK_ROOT/$script_path" <<<"$block_input") || script_exit_code=$?
+	block=$("$resolved_script_path" <<<"$block_input") || script_exit_code=$?
 
 	if [[ $script_exit_code -ne 0 ]]; then
 		echo "create_block:: block script failed with exit code $script_exit_code" >&2
@@ -217,6 +260,64 @@ convert_thread_ts() {
 	fi
 
 	echo "$input"
+
+	return 0
+}
+
+# Sanitize payload by redacting sensitive information (auth tokens, PII)
+#
+# Arguments:
+#   $1 - payload_json: JSON payload string to sanitize
+#
+# Outputs:
+#   Writes sanitized JSON payload to stdout (token set to "[REDACTED]")
+#
+# Returns:
+#   0 on success
+#   1 if JSON is invalid
+_sanitize_payload() {
+	local payload_json="$1"
+
+	if ! echo "$payload_json" | jq . >/dev/null 2>&1; then
+		echo "$payload_json"
+		return 1
+	fi
+
+	# Redact sensitive fields from source (auth tokens)
+	# Set slack_bot_user_oauth_token to "[REDACTED]"
+	local sanitized
+	sanitized=$(echo "$payload_json" | jq '
+		if .source then
+			.source.slack_bot_user_oauth_token = "[REDACTED]"
+		else
+			.
+		end
+	')
+
+	echo "$sanitized"
+	return 0
+}
+
+# Log sanitized payload for debugging
+#
+# Uses global variable: INPUT_PAYLOAD
+#
+# Side Effects:
+#   Writes sanitized payload to stderr for debugging
+_log_sanitized_payload() {
+	local payload_content
+	payload_content=$(cat "$INPUT_PAYLOAD")
+
+	local sanitized
+	if ! sanitized=$(_sanitize_payload "$payload_content"); then
+		echo "parse_payload:: failed to sanitize payload for logging" >&2
+		return 1
+	fi
+
+	cat <<EOF >&2
+parse_payload:: input payload (sanitized):
+$(echo "$sanitized" | jq .)
+EOF
 
 	return 0
 }
@@ -590,6 +691,14 @@ parse_payload() {
 
 	if ! validate_input_payload_json; then
 		return 1
+	fi
+
+	# Log sanitized payloa if params.debug is true
+	# This is one of the few options that can be used take precedence over the .from_file and .raw options
+	local debug_enabled
+	debug_enabled=$(jq -r '.params.debug // false' "$INPUT_PAYLOAD")
+	if [[ "$debug_enabled" == "true" ]]; then
+		_log_sanitized_payload
 	fi
 
 	if ! load_input_payload_params; then

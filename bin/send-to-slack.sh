@@ -85,9 +85,7 @@ get_version() {
 		return 1
 	fi
 
-	candidates=(
-		"${root_path}/VERSION"
-		"${root_path}/share/send-to-slack/VERSION")
+	candidates=("${root_path}/VERSION")
 
 	for version_path in "${candidates[@]}"; do
 		if [[ -f "$version_path" ]]; then
@@ -217,15 +215,8 @@ create_metadata() {
 	)
 
 	if [[ "${SHOW_PAYLOAD}" == "true" ]] && [[ -n "${payload}" ]]; then
-		local safe_payload
-		# Redact token if source field exists, otherwise use payload as-is
-		if jq -e '.source' <<<"${payload}" >/dev/null 2>&1; then
-			safe_payload=$(jq '.source.slack_bot_user_oauth_token = "[REDACTED]"' <<<"${payload}")
-		else
-			safe_payload="${payload}"
-		fi
 		METADATA=$(echo "$METADATA" | jq \
-			--arg payload "$safe_payload" \
+			--arg payload "${payload}" \
 			'. += [{"name": "payload", "value": $payload}]')
 	fi
 
@@ -390,7 +381,7 @@ crosspost_notification() {
 
 		# Write payload to temp file for parsing
 		local temp_payload
-		temp_payload=$(mktemp -t send-to-slack.crosspost-payload.XXXXXX)
+		temp_payload=$(mktemp /tmp/send-to-slack.crosspost-payload.XXXXXX)
 		if ! chmod 700 "$temp_payload"; then
 			echo "crosspost_notification:: failed to secure temp payload ${temp_payload}" >&2
 			rm -f "$temp_payload"
@@ -842,7 +833,7 @@ process_input() {
 		use_stdin="true"
 	fi
 
-	input_payload=$(mktemp -t send-to-slack.resource-in.XXXXXX)
+	input_payload=$(mktemp /tmp/send-to-slack.resource-in.XXXXXX)
 	if ! chmod 700 "$input_payload"; then
 		echo "process_input:: failed to secure temp input ${input_payload}" >&2
 		rm -f "$input_payload"
@@ -904,19 +895,34 @@ process_input() {
 initialize_script_environment() {
 	local script_dir
 	local bin_dir
+	local prefix_dir
+	local lib_dir
 
 	if [[ -z "${SEND_TO_SLACK_ROOT}" ]]; then
 		script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-		# Check for source/Docker layout: script_dir/bin exists
-		if [[ -d "$script_dir/bin" ]] && [[ -f "$script_dir/bin/parse-payload.sh" ]]; then
+		# Check for source/Docker layout: script_dir/lib exists
+		if [[ -d "$script_dir/lib" ]] && [[ -f "$script_dir/lib/parse-payload.sh" ]]; then
 			SEND_TO_SLACK_ROOT="$script_dir"
-			bin_dir="$script_dir/bin"
+			bin_dir="$script_dir/lib"
 		# Check for installed layout: helper scripts are in same directory as script
 		# In this case, SEND_TO_SLACK_ROOT should be parent so bin/blocks paths resolve correctly
 		elif [[ -f "$script_dir/parse-payload.sh" ]] && [[ -d "$script_dir/blocks" ]]; then
 			SEND_TO_SLACK_ROOT=$(dirname "$script_dir")
 			bin_dir="$script_dir"
+		# Check for standard installation: script in bin/, supporting files in lib/
+		# e.g., /usr/local/bin/send-to-slack -> supporting files in /usr/local/lib/send-to-slack/
+		elif [[ "$script_dir" == */bin ]] || [[ "$script_dir" == */bin/* ]]; then
+			# Extract prefix
+			prefix_dir=$(dirname "$script_dir")
+			lib_dir="$prefix_dir/lib/send-to-slack"
+			if [[ -d "$lib_dir/bin" ]] && [[ -f "$lib_dir/bin/parse-payload.sh" ]]; then
+				SEND_TO_SLACK_ROOT="$lib_dir"
+				bin_dir="$lib_dir/bin"
+			else
+				echo "initialize_script_environment:: cannot locate bin directory. Script location: $script_dir, checked: $lib_dir/bin" >&2
+				return 1
+			fi
 		else
 			echo "initialize_script_environment:: cannot locate bin directory. Script location: $script_dir" >&2
 			return 1
@@ -925,7 +931,9 @@ initialize_script_environment() {
 
 	# Determine bin_dir if SEND_TO_SLACK_ROOT was set externally
 	if [[ -z "${bin_dir}" ]]; then
-		if [[ -d "${SEND_TO_SLACK_ROOT}/bin" ]] && [[ -f "${SEND_TO_SLACK_ROOT}/bin/parse-payload.sh" ]]; then
+		if [[ -d "${SEND_TO_SLACK_ROOT}/lib" ]] && [[ -f "${SEND_TO_SLACK_ROOT}/lib/parse-payload.sh" ]]; then
+			bin_dir="${SEND_TO_SLACK_ROOT}/lib"
+		elif [[ -d "${SEND_TO_SLACK_ROOT}/bin" ]] && [[ -f "${SEND_TO_SLACK_ROOT}/bin/parse-payload.sh" ]]; then
 			bin_dir="${SEND_TO_SLACK_ROOT}/bin"
 		elif [[ -f "${SEND_TO_SLACK_ROOT}/bin/parse-payload.sh" ]] && [[ -d "${SEND_TO_SLACK_ROOT}/bin/blocks" ]]; then
 			bin_dir="${SEND_TO_SLACK_ROOT}/bin"
@@ -1055,6 +1063,16 @@ main() {
 
 	timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
+	# Check if params.debug is true and override show_payload/show_metadata
+	local debug_enabled
+	debug_enabled=$(jq -r '.params.debug // false' "${input_payload}")
+	if [[ "$debug_enabled" == "true" ]]; then
+		SHOW_METADATA="true"
+		SHOW_PAYLOAD="true"
+		export SHOW_METADATA
+		export SHOW_PAYLOAD
+	fi
+
 	echo "main:: parsing payload"
 
 	# Ensure file still exists before parsing
@@ -1071,7 +1089,7 @@ main() {
 	fi
 
 	local parsed_payload_file
-	parsed_payload_file=$(mktemp -t send-to-slack.parsed-payload.XXXXXX)
+	parsed_payload_file=$(mktemp /tmp/send-to-slack.parsed-payload.XXXXXX)
 	if ! chmod 700 "$parsed_payload_file"; then
 		echo "main:: failed to secure parsed payload file ${parsed_payload_file}" >&2
 		rm -f "${parsed_payload_file}"

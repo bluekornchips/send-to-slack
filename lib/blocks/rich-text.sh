@@ -9,7 +9,7 @@ umask 077
 BLOCK_TYPE="rich_text"
 MAX_RICH_TEXT_CHARS=4000
 
-UPLOAD_FILE_SCRIPT="${UPLOAD_FILE_SCRIPT:-bin/file-upload.sh}"
+UPLOAD_FILE_SCRIPT="${UPLOAD_FILE_SCRIPT:-lib/file-upload.sh}"
 
 ########################################################
 # Documentation URLs
@@ -26,7 +26,7 @@ handle_oversize_text() {
 	local extracted_text="$1"
 
 	local file_path
-	file_path=$(mktemp -t rich-text.sh.oversize.XXXXXX)
+	file_path=$(mktemp /tmp/rich-text.sh.oversize.XXXXXX)
 	if ! chmod 700 "$file_path"; then
 		echo "handle_oversize_text:: failed to secure temp file ${file_path}" >&2
 		rm -f "$file_path"
@@ -44,7 +44,19 @@ handle_oversize_text() {
 		upload_script_path="$UPLOAD_FILE_SCRIPT"
 	else
 		local base_root="${SEND_TO_SLACK_ROOT:-.}"
-		upload_script_path="${base_root%/}/${UPLOAD_FILE_SCRIPT}"
+		local lib_path="${base_root%/}/${UPLOAD_FILE_SCRIPT}"
+		local bin_path="${base_root%/}/${UPLOAD_FILE_SCRIPT/lib\/file-upload.sh/bin\/file-upload.sh}"
+
+		# Check lib/ layout first (source layout)
+		if [[ -f "$lib_path" ]]; then
+			upload_script_path="$lib_path"
+		# Check bin/ layout (installed layout)
+		elif [[ -f "$bin_path" ]]; then
+			upload_script_path="$bin_path"
+		else
+			echo "handle_oversize_text:: file upload script not found: checked ${lib_path} and ${bin_path}" >&2
+			return 1
+		fi
 	fi
 
 	if [[ ! -f "$upload_script_path" ]]; then
@@ -90,7 +102,7 @@ create_rich_text() {
 	fi
 
 	local input_json
-	input_json=$(mktemp -t rich-text.sh.input-json.XXXXXX)
+	input_json=$(mktemp /tmp/rich-text.sh.input-json.XXXXXX)
 	if ! chmod 700 "$input_json"; then
 		echo "create_rich_text:: failed to secure temp file ${input_json}" >&2
 		rm -f "$input_json"

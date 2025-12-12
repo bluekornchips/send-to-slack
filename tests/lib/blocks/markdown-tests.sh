@@ -10,7 +10,7 @@ setup_file() {
 		exit 1
 	fi
 
-	SCRIPT="$GIT_ROOT/bin/blocks/markdown.sh"
+	SCRIPT="$GIT_ROOT/lib/blocks/markdown.sh"
 	EXAMPLES_FILE="$GIT_ROOT/examples/markdown.yaml"
 
 	if [[ ! -f "$SCRIPT" ]]; then

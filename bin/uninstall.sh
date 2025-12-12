@@ -52,7 +52,7 @@ main() {
 		return 1
 	fi
 
-	manifest_path="$prefix/share/send-to-slack/install_manifest.txt"
+	manifest_path="$prefix/lib/send-to-slack/install_manifest.txt"
 	if [[ ! -f "$manifest_path" ]]; then
 		echo "uninstall:: manifest not found: $manifest_path" >&2
 		return 1
@@ -70,6 +70,8 @@ main() {
 
 		if [[ -f "$entry" || -L "$entry" ]]; then
 			rm -f "$entry"
+		elif [[ -d "$entry" ]]; then
+			rmdir "$entry" 2>/dev/null || true
 		else
 			echo "uninstall:: skipped missing entry: $entry" >&2
 		fi
@@ -77,8 +79,14 @@ main() {
 
 	rm -f "$manifest_path"
 
-	if [[ -d "$prefix/share/send-to-slack" ]]; then
-		rmdir "$prefix/share/send-to-slack" 2>/dev/null || true
+	if [[ -d "$prefix/lib/send-to-slack/bin/blocks" ]]; then
+		rmdir "$prefix/lib/send-to-slack/bin/blocks" 2>/dev/null || true
+	fi
+	if [[ -d "$prefix/lib/send-to-slack/bin" ]]; then
+		rmdir "$prefix/lib/send-to-slack/bin" 2>/dev/null || true
+	fi
+	if [[ -d "$prefix/lib/send-to-slack" ]]; then
+		rmdir "$prefix/lib/send-to-slack" 2>/dev/null || true
 	fi
 
 	echo "Uninstalled send-to-slack from $prefix"
