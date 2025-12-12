@@ -7,6 +7,20 @@
 set -euo pipefail
 IFS=$' \n\t'
 
+# Fail fast with a concise message when not using bash
+# Single brackets for POSIX yo
+if [ -z "${BASH_VERSION:-}" ]; then
+	# Use echo here since abort() may not be defined yet if bash isn't running
+	echo "Bash is required to interpret this script." >&2
+	exit 1
+fi
+
+# Check if script is run in POSIX mode
+if [[ -n "${POSIXLY_CORRECT+1}" ]]; then
+	echo "Bash must not run in POSIX mode. Please unset POSIXLY_CORRECT and try again." >&2
+	exit 1
+fi
+
 VERSION_FILE_NAME="VERSION"
 DEFAULT_INSTALL_PATH="${HOME:+${HOME}/.local}"
 DEFAULT_REPO_URL="https://github.com/bluekornchips/send-to-slack"
@@ -21,6 +35,19 @@ prefix=""
 CURL_TIMEOUT=30
 CURL_MAX_RETRIES=3
 CURL_RETRY_DELAY=2
+
+# Abort with error message
+#
+# Inputs:
+# - $@ - error message(s) to display
+#
+# Side Effects:
+# - Outputs error message(s) to stderr
+# - Exits with status 1
+abort() {
+	printf "%s\n" "$@" >&2
+	exit 1
+}
 
 # Display usage information
 #
@@ -720,7 +747,7 @@ main() {
 
 	if [[ $parse_result -ne 0 ]]; then
 		usage
-		return 1
+		abort "Invalid arguments. See usage above."
 	fi
 
 	if [[ -z "$prefix" ]]; then
@@ -734,22 +761,21 @@ main() {
 	case "$INSTALL_MODE" in
 	local)
 		if ! install_local "$prefix"; then
-			return 1
+			abort "Installation failed. See error messages above for details."
 		fi
 		;;
 	commit)
 		if ! install_commit "$COMMIT_REF" "$prefix"; then
-			return 1
+			abort "Installation failed. See error messages above for details."
 		fi
 		;;
 	latest)
 		if ! install_latest_main "$prefix"; then
-			return 1
+			abort "Installation failed. See error messages above for details."
 		fi
 		;;
 	*)
-		echo "main:: unknown install mode: ${INSTALL_MODE}" >&2
-		return 1
+		abort "Unknown install mode: ${INSTALL_MODE}"
 		;;
 	esac
 
@@ -760,7 +786,8 @@ main() {
 }
 
 # Only run main when script is executed directly, not when sourced
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+# This should safely allow piping and sourcing the script for unit testing while still working when piped
+if [[ "${BASH_SOURCE[0]:-}" == "${0}" ]] || [[ -z "${BASH_SOURCE[0]:-}" ]]; then
 	main "$@"
 	exit $?
 fi

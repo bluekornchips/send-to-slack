@@ -10,42 +10,37 @@ Measure twice, send once.
 
 ## Installation
 
-### System Installation
+### Quick Install
 
-Install to system directory `/usr/local` (requires sudo):
+Install to `~/.local`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/install.sh | bash
+```
+
+### From Source
 
 ```bash
 git clone https://github.com/bluekornchips/send-to-slack.git
 cd send-to-slack
-sudo make install
-```
-
-Or use the installation script directly:
-
-```bash
-sudo ./install.sh /usr/local
-```
-
-### Custom Installation Prefix
-
-Install to a custom location:
-
-```bash
-./install.sh /opt
+./install.sh
 ```
 
 ### Uninstallation
 
-```bash
-sudo make uninstall
-```
-
-Or use the uninstall script directly:
+Use the uninstall script to remove all installed files:
 
 ```bash
-sudo ./uninstall.sh /usr/local
-
+./uninstall.sh ~/.local
 ```
+
+For protected prefixes (like `/usr/local`), use `--force`:
+
+```bash
+./uninstall.sh --force /usr/local
+```
+
+The uninstall script uses the installation manifest at `$prefix/share/send-to-slack/install_manifest.txt` to remove all files that were installed.
 
 ## Container Image
 
@@ -130,8 +125,25 @@ When running directly from the repository, use `./send-to-slack.sh` instead of `
 - Reads JSON from stdin when no file is provided.
 - Use `-f`, `-file`, or `--file` to point at a payload file.
 - Use `-v` or `--version` to display version information and exit.
+- Use `-h` or `--help` to display usage information and exit.
 - Use `--health-check` to validate required dependencies without sending a message.
 - Emits Concourse-style JSON (`version`, `metadata`) to stdout unless `SEND_TO_SLACK_OUTPUT` is set.
+
+## Health Check
+
+Use `--health-check` to validate dependencies (`jq`, `curl`) and optionally test Slack API connectivity if `SLACK_BOT_USER_OAUTH_TOKEN` is set. Returns exit code 0 on success, 1 on failure. Skips API check if `DRY_RUN` or `SKIP_SLACK_API_CHECK` is set.
+
+## Environment Variables
+
+The following environment variables control tool behavior:
+
+- `SLACK_BOT_USER_OAUTH_TOKEN` - Slack bot OAuth token (fallback if not in `source`)
+- `CHANNEL` - Target Slack channel (fallback if not in `params.channel`)
+- `DRY_RUN` - Set to `true` to validate without sending messages
+- `SEND_TO_SLACK_OUTPUT` - File path to write JSON output instead of stdout
+- `SHOW_METADATA` - Set to `false` to disable metadata output (default: `true`)
+- `SHOW_PAYLOAD` - Set to `false` to exclude payload from metadata (default: `true`)
+- `SKIP_SLACK_API_CHECK` - Set to `true` to skip API connectivity check in health check mode
 
 ## Features
 
