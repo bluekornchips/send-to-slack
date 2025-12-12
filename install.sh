@@ -786,7 +786,8 @@ main() {
 }
 
 # Only run main when script is executed directly, not when sourced
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+# This should safely allow piping and sourcing the script for unit testing while still working when piped
+if [[ "${BASH_SOURCE[0]:-}" == "${0}" ]] || [[ -z "${BASH_SOURCE[0]:-}" ]]; then
 	main "$@"
 	exit $?
 fi
