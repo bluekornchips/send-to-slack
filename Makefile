@@ -6,7 +6,12 @@ SYSTEM_PREFIX := /usr/local
 test:
 	clear && bats --timing --verbose-run \
 		./concourse/resource-type/tests/*tests.sh \
-		./tests/*-tests.sh \
+		./tests/docker-tests.sh \
+		./tests/file-upload-tests.sh \
+		./tests/install-tests.sh \
+		./tests/parse-payload-tests.sh \
+		./tests/resolve-mentions-tests.sh \
+		./tests/send-to-slack-tests.sh \
 		./tests/blocks/*tests.sh
 
 test-smoke:

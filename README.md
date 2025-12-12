@@ -10,42 +10,25 @@ Measure twice, send once.
 
 ## Installation
 
-### System Installation
+### Quick Install
 
-Install to system directory `/usr/local` (requires sudo):
+Install to `~/.local`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/install.sh | bash
+```
+
+### From Source
 
 ```bash
 git clone https://github.com/bluekornchips/send-to-slack.git
 cd send-to-slack
-sudo make install
-```
-
-Or use the installation script directly:
-
-```bash
-sudo ./install.sh /usr/local
-```
-
-### Custom Installation Prefix
-
-Install to a custom location:
-
-```bash
-./install.sh /opt
+./install.sh
 ```
 
 ### Uninstallation
 
-```bash
-sudo make uninstall
-```
-
-Or use the uninstall script directly:
-
-```bash
-sudo ./uninstall.sh /usr/local
-
-```
+Remove the installed files from `~/.local/bin/send-to-slack` and related files.
 
 ## Container Image
 
@@ -132,6 +115,10 @@ When running directly from the repository, use `./send-to-slack.sh` instead of `
 - Use `-v` or `--version` to display version information and exit.
 - Use `--health-check` to validate required dependencies without sending a message.
 - Emits Concourse-style JSON (`version`, `metadata`) to stdout unless `SEND_TO_SLACK_OUTPUT` is set.
+
+## Health Check
+
+Use `--health-check` to validate dependencies (`jq`, `curl`) and optionally test Slack API connectivity if `SLACK_BOT_USER_OAUTH_TOKEN` is set. Returns exit code 0 on success, 1 on failure. Skips API check if `DRY_RUN` or `SKIP_SLACK_API_CHECK` is set.
 
 ## Features
 

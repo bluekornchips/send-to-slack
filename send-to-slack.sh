@@ -41,6 +41,30 @@ DOC_URL_LEGACY_ATTACHMENTS="https://api.slack.com/reference/messaging/payload#le
 DOC_URL_RATE_LIMITS="https://api.slack.com/docs/rate-limits"
 DOC_URL_SCOPES="https://api.slack.com/scopes"
 
+# Display usage information
+#
+# Side Effects:
+# - Outputs usage message to stdout
+#
+# Returns:
+# - 0 always
+usage() {
+	cat <<EOF
+Usage: send-to-slack [OPTIONS]
+
+Send messages to Slack using Block Kit formatting.
+
+OPTIONS:
+  -f, --file <path>     Read payload from file instead of stdin
+  -v, --version         Display version information and exit
+  -h, --help            Display this help message and exit
+  --health-check        Validate dependencies and Slack API connectivity without sending
+
+For more information, see: https://github.com/bluekornchips/send-to-slack
+EOF
+	return 0
+}
+
 # Resolve version from known locations
 #
 # Inputs:
@@ -866,6 +890,96 @@ process_input() {
 	return 0
 }
 
+# Initialize script environment and locate bin directory
+#
+# Side Effects:
+#   Sets SEND_TO_SLACK_ROOT and bin_dir variables
+#
+# Outputs:
+#   Writes bin_dir path to stdout
+#
+# Returns:
+#   0 on success
+#   1 if bin directory cannot be located
+initialize_script_environment() {
+	local script_dir
+	local bin_dir
+
+	if [[ -z "${SEND_TO_SLACK_ROOT}" ]]; then
+		script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+		# Check for source/Docker layout: script_dir/bin exists
+		if [[ -d "$script_dir/bin" ]] && [[ -f "$script_dir/bin/parse-payload.sh" ]]; then
+			SEND_TO_SLACK_ROOT="$script_dir"
+			bin_dir="$script_dir/bin"
+		# Check for installed layout: helper scripts are in same directory as script
+		# In this case, SEND_TO_SLACK_ROOT should be parent so bin/blocks paths resolve correctly
+		elif [[ -f "$script_dir/parse-payload.sh" ]] && [[ -d "$script_dir/blocks" ]]; then
+			SEND_TO_SLACK_ROOT=$(dirname "$script_dir")
+			bin_dir="$script_dir"
+		else
+			echo "initialize_script_environment:: cannot locate bin directory. Script location: $script_dir" >&2
+			return 1
+		fi
+	fi
+
+	# Determine bin_dir if SEND_TO_SLACK_ROOT was set externally
+	if [[ -z "${bin_dir}" ]]; then
+		if [[ -d "${SEND_TO_SLACK_ROOT}/bin" ]] && [[ -f "${SEND_TO_SLACK_ROOT}/bin/parse-payload.sh" ]]; then
+			bin_dir="${SEND_TO_SLACK_ROOT}/bin"
+		elif [[ -f "${SEND_TO_SLACK_ROOT}/bin/parse-payload.sh" ]] && [[ -d "${SEND_TO_SLACK_ROOT}/bin/blocks" ]]; then
+			bin_dir="${SEND_TO_SLACK_ROOT}/bin"
+		else
+			echo "initialize_script_environment:: cannot locate parse-payload.sh in ${SEND_TO_SLACK_ROOT}" >&2
+			return 1
+		fi
+	fi
+
+	echo "$bin_dir"
+
+	return 0
+}
+
+# Parse command line arguments
+#
+# Arguments:
+#   $@ - Command line arguments
+#
+# Side Effects:
+#   Sets global main_args array and health_check_mode variable
+#   May call print_version and exit
+#
+# Returns:
+#   0 on success
+#   2 if version or help was requested
+parse_main_args() {
+	main_args=()
+	health_check_mode=false
+
+	while [[ $# -gt 0 ]]; do
+		case $1 in
+		-v | --version)
+			print_version "${SEND_TO_SLACK_ROOT}"
+			return 2
+			;;
+		-h | --help)
+			usage
+			return 2
+			;;
+		--health-check)
+			health_check_mode=true
+			shift
+			;;
+		*)
+			main_args+=("$1")
+			shift
+			;;
+		esac
+	done
+
+	return 0
+}
+
 # Main entry point that processes stdin payload and sends to Slack
 #
 # Inputs:
@@ -884,59 +998,27 @@ process_input() {
 main() {
 	local input_payload
 	local timestamp
-	local script_dir
 	local bin_dir
-	local main_args
-	local health_check_mode=false
+	local parse_result
 
-	if [[ -z "${SEND_TO_SLACK_ROOT}" ]]; then
-		script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-
-		# Check for source/Docker layout: script_dir/bin exists
-		if [[ -d "$script_dir/bin" ]] && [[ -f "$script_dir/bin/parse-payload.sh" ]]; then
-			SEND_TO_SLACK_ROOT="$script_dir"
-			bin_dir="$script_dir/bin"
-		# Check for installed layout: helper scripts are in same directory as script
-		# In this case, SEND_TO_SLACK_ROOT should be parent so bin/blocks paths resolve correctly
-		elif [[ -f "$script_dir/parse-payload.sh" ]] && [[ -d "$script_dir/blocks" ]]; then
-			SEND_TO_SLACK_ROOT=$(dirname "$script_dir")
-			bin_dir="$script_dir"
-		else
-			echo "main:: cannot locate bin directory. Script location: $script_dir" >&2
-			return 1
-		fi
+	if ! bin_dir=$(initialize_script_environment); then
+		return 1
 	fi
 
-	# Determine bin_dir if SEND_TO_SLACK_ROOT was set externally
-	if [[ -z "${bin_dir}" ]]; then
-		if [[ -d "${SEND_TO_SLACK_ROOT}/bin" ]] && [[ -f "${SEND_TO_SLACK_ROOT}/bin/parse-payload.sh" ]]; then
-			bin_dir="${SEND_TO_SLACK_ROOT}/bin"
-		elif [[ -f "${SEND_TO_SLACK_ROOT}/bin/parse-payload.sh" ]] && [[ -d "${SEND_TO_SLACK_ROOT}/bin/blocks" ]]; then
-			bin_dir="${SEND_TO_SLACK_ROOT}/bin"
-		else
-			echo "main:: cannot locate parse-payload.sh in ${SEND_TO_SLACK_ROOT}" >&2
-			return 1
-		fi
+	# Parse arguments
+	# If help/version is requested, parse_main_args will output and return 2
+	parse_result=0
+	parse_main_args "$@" || parse_result=$?
+
+	if [[ $parse_result -eq 2 ]]; then
+		# Version or help was requested and already printed
+		return 0
 	fi
 
-	# Parse command line arguments
-	main_args=()
-	while [[ $# -gt 0 ]]; do
-		case $1 in
-		-v | --version)
-			print_version "${SEND_TO_SLACK_ROOT}"
-			return 0
-			;;
-		--health-check)
-			health_check_mode=true
-			shift
-			;;
-		*)
-			main_args+=("$1")
-			shift
-			;;
-		esac
-	done
+	if [[ $parse_result -ne 0 ]]; then
+		echo "main:: failed to parse arguments" >&2
+		return 1
+	fi
 
 	local version
 	if ! version=$(get_version "${SEND_TO_SLACK_ROOT}"); then
