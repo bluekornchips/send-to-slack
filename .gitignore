@@ -24,3 +24,6 @@ test-payload.*
 
 # Resource output
 resource-out.json
+
+# Release build artifacts
+release/send-to-slack
