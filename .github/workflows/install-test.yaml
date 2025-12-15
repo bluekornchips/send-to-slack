@@ -34,9 +34,14 @@ jobs:
           # Set repository
           echo "REPO=${GITHUB_REPOSITORY}" >> $GITHUB_ENV
 
-          # Set PR information
-          echo "PR_NUMBER=${GITHUB_EVENT_PULL_REQUEST_NUMBER:-${GITHUB_EVENT_NUMBER}}" >> $GITHUB_ENV
-          echo "PR_URL=${GITHUB_EVENT_PULL_REQUEST_HTML_URL:-${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/pull/${GITHUB_EVENT_PULL_REQUEST_NUMBER:-${GITHUB_EVENT_NUMBER}}}" >> $GITHUB_ENV
+          # Set PR information (read from event JSON file)
+          PR_NUMBER=$(jq -r '.pull_request.number // empty' "$GITHUB_EVENT_PATH" 2>/dev/null || echo '')
+          PR_URL=$(jq -r '.pull_request.html_url // empty' "$GITHUB_EVENT_PATH" 2>/dev/null || echo '')
+          if [[ -z "$PR_URL" ]] && [[ -n "$PR_NUMBER" ]]; then
+            PR_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/pull/${PR_NUMBER}"
+          fi
+          echo "PR_NUMBER=${PR_NUMBER}" >> $GITHUB_ENV
+          echo "PR_URL=${PR_URL}" >> $GITHUB_ENV
 
           # Set workflow run URL
           echo "WORKFLOW_RUN_URL=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >> $GITHUB_ENV

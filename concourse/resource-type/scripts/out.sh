@@ -40,14 +40,13 @@ main() {
 		rm -f "${SEND_TO_SLACK_OUTPUT}"
 		return 1
 	fi
-	trap 'rm -f "${SEND_TO_SLACK_OUTPUT}"' EXIT ERR RETURN
 	input_file=$(mktemp /tmp/resource-in.XXXXXX)
 	if ! chmod 700 "$input_file"; then
 		echo "out:: failed to secure input file ${input_file}" >&2
-		rm -f "${input_file}"
+		rm -f "${input_file}" "${SEND_TO_SLACK_OUTPUT}"
 		return 1
 	fi
-	trap 'rm -f "${input_file}"' EXIT ERR RETURN
+	trap 'rm -f "${SEND_TO_SLACK_OUTPUT}" "${input_file}"' EXIT ERR RETURN
 
 	# Read the contents of stdin into the input file
 	cat >"${input_file}"

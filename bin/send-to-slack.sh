@@ -1074,7 +1074,7 @@ main() {
 		return 1
 	fi
 
-	trap 'rm -f "$input_payload"' EXIT ERR
+	trap 'rm -f "$input_payload" "${parsed_payload_file:-}"' EXIT ERR
 
 	timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
@@ -1110,17 +1110,14 @@ main() {
 		rm -f "${parsed_payload_file}"
 		return 1
 	fi
-	trap 'rm -f "${parsed_payload_file}"' RETURN EXIT ERR
 	if ! parse_payload "${input_payload}" >"${parsed_payload_file}"; then
 		echo "main:: failed to parse payload" >&2
 		rm -f "${parsed_payload_file}"
-		trap - RETURN EXIT ERR
 		return 1
 	fi
 	local parsed_payload
 	parsed_payload=$(cat "${parsed_payload_file}")
 	rm -f "${parsed_payload_file}"
-	trap - RETURN EXIT ERR
 
 	# Handle create_thread: send first block as regular message, then remaining blocks in thread
 	local create_thread

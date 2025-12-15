@@ -227,7 +227,18 @@ send_notification() {
 		if [[ -z "${REPO:-}" ]]; then
 			local git_url
 			git_url=$(git config --get remote.origin.url 2>/dev/null || echo '')
-			REPO="${REPO:-unknown}"
+			if [[ -n "$git_url" ]]; then
+				# Extract repo name from git URL, handling both https and ssh formats
+				if [[ "$git_url" =~ github\.com[:/]([^/]+/[^/]+)\.git?$ ]]; then
+					REPO="${BASH_REMATCH[1]}"
+				elif [[ "$git_url" =~ github\.com[:/]([^/]+/[^/]+)/?$ ]]; then
+					REPO="${BASH_REMATCH[1]}"
+				else
+					REPO="unknown"
+				fi
+			else
+				REPO="unknown"
+			fi
 		fi
 		export BRANCH COMMIT_SHA COMMIT_SHORT TIMESTAMP REPO
 	fi
@@ -268,31 +279,40 @@ send_notification() {
 	# Add GitHub Actions context block if in GHA mode
 	if [[ -n "${GITHUB_ACTIONS:-}" ]] && [[ -n "${EVENT_TYPE:-}" ]]; then
 		local gha_context_block
-		gha_context_block=$(jq -n \
+		local elements_array
+		elements_array=$(jq -n \
 			--arg event_type "${EVENT_TYPE:-}" \
-			--arg workflow_url "${WORKFLOW_RUN_URL:-}" \
-			'{
-				type: "context",
-				elements: [
-					{
-						type: "plain_text",
-						text: "Event: \($event_type)"
-					}
-				] + (if $workflow_url != "" then [{
+			'[{
+				type: "plain_text",
+				text: "Event: \($event_type)"
+			}]')
+
+		# Add workflow URL element if available
+		if [[ -n "${WORKFLOW_RUN_URL:-}" ]]; then
+			elements_array=$(echo "$elements_array" | jq \
+				--arg workflow_url "${WORKFLOW_RUN_URL:-}" \
+				'. += [{
 					type: "plain_text",
 					text: "Workflow: \($workflow_url)"
-				}] else [] end)
-			}')
+				}]')
+		fi
 
 		# Add PR info if available
 		if [[ -n "${PR_NUMBER:-}" ]] && [[ -n "${PR_URL:-}" ]]; then
-			gha_context_block=$(echo "$gha_context_block" | jq --arg pr_number "$PR_NUMBER" --arg pr_url "$PR_URL" '
-				.elements += [{
+			elements_array=$(echo "$elements_array" | jq \
+				--arg pr_number "${PR_NUMBER:-}" \
+				'. += [{
 					type: "plain_text",
 					text: "PR: #\($pr_number)"
-				}]
-			')
+				}]')
 		fi
+
+		gha_context_block=$(jq -n \
+			--argjson elements "$elements_array" \
+			'{
+				type: "context",
+				elements: $elements
+			}')
 
 		# Insert GHA context block at the beginning (before the existing context block)
 		blocks_json=$(echo "$blocks_json" | jq --argjson gha_block "$gha_context_block" '. |= [$gha_block] + .')
