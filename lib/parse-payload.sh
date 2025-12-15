@@ -86,6 +86,11 @@ _validate_block_script() {
 	local script_path="$1"
 	local resolved_path
 
+	if [[ -z "${SEND_TO_SLACK_ROOT}" ]]; then
+		echo "_validate_block_script:: SEND_TO_SLACK_ROOT is not set" >&2
+		return 1
+	fi
+
 	if ! resolved_path=$(_resolve_block_script_path "$script_path"); then
 		echo "_validate_block_script:: block script not found: ${SEND_TO_SLACK_ROOT}/${script_path}" >&2
 		return 1

@@ -1,68 +1,10 @@
-name: PR Build Test
+name: PR Installation Test
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
 
 jobs:
-  build-and-test:
-    name: Build and Test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Prepare environment variables
-        id: env
-        run: |
-          # Set event type
-          echo "EVENT_TYPE=Pull Request" >> $GITHUB_ENV
-
-          # Set branch name (use head ref for PRs)
-          echo "BRANCH=${GITHUB_HEAD_REF}" >> $GITHUB_ENV
-
-          # Set commit information
-          echo "COMMIT_SHA=${GITHUB_SHA}" >> $GITHUB_ENV
-          echo "COMMIT_SHORT=${GITHUB_SHA:0:7}" >> $GITHUB_ENV
-
-          # Set repository
-          echo "REPO=${GITHUB_REPOSITORY}" >> $GITHUB_ENV
-
-          # Set PR information
-          echo "PR_NUMBER=${GITHUB_EVENT_PULL_REQUEST_NUMBER:-${GITHUB_EVENT_NUMBER}}" >> $GITHUB_ENV
-          echo "PR_URL=${GITHUB_EVENT_PULL_REQUEST_HTML_URL:-${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/pull/${GITHUB_EVENT_PULL_REQUEST_NUMBER:-${GITHUB_EVENT_NUMBER}}}" >> $GITHUB_ENV
-
-          # Set workflow run URL
-          echo "WORKFLOW_RUN_URL=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >> $GITHUB_ENV
-
-          # Set timestamp
-          echo "TIMESTAMP=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
-
-      - name: Run build tests
-        env:
-          CHANNEL: ${{ vars.SLACK_CHANNEL || secrets.SLACK_CHANNEL || '#test' }}
-          SLACK_BOT_USER_OAUTH_TOKEN: ${{ secrets.SLACK_BOT_USER_OAUTH_TOKEN }}
-          GITHUB_ACTIONS: true
-          EVENT_TYPE: ${{ env.EVENT_TYPE }}
-          BRANCH: ${{ env.BRANCH }}
-          COMMIT_SHA: ${{ env.COMMIT_SHA }}
-          COMMIT_SHORT: ${{ env.COMMIT_SHORT }}
-          REPO: ${{ env.REPO }}
-          PR_NUMBER: ${{ env.PR_NUMBER }}
-          PR_URL: ${{ env.PR_URL }}
-          WORKFLOW_RUN_URL: ${{ env.WORKFLOW_RUN_URL }}
-          TIMESTAMP: ${{ env.TIMESTAMP }}
-        run: |
-          chmod +x ci/build-tests.sh
-          ci/build-tests.sh
-
   install-test:
     name: Installation Test
     runs-on: ubuntu-latest
