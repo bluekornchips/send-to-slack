@@ -20,7 +20,7 @@ curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/bi
 
 Installs to `~/.local/bin/send-to-slack` and supporting files to `~/.local/lib/send-to-slack/`.
 
-**System installation (requires sudo):**
+System installation (requires sudo):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/bin/install.sh | sudo bash
@@ -46,25 +46,34 @@ echo 'alias send-to-slack="path/to/send-to-slack/bin/send-to-slack.sh"' >> ~/.ba
 
 ### Uninstallation
 
-Use the uninstall script to remove all installed files. For user-local installations:
+Use the uninstall script to remove all installed files. The script can work in two ways:
+
+1. Auto-detect installation (default): Finds the installation by resolving where the `send-to-slack` command points to:
 
 ```bash
-./bin/uninstall.sh ~/.local
+./bin/uninstall.sh
 ```
 
 For system installations:
 
 ```bash
+sudo ./bin/uninstall.sh
+```
+
+2. Specify prefix: Provide the installation prefix to uninstall from a specific location:
+
+```bash
+./bin/uninstall.sh ~/.local
 sudo ./bin/uninstall.sh /usr/local
 ```
 
-Or use `--force` flag for protected prefixes:
+Use `--force` flag for protected prefixes:
 
 ```bash
 sudo ./bin/uninstall.sh --force /usr/local
 ```
 
-The uninstall script uses the installation manifest at `$prefix/lib/send-to-slack/install_manifest.txt` to remove all files that were installed.
+The uninstall script removes the entire installation directory and the executable from bin/.
 
 ## Container Image
 

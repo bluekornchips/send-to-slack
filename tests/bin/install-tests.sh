@@ -177,8 +177,7 @@ run_installer() {
 @test "install:: outputs installation location" {
 	mock_network_tools
 	run_installer 2>&1 || true
-	# Check if it mentions /usr/local, even if installation failed due to permissions
-	echo "$output" | grep -q "/usr/local" || echo "$output" | grep -q "Installed send-to-slack to"
+	echo "$output" | grep -q "/send-to-slack/" || echo "$output" | grep -q "Installed send-to-slack to"
 }
 
 @test "install:: outputs resolved reference" {

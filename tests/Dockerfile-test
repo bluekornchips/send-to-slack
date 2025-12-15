@@ -8,8 +8,9 @@ WORKDIR /opt/resource
 COPY ./concourse/resource-type/scripts/check.sh /opt/resource/check
 COPY ./concourse/resource-type/scripts/in.sh /opt/resource/in
 COPY ./concourse/resource-type/scripts/out.sh /opt/resource/out
-COPY ./bin/send-to-slack.sh /opt/resource/send-to-slack.sh
+COPY ./bin/send-to-slack.sh /opt/resource/send-to-slack
 COPY ./lib/ /opt/resource/lib/
+COPY ./VERSION /opt/resource/VERSION
 
 ENV SEND_TO_SLACK_ROOT=/opt/resource
 
@@ -18,10 +19,9 @@ RUN apk add --no-cache make git shellcheck shfmt coreutils wget && \
 	git config --global --add safe.directory /workspace && \
 	wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 && \
 	chmod 755 /usr/local/bin/yq && \
-	(apk add --no-cache --repository=http://dl-cdn.alpinelinux.org/alpine/edge/community bats >/dev/null 2>&1 || \
-	(git clone --depth 1 https://github.com/bats-core/bats-core.git /tmp/bats-core >/dev/null 2>&1 && \
-	/tmp/bats-core/install.sh /usr/local >/dev/null 2>&1 && \
-	rm -rf /tmp/bats-core)) && \
+	(git clone --depth 1 https://github.com/bats-core/bats-core.git /tmp/bats-core && \
+	/tmp/bats-core/install.sh /usr/local && \
+	rm -rf /tmp/bats-core) && \
 	apk del wget && \
 	rm -rf /var/cache/apk/*
 

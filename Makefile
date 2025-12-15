@@ -8,6 +8,7 @@ test:
 		./concourse/resource-type/tests/*tests.sh \
 		./tests/lib/file-upload-tests.sh \
 		./tests/bin/install-tests.sh \
+		./tests/bin/uninstall-tests.sh \
 		./tests/lib/parse-payload-tests.sh \
 		./tests/lib/resolve-mentions-tests.sh \
 		./tests/bin/send-to-slack-tests.sh \
@@ -30,7 +31,7 @@ test-all:
 		./tests/lib/blocks/*tests.sh
 
 test-in-docker:
-	clear && DOCKER_IMAGE_TAG=local MAKE_COMMAND="make test" ./tests/run-tests-in-docker.sh
+	clear && ./tests/run-tests-in-docker.sh --make "make test"
 
 # concourse
 check-docker-deps:

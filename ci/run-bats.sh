@@ -64,12 +64,40 @@ filter_files() {
 	return 0
 }
 
+# Check for required external commands
+#
+# Returns:
+#   0 if all dependencies are available
+#   1 if any dependency is missing
+check_dependencies() {
+	local missing_deps=()
+	local required_commands=("git" "bats" "find" "grep")
+
+	for cmd in "${required_commands[@]}"; do
+		if ! command -v "$cmd" >/dev/null 2>&1; then
+			missing_deps+=("$cmd")
+		fi
+	done
+
+	if [[ ${#missing_deps[@]} -gt 0 ]]; then
+		echo "check_dependencies:: missing required dependencies: ${missing_deps[*]}" >&2
+		echo "check_dependencies:: please install missing dependencies and try again" >&2
+		return 1
+	fi
+
+	return 0
+}
+
 main() {
 	local base_ref
 	local current_branch
 	local all_changed_sh
 	local test_files
 	local test_files_list
+
+	if ! check_dependencies; then
+		return 1
+	fi
 
 	if [[ -n "${GITHUB_BASE_REF}" ]]; then
 		base_ref="${GITHUB_BASE_REF}"

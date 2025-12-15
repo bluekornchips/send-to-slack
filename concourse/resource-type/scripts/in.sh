@@ -32,7 +32,7 @@ main() {
 		rm -f "${payload}"
 		return 1
 	fi
-	trap 'rm -f "${payload}"' EXIT RETURN
+	trap 'rm -f "${payload}"' EXIT ERR RETURN
 
 	cat >"${payload}" <&0
 

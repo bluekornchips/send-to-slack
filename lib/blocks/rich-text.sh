@@ -32,7 +32,7 @@ handle_oversize_text() {
 		rm -f "$file_path"
 		return 1
 	fi
-	trap 'rm -f "$file_path"' RETURN EXIT
+	trap 'rm -f "$file_path"' RETURN EXIT ERR
 
 	# Write the extracted text to the file
 	echo "$extracted_text" >"$file_path"
@@ -108,7 +108,7 @@ create_rich_text() {
 		rm -f "$input_json"
 		return 1
 	fi
-	trap 'rm -f "$input_json"' RETURN EXIT
+	trap 'rm -f "$input_json"' RETURN EXIT ERR
 	echo "$input" >"$input_json"
 
 	if ! jq . "$input_json" >/dev/null 2>&1; then

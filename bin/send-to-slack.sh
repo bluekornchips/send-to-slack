@@ -387,7 +387,7 @@ crosspost_notification() {
 			rm -f "$temp_payload"
 			return 1
 		fi
-		trap 'rm -f "$temp_payload"' RETURN EXIT
+		trap 'rm -f "$temp_payload"' RETURN EXIT ERR
 		echo "$crosspost_payload" >"$temp_payload"
 
 		# Parse the payload
@@ -395,10 +395,12 @@ crosspost_notification() {
 		if ! parsed_payload=$(parse_payload "$temp_payload"); then
 			echo "crosspost_notification:: failed to parse payload for channel $channel" >&2
 			rm -f "$temp_payload"
+			trap - RETURN EXIT ERR
 			continue
 		fi
 
 		rm -f "$temp_payload"
+		trap - RETURN EXIT ERR
 
 		# Send the notification
 		if ! send_notification "$parsed_payload"; then
@@ -881,7 +883,7 @@ process_input() {
 	return 0
 }
 
-# Initialize script environment and locate bin directory
+# Initialize script environment and locate lib directory
 #
 # Side Effects:
 #   Sets SEND_TO_SLACK_ROOT and bin_dir variables
@@ -891,56 +893,69 @@ process_input() {
 #
 # Returns:
 #   0 on success
-#   1 if bin directory cannot be located
+#   1 if lib directory cannot be located
 initialize_script_environment() {
 	local script_dir
 	local bin_dir
-	local prefix_dir
-	local lib_dir
+
+	resolve_path() {
+		local p="$1"
+		if [[ "$p" != */* ]]; then
+			p=$(command -v "$p" 2>/dev/null || echo "$p")
+		fi
+
+		local count=0
+		while [[ -L "$p" && $count -lt 10 ]]; do
+			local target
+			target=$(readlink "$p")
+			if [[ "$target" == /* ]]; then
+				p="$target"
+			else
+				p="$(cd "$(dirname "$p")" && cd "$(dirname "$target")" && pwd)/$(basename "$target")"
+			fi
+			count=$((count + 1))
+		done
+		echo "$p"
+	}
 
 	if [[ -z "${SEND_TO_SLACK_ROOT}" ]]; then
-		script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-
-		# Check for source/Docker layout: script_dir/lib exists
-		if [[ -d "$script_dir/lib" ]] && [[ -f "$script_dir/lib/parse-payload.sh" ]]; then
-			SEND_TO_SLACK_ROOT="$script_dir"
-			bin_dir="$script_dir/lib"
-		# Check for installed layout: helper scripts are in same directory as script
-		# In this case, SEND_TO_SLACK_ROOT should be parent so bin/blocks paths resolve correctly
-		elif [[ -f "$script_dir/parse-payload.sh" ]] && [[ -d "$script_dir/blocks" ]]; then
-			SEND_TO_SLACK_ROOT=$(dirname "$script_dir")
-			bin_dir="$script_dir"
-		# Check for standard installation: script in bin/, supporting files in lib/
-		# e.g., /usr/local/bin/send-to-slack -> supporting files in /usr/local/lib/send-to-slack/
-		elif [[ "$script_dir" == */bin ]] || [[ "$script_dir" == */bin/* ]]; then
-			# Extract prefix
-			prefix_dir=$(dirname "$script_dir")
-			lib_dir="$prefix_dir/lib/send-to-slack"
-			if [[ -d "$lib_dir/bin" ]] && [[ -f "$lib_dir/bin/parse-payload.sh" ]]; then
-				SEND_TO_SLACK_ROOT="$lib_dir"
-				bin_dir="$lib_dir/bin"
-			else
-				echo "initialize_script_environment:: cannot locate bin directory. Script location: $script_dir, checked: $lib_dir/bin" >&2
-				return 1
-			fi
-		else
-			echo "initialize_script_environment:: cannot locate bin directory. Script location: $script_dir" >&2
+		local script_path
+		script_path=$(resolve_path "${BASH_SOURCE[0]}")
+		if [[ -z "$script_path" ]] || [[ ! -f "$script_path" ]]; then
+			echo "initialize_script_environment:: cannot determine script path" >&2
 			return 1
+		fi
+
+		script_dir=$(cd "$(dirname "$script_path")" && pwd)
+		if [[ -z "$script_dir" ]]; then
+			echo "initialize_script_environment:: cannot determine script directory" >&2
+			return 1
+		fi
+
+		SEND_TO_SLACK_ROOT="$script_dir"
+
+		# If we're in a bin/ directory, check if there's a send-to-slack directory in the parent
+		if [[ "$(basename "$SEND_TO_SLACK_ROOT")" == "bin" ]]; then
+			local parent_dir
+			parent_dir=$(dirname "$SEND_TO_SLACK_ROOT")
+			if [[ -d "$parent_dir/send-to-slack" ]] && [[ -f "$parent_dir/send-to-slack/send-to-slack" ]] && [[ -d "$parent_dir/send-to-slack/lib" ]]; then
+				SEND_TO_SLACK_ROOT="$parent_dir/send-to-slack"
+			fi
 		fi
 	fi
 
-	# Determine bin_dir if SEND_TO_SLACK_ROOT was set externally
-	if [[ -z "${bin_dir}" ]]; then
-		if [[ -d "${SEND_TO_SLACK_ROOT}/lib" ]] && [[ -f "${SEND_TO_SLACK_ROOT}/lib/parse-payload.sh" ]]; then
-			bin_dir="${SEND_TO_SLACK_ROOT}/lib"
-		elif [[ -d "${SEND_TO_SLACK_ROOT}/bin" ]] && [[ -f "${SEND_TO_SLACK_ROOT}/bin/parse-payload.sh" ]]; then
-			bin_dir="${SEND_TO_SLACK_ROOT}/bin"
-		elif [[ -f "${SEND_TO_SLACK_ROOT}/bin/parse-payload.sh" ]] && [[ -d "${SEND_TO_SLACK_ROOT}/bin/blocks" ]]; then
-			bin_dir="${SEND_TO_SLACK_ROOT}/bin"
-		else
-			echo "initialize_script_environment:: cannot locate parse-payload.sh in ${SEND_TO_SLACK_ROOT}" >&2
-			return 1
-		fi
+	# Validate that SEND_TO_SLACK_ROOT is set and valid
+	if [[ -z "${SEND_TO_SLACK_ROOT}" ]]; then
+		echo "initialize_script_environment:: SEND_TO_SLACK_ROOT is not set" >&2
+		return 1
+	fi
+
+	bin_dir="${SEND_TO_SLACK_ROOT}/lib"
+
+	# Validate bin_dir
+	if [[ ! -f "${bin_dir}/parse-payload.sh" ]]; then
+		echo "initialize_script_environment:: cannot locate parse-payload.sh (bin_dir: ${bin_dir})" >&2
+		return 1
 	fi
 
 	echo "$bin_dir"
@@ -1059,7 +1074,7 @@ main() {
 		return 1
 	fi
 
-	trap 'rm -f "$input_payload"' EXIT
+	trap 'rm -f "$input_payload"' EXIT ERR
 
 	timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
@@ -1095,14 +1110,17 @@ main() {
 		rm -f "${parsed_payload_file}"
 		return 1
 	fi
+	trap 'rm -f "${parsed_payload_file}"' RETURN EXIT ERR
 	if ! parse_payload "${input_payload}" >"${parsed_payload_file}"; then
 		echo "main:: failed to parse payload" >&2
 		rm -f "${parsed_payload_file}"
+		trap - RETURN EXIT ERR
 		return 1
 	fi
 	local parsed_payload
 	parsed_payload=$(cat "${parsed_payload_file}")
 	rm -f "${parsed_payload_file}"
+	trap - RETURN EXIT ERR
 
 	# Handle create_thread: send first block as regular message, then remaining blocks in thread
 	local create_thread

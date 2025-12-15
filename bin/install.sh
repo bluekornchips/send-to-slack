@@ -93,7 +93,7 @@ cleanup() {
 	return 0
 }
 
-trap cleanup EXIT
+trap cleanup EXIT ERR
 
 # Ensure required commands exist
 #
@@ -263,7 +263,6 @@ validate_prerequisites() {
 # Inputs:
 # - $1 - script_root: Root directory containing bin/send-to-slack.sh and lib/
 # - $2 - prefix: Installation prefix directory
-# - $3 - manifest_file: Manifest recording installed files
 #
 # Returns:
 # - 0 on success
@@ -271,73 +270,38 @@ validate_prerequisites() {
 install_files() {
 	local script_root="$1"
 	local prefix="$2"
-	local manifest_file="$3"
 	local install_root
-	local manifest_dir
-	local manifest_entries=()
 
-	# Install supporting files to $prefix/lib/send-to-slack/ maintaining repo structure
-	install_root="$prefix/lib/send-to-slack"
-	manifest_dir=$(dirname "$manifest_file")
-	install -d -m 755 "$install_root/bin/blocks"
-	install -d -m 755 "$manifest_dir"
+	install_root="$prefix/send-to-slack"
+	install -d -m 755 "$install_root/lib/blocks"
 	install -d -m 755 "$prefix/bin"
 
-	if [[ -L "$prefix/bin/send-to-slack" ]] || [[ -f "$prefix/bin/send-to-slack" ]]; then
+	# Install main executable to install_root
+	install -m 755 "$script_root/bin/send-to-slack.sh" "$install_root/send-to-slack"
+
+	# Copy executable to bin/ for PATH access
+	if [[ -f "$prefix/bin/send-to-slack" ]]; then
 		rm -f "$prefix/bin/send-to-slack"
 	fi
-	install -m 755 "$script_root/bin/send-to-slack.sh" "$prefix/bin/send-to-slack"
-	manifest_entries+=("$prefix/bin/send-to-slack")
+	install -m 755 "$install_root/send-to-slack" "$prefix/bin/send-to-slack"
 
 	# Install lib/ directory files (excluding blocks subdirectory)
 	for file in "$script_root/lib"/*; do
 		if [[ -f "$file" ]]; then
-			install -m 755 "$file" "$install_root/bin/"
-			manifest_entries+=("$install_root/bin/$(basename "$file")")
+			install -m 755 "$file" "$install_root/lib/"
 		fi
 	done
 
 	# Install lib/blocks/ directory files
 	for file in "$script_root/lib/blocks"/*; do
 		if [[ -f "$file" ]]; then
-			install -m 755 "$file" "$install_root/bin/blocks/"
-			manifest_entries+=("$install_root/bin/blocks/$(basename "$file")")
+			install -m 755 "$file" "$install_root/lib/blocks/"
 		fi
 	done
 
 	# Install VERSION file at root of install directory (matching repo structure)
 	if [[ -f "${script_root}/${VERSION_FILE_NAME}" ]]; then
 		install -m 644 "${script_root}/${VERSION_FILE_NAME}" "$install_root/${VERSION_FILE_NAME}"
-		manifest_entries+=("$install_root/${VERSION_FILE_NAME}")
-	fi
-
-	printf '%s\n' "${manifest_entries[@]}" >"$manifest_file"
-
-	return 0
-}
-
-# Perform installation from resolved script root
-#
-# Inputs:
-# - $1 - script_root: Root directory containing bin/send-to-slack.sh and lib/
-# - $2 - prefix: Installation prefix directory
-#
-# Returns:
-# - 0 on success
-# - 1 on failure
-perform_installation() {
-	local script_root="$1"
-	local prefix="$2"
-	local manifest_file
-
-	if ! validate_prerequisites "$script_root"; then
-		return 1
-	fi
-
-	manifest_file="$prefix/lib/send-to-slack/install_manifest.txt"
-
-	if ! install_files "$script_root" "$prefix" "$manifest_file"; then
-		return 1
 	fi
 
 	return 0
@@ -368,6 +332,30 @@ install_latest_main() {
 	RESOLVED_REF="${DEFAULT_REPO_BRANCH}"
 
 	if ! perform_installation "$script_root" "$prefix"; then
+		return 1
+	fi
+
+	return 0
+}
+
+# Perform installation from resolved script root
+#
+# Inputs:
+# - $1 - script_root: Root directory containing bin/send-to-slack.sh and lib/
+# - $2 - prefix: Installation prefix directory
+#
+# Returns:
+# - 0 on success
+# - 1 on failure
+perform_installation() {
+	local script_root="$1"
+	local prefix="$2"
+
+	if ! validate_prerequisites "$script_root"; then
+		return 1
+	fi
+
+	if ! install_files "$script_root" "$prefix"; then
 		return 1
 	fi
 
@@ -430,8 +418,8 @@ main() {
 		abort "Installation failed. See error messages above for details."
 	fi
 
-	echo "Installed send-to-slack to ${install_prefix}/bin/send-to-slack"
-	echo "Supporting files installed to ${install_prefix}/lib/send-to-slack/"
+	echo "Installed send-to-slack to ${install_prefix}/send-to-slack/"
+	echo "Executable available at ${install_prefix}/bin/send-to-slack"
 	echo "Resolved reference: ${RESOLVED_REF}"
 
 	return 0

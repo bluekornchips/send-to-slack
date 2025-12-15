@@ -41,7 +41,7 @@ create_table() {
 		rm -f "$input_json"
 		return 1
 	fi
-	trap 'rm -f "$input_json"' RETURN EXIT
+	trap 'rm -f "$input_json"' RETURN EXIT ERR
 	echo "$input" >"$input_json"
 
 	if ! jq . "$input_json" >/dev/null 2>&1; then

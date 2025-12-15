@@ -549,7 +549,7 @@ file_upload() {
 		rm -f "$upload_payload_file"
 		return 1
 	fi
-	trap 'rm -f "$upload_payload_file"' RETURN EXIT
+	trap 'rm -f "$upload_payload_file"' RETURN EXIT ERR
 
 	jq -n \
 		--arg file_id "$FILE_ID" \

@@ -51,7 +51,7 @@ DOC_URL_BLOCK_KIT_SECTION="https://docs.slack.dev/reference/block-kit/blocks/sec
 DOC_URL_BLOCK_KIT_VIDEO="https://docs.slack.dev/reference/block-kit/blocks/video-block"
 DOC_URL_LEGACY_ATTACHMENTS="https://api.slack.com/reference/messaging/payload#legacy"
 
-# Resolve script path, checking both lib/ and bin/ layouts
+# Resolve script path from SEND_TO_SLACK_ROOT
 #
 # Arguments:
 #   $1 - script_path: Relative path to script from SEND_TO_SLACK_ROOT (lib/ layout)
@@ -65,26 +65,9 @@ DOC_URL_LEGACY_ATTACHMENTS="https://api.slack.com/reference/messaging/payload#le
 _resolve_block_script_path() {
 	local script_path="$1"
 	local lib_path="${SEND_TO_SLACK_ROOT}/${script_path}"
-	local bin_path
 
-	# Convert lib/ paths to bin/ paths for installed layout
-	if [[ "$script_path" == lib/blocks/* ]]; then
-		bin_path="${SEND_TO_SLACK_ROOT}/${script_path/lib\/blocks/bin\/blocks}"
-	elif [[ "$script_path" == lib/file-upload.sh ]]; then
-		bin_path="${SEND_TO_SLACK_ROOT}/bin/file-upload.sh"
-	else
-		bin_path="${SEND_TO_SLACK_ROOT}/bin/$(basename "$script_path")"
-	fi
-
-	# Check lib/ layout first (source layout)
 	if [[ -f "$lib_path" ]]; then
 		echo "$lib_path"
-		return 0
-	fi
-
-	# Check bin/ layout (installed layout)
-	if [[ -f "$bin_path" ]]; then
-		echo "$bin_path"
 		return 0
 	fi
 
@@ -104,7 +87,7 @@ _validate_block_script() {
 	local resolved_path
 
 	if ! resolved_path=$(_resolve_block_script_path "$script_path"); then
-		echo "_validate_block_script:: block script not found: ${SEND_TO_SLACK_ROOT}/${script_path} (checked lib/ and bin/ layouts)" >&2
+		echo "_validate_block_script:: block script not found: ${SEND_TO_SLACK_ROOT}/${script_path}" >&2
 		return 1
 	fi
 
