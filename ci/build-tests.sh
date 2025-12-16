@@ -247,76 +247,142 @@ send_notification() {
 	temp_workspace="$(mktemp -d)"
 	trap 'rm -rf "$temp_workspace"' EXIT ERR
 
+	# Build context block with Event and Date
+	local context_block
+	context_block=$(jq -n \
+		--arg event_type "${EVENT_TYPE:-Build}" \
+		--arg timestamp "${TIMESTAMP:-unknown}" \
+		'{
+			type: "context",
+			elements: [
+				{
+					type: "plain_text",
+					text: "Event: \($event_type)"
+				},
+				{
+					type: "plain_text",
+					text: "Date: \($timestamp)"
+				}
+			]
+		}')
+
+	local table_block
+	local pr_url="${PR_URL:-}"
+	local branch_url=""
+	local commit_url=""
+	local workflow_url="${WORKFLOW_RUN_URL:-}"
+
+	if [[ -n "${REPO:-}" ]] && [[ "${REPO:-}" != "unknown" ]]; then
+		if [[ -n "${BRANCH:-}" ]] && [[ "${BRANCH:-}" != "unknown" ]]; then
+			branch_url="https://github.com/${REPO}/tree/${BRANCH}"
+		fi
+		if [[ -n "${COMMIT_SHA:-}" ]] && [[ "${COMMIT_SHA:-}" != "unknown" ]]; then
+			commit_url="https://github.com/${REPO}/commit/${COMMIT_SHA}"
+		fi
+	fi
+
+	# Build table rows with rich_text cells
+	local table_rows
+	table_rows=$(jq -n \
+		--arg pr_url "$pr_url" \
+		--arg pr_number "${PR_NUMBER:-}" \
+		--arg branch_url "$branch_url" \
+		--arg branch "${BRANCH:-unknown}" \
+		--arg commit_url "$commit_url" \
+		--arg commit "${COMMIT_SHORT:-unknown}" \
+		--arg workflow_url "$workflow_url" \
+		'[
+			[
+				{
+					type: "rich_text",
+					elements: [
+						{
+							type: "rich_text_section",
+							elements: (if $pr_url != "" then [{
+								type: "link",
+								url: $pr_url,
+								text: (if $pr_number != "" then "#\($pr_number)" else "PR" end)
+							}] else [{
+								type: "text",
+								text: (if $pr_number != "" then "#\($pr_number)" else "N/A" end)
+							}] end)
+						}
+					]
+				},
+				{
+					type: "rich_text",
+					elements: [
+						{
+							type: "rich_text_section",
+							elements: (if $branch_url != "" then [{
+								type: "link",
+								url: $branch_url,
+								text: $branch
+							}] else [{
+								type: "text",
+								text: $branch
+							}] end)
+						}
+					]
+				}
+			],
+			[
+				{
+					type: "rich_text",
+					elements: [
+						{
+							type: "rich_text_section",
+							elements: (if $commit_url != "" then [{
+								type: "link",
+								url: $commit_url,
+								text: $commit
+							}] else [{
+								type: "text",
+								text: $commit
+							}] end)
+						}
+					]
+				},
+				{
+					type: "rich_text",
+					elements: [
+						{
+							type: "rich_text_section",
+							elements: (if $workflow_url != "" then [{
+								type: "link",
+								url: $workflow_url,
+								text: "View Workflow"
+							}] else [{
+								type: "text",
+								text: "N/A"
+							}] end)
+						}
+					]
+				}
+			]
+		]')
+
+	# Create table block
+	table_block=$(jq -n \
+		--argjson rows "$table_rows" \
+		'{
+			type: "table",
+			rows: $rows
+		}')
+
+	# Combine blocks: context block, then table block, then success message
 	local blocks_json
 	blocks_json=$(jq -n \
-		--arg branch "${BRANCH:-unknown}" \
-		--arg commit "${COMMIT_SHORT:-unknown}" \
-		--arg timestamp "${TIMESTAMP:-unknown}" \
+		--argjson context "$context_block" \
+		--argjson table "$table_block" \
 		'[
-			{
-				type: "context",
-				elements: [
-					{
-						type: "plain_text",
-						text: "Branch: \($branch)"
-					},
-					{
-						type: "plain_text",
-						text: "Commit: \($commit)"
-					},
-					{
-						type: "plain_text",
-						text: "Time: \($timestamp)"
-					}
-				]
-			},
+			$context,
+			$table,
 			{
 				type: "markdown",
 				text: "The build test completed successfully."
 			}
 		]')
-
-	# Add GitHub Actions context block if in GHA mode
-	if [[ -n "${GITHUB_ACTIONS:-}" ]] && [[ -n "${EVENT_TYPE:-}" ]]; then
-		local gha_context_block
-		local elements_array
-		elements_array=$(jq -n \
-			--arg event_type "${EVENT_TYPE:-}" \
-			'[{
-				type: "plain_text",
-				text: "Event: \($event_type)"
-			}]')
-
-		# Add workflow URL element if available
-		if [[ -n "${WORKFLOW_RUN_URL:-}" ]]; then
-			elements_array=$(echo "$elements_array" | jq \
-				--arg workflow_url "${WORKFLOW_RUN_URL:-}" \
-				'. += [{
-					type: "plain_text",
-					text: "Workflow: \($workflow_url)"
-				}]')
-		fi
-
-		# Add PR info if available
-		if [[ -n "${PR_NUMBER:-}" ]] && [[ -n "${PR_URL:-}" ]]; then
-			elements_array=$(echo "$elements_array" | jq \
-				--arg pr_number "${PR_NUMBER:-}" \
-				'. += [{
-					type: "plain_text",
-					text: "PR: #\($pr_number)"
-				}]')
-		fi
-
-		gha_context_block=$(jq -n \
-			--argjson elements "$elements_array" \
-			'{
-				type: "context",
-				elements: $elements
-			}')
-
-		# Insert GHA context block at the beginning (before the existing context block)
-		blocks_json=$(echo "$blocks_json" | jq --argjson gha_block "$gha_context_block" '. |= [$gha_block] + .')
-	fi
 
 	# Create payload JSON
 	payload_file=$(mktemp)
