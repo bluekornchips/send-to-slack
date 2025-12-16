@@ -120,6 +120,13 @@ jobs:
           export HOME="/tmp/test-home"
           export PATH="$HOME/.local/bin:$PATH"
 
+          # Skip sending notification if token is not available (PRs from forks)
+          if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
+            echo "SLACK_BOT_USER_OAUTH_TOKEN not available (secrets not accessible in PRs from forks)"
+            echo "Skipping Slack notification test. Installation verification completed successfully"
+            exit 0
+          fi
+
           # Create a test payload
           TEST_PAYLOAD=$(mktemp)
           cat > "$TEST_PAYLOAD" <<EOF

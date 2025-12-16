@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 #
-# Test file for bin/parse-payload.sh
+# Test file for lib/parse-payload.sh
 # Tests the new color-based attachment behavior
 #
 
@@ -11,7 +11,7 @@ setup_file() {
 		exit 1
 	fi
 
-	SCRIPT="$GIT_ROOT/bin/parse-payload.sh"
+	SCRIPT="$GIT_ROOT/lib/parse-payload.sh"
 	if [[ ! -f "$SCRIPT" ]]; then
 		echo "Script not found: $SCRIPT" >&2
 		exit 1
