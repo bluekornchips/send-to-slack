@@ -120,11 +120,15 @@ jobs:
           export HOME="/tmp/test-home"
           export PATH="$HOME/.local/bin:$PATH"
 
-          # Skip sending notification if token is not available (PRs from forks)
+          # Use dry_run if token is not available (PRs from forks)
           if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
             echo "SLACK_BOT_USER_OAUTH_TOKEN not available (secrets not accessible in PRs from forks)"
-            echo "Skipping Slack notification test. Installation verification completed successfully"
-            exit 0
+            echo "Running in dry_run mode to verify installation without sending to Slack"
+            DRY_RUN_VALUE="true"
+            TOKEN_VALUE="xoxb-dry-run-token"
+          else
+            DRY_RUN_VALUE="false"
+            TOKEN_VALUE="${SLACK_BOT_USER_OAUTH_TOKEN}"
           fi
 
           # Create a test payload
@@ -132,11 +136,11 @@ jobs:
           cat > "$TEST_PAYLOAD" <<EOF
           {
             "source": {
-              "slack_bot_user_oauth_token": "${SLACK_BOT_USER_OAUTH_TOKEN}"
+              "slack_bot_user_oauth_token": "${TOKEN_VALUE}"
             },
             "params": {
               "channel": "${CHANNEL}",
-              "dry_run": "false",
+              "dry_run": "${DRY_RUN_VALUE}",
               "blocks": [
                 {
                   "type": "context",
