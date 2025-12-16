@@ -1944,6 +1944,9 @@ create_test_payload() {
 
 	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
 
+	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
+	export INPUT_PAYLOAD
+
 	run _log_sanitized_payload
 	[[ "$status" -eq 0 ]]
 

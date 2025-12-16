@@ -942,6 +942,15 @@ initialize_script_environment() {
 				SEND_TO_SLACK_ROOT="$parent_dir/send-to-slack"
 			fi
 		fi
+
+		# If the script itself is named "send-to-slack" (not "send-to-slack.sh"), 
+		# and we're in a send-to-slack directory, that's the root
+		if [[ "$(basename "$SEND_TO_SLACK_ROOT")" == "send-to-slack" ]] && [[ -f "${SEND_TO_SLACK_ROOT}/send-to-slack" ]] && [[ -d "${SEND_TO_SLACK_ROOT}/lib" ]]; then
+			# This is already the correct root
+			:
+		fi
+
+		export SEND_TO_SLACK_ROOT
 	fi
 
 	# Validate that SEND_TO_SLACK_ROOT is set and valid
