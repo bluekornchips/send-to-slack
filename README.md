@@ -18,7 +18,7 @@ Install to `~/.local` (default, no sudo required):
 curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/bin/install.sh | bash
 ```
 
-Installs to `~/.local/bin/send-to-slack` and supporting files to `~/.local/lib/send-to-slack/`.
+Installs to `~/.local/bin/send-to-slack` and supporting files to `~/.local/bin/lib/`.
 
 System installation (requires sudo):
 
@@ -26,7 +26,7 @@ System installation (requires sudo):
 curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/bin/install.sh | sudo bash
 ```
 
-Installs to `/usr/local/bin/send-to-slack` and supporting files to `/usr/local/lib/send-to-slack/`.
+Installs to `/usr/local/bin/send-to-slack` and supporting files to `/usr/local/bin/lib/`.
 
 ### From Source
 
