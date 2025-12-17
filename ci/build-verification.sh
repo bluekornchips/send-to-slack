@@ -217,7 +217,8 @@ build_image() {
 	build_repo="${GITHUB_REPOSITORY:-}"
 	build_branch="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-}}"
 
-	if [[ -z "${GITHUB_ACTIONS:-}" ]] && command -v git >/dev/null 2>&1; then
+	# Detect branch from git if not set and not in GitHub Actions
+	if [[ -z "$build_branch" ]] && [[ -z "${GITHUB_ACTIONS:-}" ]] && command -v git >/dev/null 2>&1; then
 		build_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')
 	fi
 
@@ -229,12 +230,14 @@ build_image() {
 		fi
 	fi
 
-	if [[ -z "$build_branch" ]] && command -v git >/dev/null 2>/dev/null; then
-		build_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')
-	fi
-
 	build_repo="${build_repo:-bluekornchips/send-to-slack}"
 	build_branch="${build_branch:-main}"
+
+	# Display detected values for remote builds
+	if [[ "$DOCKERFILE_TYPE" == "remote" ]]; then
+		echo "build_image:: detected repository: ${build_repo}"
+		echo "build_image:: detected branch: ${build_branch}"
+	fi
 
 	local image_ref
 	if [[ "$DOCKER_IMAGE_TAG" == *:* ]]; then
@@ -258,6 +261,7 @@ build_image() {
 			--build-arg "GITHUB_REPOSITORY=${build_repo}"
 			--build-arg "GITHUB_REF_NAME=${build_branch}"
 		)
+		echo "build_image:: passing build args: GITHUB_REPOSITORY=${build_repo}, GITHUB_REF_NAME=${build_branch}"
 	fi
 
 	# Use no-cache by default
