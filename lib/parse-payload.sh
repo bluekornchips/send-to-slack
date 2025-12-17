@@ -65,6 +65,11 @@ _find_root_dir() {
 	local lib_dir
 	local root_dir
 
+	if [[ -z "${BASH_SOURCE[0]:-}" ]]; then
+		echo "_find_root_dir:: BASH_SOURCE[0] is not set" >&2
+		return 1
+	fi
+
 	lib_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 	if [[ -z "$lib_dir" ]]; then
 		echo "_find_root_dir:: cannot determine lib directory" >&2
@@ -72,6 +77,10 @@ _find_root_dir() {
 	fi
 
 	root_dir=$(dirname "$lib_dir")
+	if [[ -z "$root_dir" ]]; then
+		echo "_find_root_dir:: cannot determine root directory from lib_dir: ${lib_dir}" >&2
+		return 1
+	fi
 
 	echo "$root_dir"
 	return 0
@@ -98,7 +107,6 @@ _resolve_block_script_path() {
 	fi
 
 	full_path="${root_dir}/${script_path}"
-
 	if [[ -f "$full_path" ]]; then
 		echo "$full_path"
 		return 0

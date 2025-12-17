@@ -135,7 +135,6 @@ teardown() {
 		return 1
 	fi
 
-	="$GIT_ROOT"
 	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "version"
@@ -225,7 +224,6 @@ teardown() {
 		return 1
 	fi
 
-	="$GIT_ROOT"
 	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "version"
@@ -305,7 +303,6 @@ teardown() {
 		return 1
 	fi
 
-	="$GIT_ROOT"
 	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "version"
@@ -379,7 +376,6 @@ teardown() {
 		return 1
 	fi
 
-	="$GIT_ROOT"
 	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "version"
@@ -437,7 +433,6 @@ teardown() {
 		return 1
 	fi
 
-	="$GIT_ROOT"
 	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "version"
@@ -533,7 +528,6 @@ teardown() {
 		return 1
 	fi
 
-	="$GIT_ROOT"
 	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "version"
@@ -620,7 +614,6 @@ teardown() {
 		return 1
 	fi
 
-	="$GIT_ROOT"
 	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "version"
@@ -676,7 +669,6 @@ teardown() {
 		return 1
 	fi
 
-	="$GIT_ROOT"
 	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "version"
@@ -739,7 +731,6 @@ teardown() {
 		return 1
 	fi
 
-	="$GIT_ROOT"
 	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "version"
@@ -802,7 +793,6 @@ teardown() {
 		return 1
 	fi
 
-	="$GIT_ROOT"
 	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "version"

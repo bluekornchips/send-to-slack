@@ -501,13 +501,12 @@ send_notification() {
 	echo "Sending notification to channel: ${CHANNEL}"
 	docker run --rm \
 		--platform linux/amd64 \
-		--entrypoint /bin/bash \
 		-v "${temp_workspace}:/workspace" \
-		-e CHANNEL="$CHANNEL" \
-		-e SLACK_BOT_USER_OAUTH_TOKEN="$SLACK_BOT_USER_OAUTH_TOKEN" \
+		-e CHANNEL="${CHANNEL}" \
+		-e SLACK_BOT_USER_OAUTH_TOKEN="${SLACK_BOT_USER_OAUTH_TOKEN}" \
 		-w /workspace \
 		"$image_ref" \
-		-c "cd /workspace && (command -v send-to-slack >/dev/null 2>&1 && send-to-slack < /workspace/payload.json || send-to-slack.sh < /workspace/payload.json)"
+		/usr/local/bin/send-to-slack -f /workspace/payload.json
 
 	local exit_code=$?
 	rm -rf "$temp_workspace"

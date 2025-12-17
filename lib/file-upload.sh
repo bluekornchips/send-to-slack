@@ -591,7 +591,7 @@ file_upload() {
 		}' >"$upload_payload_file"
 
 	echo "file_upload:: complete upload payload:" >&2
-	cat "$upload_payload_file" | jq . >&2
+	jq . <"$upload_payload_file" >&2
 
 	API_URL="https://slack.com/api/files.completeUploadExternal?channel_id=${CHANNEL}"
 	export API_URL
