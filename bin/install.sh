@@ -196,6 +196,9 @@ download_and_unpack() {
 
 	if [[ ${#dirs[@]} -eq 0 ]]; then
 		echo "download_and_unpack:: failed to locate extracted directory with expected files" >&2
+		echo "download_and_unpack:: searched in: ${temp_dir}" >&2
+		echo "download_and_unpack:: found directories:" >&2
+		find "$temp_dir" -maxdepth 1 -mindepth 1 -type d -exec ls -la {} \; >&2 || true
 		return 1
 	fi
 
@@ -245,28 +248,30 @@ validate_prerequisites() {
 install_files() {
 	local script_root="$1"
 	local prefix="$2"
-	local bin_dir="${prefix}/bin"
-	local lib_dir="${bin_dir}/lib"
+	local install_dir="${prefix}/bin/send-to-slack"
+	local lib_dir="${install_dir}/lib"
 
-	echo "install_files:: installing to ${prefix}"
+	echo "install_files:: installing to ${install_dir}"
 
-	# Install executable directly to bin/
-	if ! install -d -m 755 "$bin_dir"; then
-		echo "install_files:: failed to create bin directory: ${bin_dir}" >&2
+	# Create installation directory
+	if ! install -d -m 755 "$install_dir"; then
+		echo "install_files:: failed to create installation directory: ${install_dir}" >&2
 		return 1
 	fi
 
-	if ! install -m 755 "$script_root/send-to-slack.sh" "$bin_dir/send-to-slack"; then
+	# Install executable
+	if ! install -m 755 "$script_root/send-to-slack.sh" "$install_dir/send-to-slack"; then
 		echo "install_files:: failed to install executable" >&2
 		return 1
 	fi
 
-	# Install lib files to bin/lib/ (relative to executable location)
+	# Install lib directory structure
 	if ! install -d -m 755 "$lib_dir/blocks"; then
 		echo "install_files:: failed to create lib directory: ${lib_dir}/blocks" >&2
 		return 1
 	fi
 
+	# Install lib files
 	for file in "$script_root/lib"/*; do
 		if [[ -f "$file" ]]; then
 			if ! install -m 755 "$file" "$lib_dir/"; then
@@ -285,9 +290,9 @@ install_files() {
 		fi
 	done
 
-	# Install VERSION file next to executable
+	# Install VERSION file
 	if [[ -f "${script_root}/${VERSION_FILE_NAME}" ]]; then
-		if ! install -m 644 "${script_root}/${VERSION_FILE_NAME}" "$bin_dir/${VERSION_FILE_NAME}"; then
+		if ! install -m 644 "${script_root}/${VERSION_FILE_NAME}" "$install_dir/${VERSION_FILE_NAME}"; then
 			echo "install_files:: failed to install VERSION file" >&2
 			return 1
 		fi
@@ -377,39 +382,40 @@ main() {
 	done
 
 	install_prefix=$(determine_install_prefix)
+	install_dir="${install_prefix}/bin/send-to-slack"
 
 	echo "main:: this script will install:"
-	echo "main::   ${install_prefix}/bin/send-to-slack"
-	echo "main::   ${install_prefix}/bin/lib/"
+	echo "main::   ${install_dir}/send-to-slack"
+	echo "main::   ${install_dir}/lib/"
 
 	if ! install_latest_main "$install_prefix"; then
 		echo "main:: installation failed. See error messages above for details." >&2
 		return 1
 	fi
 
-	echo "main:: installed send-to-slack to ${install_prefix}/bin/"
-	echo "main:: executable available at ${install_prefix}/bin/send-to-slack"
+	echo "main:: installed send-to-slack to ${install_dir}"
+	echo "main:: executable available at ${install_dir}/send-to-slack"
 	echo "main:: resolved reference: ${RESOLVED_REF}"
 
-	if [[ ":${PATH}:" != *":${install_prefix}/bin:"* ]]; then
-		echo "main:: ${install_prefix}/bin is not in your PATH." >&2
+	if [[ ":${PATH}:" != *":${install_dir}:"* ]]; then
+		echo "main:: ${install_dir} is not in your PATH." >&2
 		echo "main:: add it to your PATH by running:"
-		echo "main::   export PATH=\"${install_prefix}/bin:\$PATH\""
+		echo "main::   export PATH=\"${install_dir}:\$PATH\""
 		echo
 		echo "main:: to make this permanent, add the above line to your shell configuration file:"
 		case "${SHELL}" in
 		*/bash*)
 			if [[ "$(uname)" == "Linux" ]]; then
-				echo "main::   echo 'export PATH=\"${install_prefix}/bin:\$PATH\"' >> ~/.bashrc"
+				echo "main::   echo 'export PATH=\"${install_dir}:\$PATH\"' >> ~/.bashrc"
 			else
-				echo "main::   echo 'export PATH=\"${install_prefix}/bin:\$PATH\"' >> ~/.bash_profile"
+				echo "main::   echo 'export PATH=\"${install_dir}:\$PATH\"' >> ~/.bash_profile"
 			fi
 			;;
 		*/zsh*)
-			echo "main::   echo 'export PATH=\"${install_prefix}/bin:\$PATH\"' >> ~/.zshrc"
+			echo "main::   echo 'export PATH=\"${install_dir}:\$PATH\"' >> ~/.zshrc"
 			;;
 		*)
-			echo "main::   echo 'export PATH=\"${install_prefix}/bin:\$PATH\"' >> ~/.profile"
+			echo "main::   echo 'export PATH=\"${install_dir}:\$PATH\"' >> ~/.profile"
 			;;
 		esac
 	fi

@@ -64,13 +64,20 @@ DOC_URL_LEGACY_ATTACHMENTS="https://api.slack.com/reference/messaging/payload#le
 _find_root_dir() {
 	local lib_dir
 	local root_dir
+	local script_path
 
 	if [[ -z "${BASH_SOURCE[0]:-}" ]]; then
 		echo "_find_root_dir:: BASH_SOURCE[0] is not set" >&2
 		return 1
 	fi
 
-	lib_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+	# Get the absolute path of the directory containing this script
+	script_path="${BASH_SOURCE[0]}"
+	if [[ ! "$script_path" = /* ]]; then
+		script_path=$(cd "$(dirname "$script_path")" && pwd)/$(basename "$script_path")
+	fi
+
+	lib_dir=$(cd "$(dirname "$script_path")" && pwd)
 	if [[ -z "$lib_dir" ]]; then
 		echo "_find_root_dir:: cannot determine lib directory" >&2
 		return 1

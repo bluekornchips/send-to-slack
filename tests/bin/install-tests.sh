@@ -177,7 +177,7 @@ run_installer() {
 @test "install:: outputs installation location" {
 	mock_network_tools
 	run_installer 2>&1 || true
-	echo "$output" | grep -q "/bin/lib/" || echo "$output" | grep -q "Installed send-to-slack to" || echo "$output" | grep -q "/bin/send-to-slack"
+	echo "$output" | grep -q "Installed send-to-slack to" || echo "$output" | grep -q "/send-to-slack"
 }
 
 @test "install:: outputs resolved reference" {

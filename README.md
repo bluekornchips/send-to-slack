@@ -18,7 +18,7 @@ Install to `~/.local` (default, no sudo required):
 curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/bin/install.sh | bash
 ```
 
-Installs to `~/.local/bin/send-to-slack` and supporting files to `~/.local/bin/lib/`.
+Installs to `~/.local/bin/send-to-slack/` directory with executable at `~/.local/bin/send-to-slack/send-to-slack` and supporting files in `~/.local/bin/send-to-slack/lib/`.
 
 System installation (requires sudo):
 
@@ -26,7 +26,55 @@ System installation (requires sudo):
 curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/bin/install.sh | sudo bash
 ```
 
-Installs to `/usr/local/bin/send-to-slack` and supporting files to `/usr/local/bin/lib/`.
+Installs to `/usr/local/bin/send-to-slack/` directory with executable at `/usr/local/bin/send-to-slack/send-to-slack` and supporting files in `/usr/local/bin/send-to-slack/lib/`.
+
+#### Installation Directory Structure
+
+User installation (`~/.local/bin/send-to-slack/`):
+
+```
+~/.local/bin/send-to-slack/
+├── send-to-slack          # Main executable
+├── VERSION                # Version file
+└── lib/                   # Library files
+    ├── parse-payload.sh
+    ├── file-upload.sh
+    ├── resolve-mentions.sh
+    └── blocks/            # Block type scripts
+        ├── actions.sh
+        ├── context.sh
+        ├── divider.sh
+        ├── header.sh
+        ├── image.sh
+        ├── markdown.sh
+        ├── rich-text.sh
+        ├── section.sh
+        ├── table.sh
+        └── video.sh
+```
+
+System installation (`/usr/local/bin/send-to-slack/`):
+
+```
+/usr/local/bin/send-to-slack/
+├── send-to-slack          # Main executable
+├── VERSION                # Version file
+└── lib/                   # Library files
+    ├── parse-payload.sh
+    ├── file-upload.sh
+    ├── resolve-mentions.sh
+    └── blocks/            # Block type scripts
+        ├── actions.sh
+        ├── context.sh
+        ├── divider.sh
+        ├── header.sh
+        ├── image.sh
+        ├── markdown.sh
+        ├── rich-text.sh
+        ├── section.sh
+        ├── table.sh
+        └── video.sh
+```
 
 ### From Source
 

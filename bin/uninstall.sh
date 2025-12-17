@@ -100,12 +100,10 @@ find_installation_directory() {
 
 	install_dir=$(cd "$(dirname "$resolved_path")" && pwd)
 
-	# If we're in a bin/ directory, check if there's a send-to-slack directory in the parent
+	# If we're in a bin/ directory, check if there's a send-to-slack directory here
 	if [[ "$(basename "$install_dir")" == "bin" ]]; then
-		local parent_dir
-		parent_dir=$(dirname "$install_dir")
-		if [[ -d "$parent_dir/send-to-slack" ]] && [[ -f "$parent_dir/send-to-slack/send-to-slack" ]] && [[ -d "$parent_dir/send-to-slack/lib" ]]; then
-			install_dir="$parent_dir/send-to-slack"
+		if [[ -d "$install_dir/send-to-slack" ]] && [[ -f "$install_dir/send-to-slack/send-to-slack" ]] && [[ -d "$install_dir/send-to-slack/lib" ]]; then
+			install_dir="$install_dir/send-to-slack"
 		fi
 	fi
 
@@ -163,7 +161,7 @@ main() {
 
 	# If prefix provided, use it directly; otherwise find by resolving command
 	if [[ -n "$prefix" ]]; then
-		install_dir="$prefix/send-to-slack"
+		install_dir="$prefix/bin/send-to-slack"
 		if [[ ! -d "$install_dir" ]]; then
 			echo "uninstall:: installation directory not found: $install_dir" >&2
 			return 1

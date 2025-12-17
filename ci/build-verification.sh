@@ -508,8 +508,8 @@ send_notification() {
 		send_to_slack_cmd="send-to-slack"
 		;;
 	*)
-		# Default and remote Dockerfiles install to /usr/local/bin
-		send_to_slack_cmd="/usr/local/bin/send-to-slack"
+		# Default and remote Dockerfiles install to /usr/local/bin/send-to-slack
+		send_to_slack_cmd="/usr/local/bin/send-to-slack/send-to-slack"
 		;;
 	esac
 

@@ -84,18 +84,18 @@ jobs:
           bash /tmp/install.sh
 
           # Verify installation
-          if [[ ! -f "$HOME/.local/bin/send-to-slack" ]]; then
-            echo "Installation failed: send-to-slack not found at $HOME/.local/bin/send-to-slack" >&2
+          if [[ ! -f "$HOME/.local/bin/send-to-slack/send-to-slack" ]]; then
+            echo "Installation failed: send-to-slack not found at $HOME/.local/bin/send-to-slack/send-to-slack" >&2
             exit 1
           fi
 
-          if [[ ! -d "$HOME/.local/send-to-slack" ]]; then
-            echo "Installation failed: send-to-slack directory not found at $HOME/.local/send-to-slack" >&2
+          if [[ ! -d "$HOME/.local/bin/send-to-slack/lib" ]]; then
+            echo "Installation failed: lib directory not found at $HOME/.local/bin/send-to-slack/lib" >&2
             exit 1
           fi
 
           # Test that the installed version works
-          "$HOME/.local/bin/send-to-slack" --help > /dev/null || {
+          "$HOME/.local/bin/send-to-slack/send-to-slack" --help > /dev/null || {
             echo "Installed send-to-slack --help failed" >&2
             exit 1
           }
@@ -118,7 +118,7 @@ jobs:
           TIMESTAMP: ${{ env.TIMESTAMP }}
         run: |
           export HOME="/tmp/test-home"
-          export PATH="$HOME/.local/bin:$PATH"
+          export PATH="$HOME/.local/bin/send-to-slack:$PATH"
 
           # Use dry_run if token is not available (PRs from forks)
           if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
