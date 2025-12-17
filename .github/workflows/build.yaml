@@ -67,7 +67,7 @@ jobs:
         run: |
           docker build --platform linux/amd64 -t send-to-slack:test-local -f Docker/Dockerfile .
           IMAGE_ID=$(docker images --format "{{.ID}}" send-to-slack:test-local | head -n1)
-          tests/ci/build-tests.sh --image "$IMAGE_ID"
+          ./ci/build-verification.sh --image "$IMAGE_ID"
 
       - name: Build and test Dockerfile.remote
         env:
@@ -86,7 +86,7 @@ jobs:
         run: |
           docker build --platform linux/amd64 -t send-to-slack:test-dockerfile -f Docker/Dockerfile.remote .
           IMAGE_ID=$(docker images --format "{{.ID}}" send-to-slack:test-dockerfile | head -n1)
-          tests/ci/build-tests.sh --image "$IMAGE_ID"
+          ./ci/build-verification.sh --image "$IMAGE_ID"
 
       - name: Build and test Dockerfile.concourse
         env:
@@ -105,4 +105,4 @@ jobs:
         run: |
           docker build --platform linux/amd64 -t send-to-slack:test-concourse -f Docker/Dockerfile.concourse .
           IMAGE_ID=$(docker images --format "{{.ID}}" send-to-slack:test-concourse | head -n1)
-          tests/ci/build-tests.sh --image "$IMAGE_ID"
+          ./ci/build-verification.sh --image "$IMAGE_ID"
