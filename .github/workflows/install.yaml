@@ -1,0 +1,174 @@
+name: PR Installation Test
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  install-test:
+    name: Installation Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Prepare environment variables
+        id: env
+        run: |
+          # Set event type
+          echo "EVENT_TYPE=Pull Request" >> $GITHUB_ENV
+
+          # Set branch name (use head ref for PRs)
+          echo "BRANCH=${GITHUB_HEAD_REF}" >> $GITHUB_ENV
+
+          # Set commit information
+          echo "COMMIT_SHA=${GITHUB_SHA}" >> $GITHUB_ENV
+          echo "COMMIT_SHORT=${GITHUB_SHA:0:7}" >> $GITHUB_ENV
+
+          # Set repository
+          echo "REPO=${GITHUB_REPOSITORY}" >> $GITHUB_ENV
+
+          # Set PR information (read from event JSON file)
+          PR_NUMBER=$(jq -r '.pull_request.number // empty' "$GITHUB_EVENT_PATH" 2>/dev/null || echo '')
+          PR_URL=$(jq -r '.pull_request.html_url // empty' "$GITHUB_EVENT_PATH" 2>/dev/null || echo '')
+          if [[ -z "$PR_URL" ]] && [[ -n "$PR_NUMBER" ]]; then
+            PR_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/pull/${PR_NUMBER}"
+          fi
+          echo "PR_NUMBER=${PR_NUMBER}" >> $GITHUB_ENV
+          echo "PR_URL=${PR_URL}" >> $GITHUB_ENV
+
+          # Set workflow run URL
+          echo "WORKFLOW_RUN_URL=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >> $GITHUB_ENV
+
+          # Set timestamp
+          echo "TIMESTAMP=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
+
+      - name: Fetch and modify install script for PR branch
+        run: |
+          INSTALL_SCRIPT_URL="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_HEAD_REF}/bin/install.sh"
+          echo "Fetching install script from: ${INSTALL_SCRIPT_URL}"
+
+          # Fetch the install script
+          curl -fsSL "${INSTALL_SCRIPT_URL}" -o /tmp/install.sh
+
+          # Modify the script to use the PR branch instead of main
+          # Replace DEFAULT_REPO_BRANCH="main" with the PR branch (handle various quote styles)
+          sed -i "s/DEFAULT_REPO_BRANCH=\"main\"/DEFAULT_REPO_BRANCH=\"${GITHUB_HEAD_REF}\"/" /tmp/install.sh
+          sed -i "s/DEFAULT_REPO_BRANCH='main'/DEFAULT_REPO_BRANCH='${GITHUB_HEAD_REF}'/" /tmp/install.sh
+
+          chmod +x /tmp/install.sh
+
+          # Verify the modification worked
+          if ! grep -q "DEFAULT_REPO_BRANCH.*${GITHUB_HEAD_REF}" /tmp/install.sh; then
+            echo "Failed to modify install script for PR branch" >&2
+            echo "Current DEFAULT_REPO_BRANCH line:" >&2
+            grep "DEFAULT_REPO_BRANCH" /tmp/install.sh >&2 || echo "Not found" >&2
+            exit 1
+          fi
+
+          echo "Successfully modified install script to use branch: ${GITHUB_HEAD_REF}"
+
+      - name: Run installation from PR branch
+        run: |
+          # Install to a test directory (not system directories)
+          export HOME="/tmp/test-home"
+          mkdir -p "$HOME"
+
+          # Run the modified install script
+          bash /tmp/install.sh
+
+          # Verify installation
+          if [[ ! -f "$HOME/.local/bin/send-to-slack" ]]; then
+            echo "Installation failed: send-to-slack not found at $HOME/.local/bin/send-to-slack" >&2
+            exit 1
+          fi
+
+          if [[ ! -d "$HOME/.local/send-to-slack" ]]; then
+            echo "Installation failed: send-to-slack directory not found at $HOME/.local/send-to-slack" >&2
+            exit 1
+          fi
+
+          # Test that the installed version works
+          "$HOME/.local/bin/send-to-slack" --help > /dev/null || {
+            echo "Installed send-to-slack --help failed" >&2
+            exit 1
+          }
+
+          echo "Installation test completed successfully"
+
+      - name: Test installed version with notification
+        env:
+          CHANNEL: ${{ vars.SLACK_CHANNEL || secrets.SLACK_CHANNEL || '#test' }}
+          SLACK_BOT_USER_OAUTH_TOKEN: ${{ secrets.SLACK_BOT_USER_OAUTH_TOKEN }}
+          GITHUB_ACTIONS: true
+          EVENT_TYPE: ${{ env.EVENT_TYPE }}
+          BRANCH: ${{ env.BRANCH }}
+          COMMIT_SHA: ${{ env.COMMIT_SHA }}
+          COMMIT_SHORT: ${{ env.COMMIT_SHORT }}
+          REPO: ${{ env.REPO }}
+          PR_NUMBER: ${{ env.PR_NUMBER }}
+          PR_URL: ${{ env.PR_URL }}
+          WORKFLOW_RUN_URL: ${{ env.WORKFLOW_RUN_URL }}
+          TIMESTAMP: ${{ env.TIMESTAMP }}
+        run: |
+          export HOME="/tmp/test-home"
+          export PATH="$HOME/.local/bin:$PATH"
+
+          # Use dry_run if token is not available (PRs from forks)
+          if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
+            echo "SLACK_BOT_USER_OAUTH_TOKEN not available (secrets not accessible in PRs from forks)"
+            echo "Running in dry_run mode to verify installation without sending to Slack"
+            DRY_RUN_VALUE="true"
+            TOKEN_VALUE="xoxb-dry-run-token"
+          else
+            DRY_RUN_VALUE="false"
+            TOKEN_VALUE="${SLACK_BOT_USER_OAUTH_TOKEN}"
+          fi
+
+          # Create a test payload
+          TEST_PAYLOAD=$(mktemp)
+          cat > "$TEST_PAYLOAD" <<EOF
+          {
+            "source": {
+              "slack_bot_user_oauth_token": "${TOKEN_VALUE}"
+            },
+            "params": {
+              "channel": "${CHANNEL}",
+              "dry_run": "${DRY_RUN_VALUE}",
+              "blocks": [
+                {
+                  "type": "context",
+                  "elements": [
+                    {
+                      "type": "plain_text",
+                      "text": "Branch: ${BRANCH}"
+                    },
+                    {
+                      "type": "plain_text",
+                      "text": "Commit: ${COMMIT_SHORT}"
+                    },
+                    {
+                      "type": "plain_text",
+                      "text": "Time: ${TIMESTAMP}"
+                    }
+                  ]
+                },
+                {
+                  "type": "markdown",
+                  "text": "Installation test from PR branch completed successfully."
+                }
+              ]
+            }
+          }
+          EOF
+
+          # Send test notification using installed version
+          send-to-slack < "$TEST_PAYLOAD"
+
+          rm -f "$TEST_PAYLOAD"
