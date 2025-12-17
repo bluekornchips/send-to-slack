@@ -1,0 +1,19 @@
+# Minimal CI image that installs the latest main build via remote curl.
+FROM --platform=amd64 alpine:3.20
+
+# Build arguments for repository and branch
+ARG GITHUB_REPOSITORY=bluekornchips/send-to-slack
+ARG GITHUB_REF_NAME=main
+
+RUN apk add --no-cache \
+        bash \
+        ca-certificates \
+        curl \
+        gettext \
+        gzip \
+        jq \
+        tar
+
+RUN curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}/bin/install.sh | bash
+
+CMD ["/bin/bash"]

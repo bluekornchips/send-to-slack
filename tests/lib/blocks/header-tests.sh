@@ -30,7 +30,7 @@ setup_file() {
 		export REAL_TOKEN
 	fi
 
-	SEND_TO_SLACK_SCRIPT="$GIT_ROOT/bin/send-to-slack.sh"
+	SEND_TO_SLACK_SCRIPT="$GIT_ROOT/send-to-slack.sh"
 
 	export GIT_ROOT
 	export SCRIPT
@@ -43,9 +43,6 @@ setup_file() {
 
 setup() {
 	source "$SCRIPT"
-
-	SEND_TO_SLACK_ROOT="$GIT_ROOT"
-	export SEND_TO_SLACK_ROOT
 
 	return 0
 }

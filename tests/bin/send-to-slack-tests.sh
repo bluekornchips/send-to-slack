@@ -16,7 +16,7 @@ setup_file() {
 		exit 1
 	fi
 
-	SCRIPT="$GIT_ROOT/bin/send-to-slack.sh"
+	SCRIPT="$GIT_ROOT/send-to-slack.sh"
 	if [[ ! -f "$SCRIPT" ]]; then
 		echo "Script not found: $SCRIPT" >&2
 		exit 1
@@ -37,10 +37,8 @@ setup_file() {
 setup() {
 	source "$SCRIPT"
 
-	SEND_TO_SLACK_ROOT="$GIT_ROOT"
-
 	# Source parse-payload.sh for parse_payload function
-	source "$SEND_TO_SLACK_ROOT/lib/parse-payload.sh"
+	source "$GIT_ROOT/lib/parse-payload.sh"
 
 	SLACK_BOT_USER_OAUTH_TOKEN="test-token"
 	CHANNEL="#test"
@@ -60,7 +58,6 @@ setup() {
 
 	TEST_PAYLOAD_FILE=$(mktemp send-to-slack-tests.test-payload.XXXXXX)
 
-	export SEND_TO_SLACK_ROOT
 	export SLACK_BOT_USER_OAUTH_TOKEN
 	export CHANNEL
 	export MESSAGE
@@ -885,7 +882,6 @@ mock_curl_permalink_failure() {
 @test "main:: accepts -file option with valid file" {
 	create_test_payload
 
-	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
 	run "$SCRIPT" -file "$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "version"
@@ -896,7 +892,6 @@ mock_curl_permalink_failure() {
 @test "main:: accepts --file option with valid file" {
 	create_test_payload
 
-	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
 	run "$SCRIPT" --file "$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "version"
@@ -905,7 +900,7 @@ mock_curl_permalink_failure() {
 }
 
 @test "main:: fails when -file option is specified without file path" {
-	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
+
 	run "$SCRIPT" -file
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "process_input::"
@@ -913,7 +908,7 @@ mock_curl_permalink_failure() {
 }
 
 @test "main:: fails when --file option is specified without file path" {
-	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
+
 	run "$SCRIPT" --file
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "process_input::"
@@ -924,7 +919,6 @@ mock_curl_permalink_failure() {
 	local nonexistent_file
 	nonexistent_file="/tmp/nonexistent-file-$(date +%s).json"
 
-	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
 	run "$SCRIPT" -file "$nonexistent_file"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "process_input::"
@@ -936,7 +930,6 @@ mock_curl_permalink_failure() {
 	empty_file=$(mktemp send-to-slack-tests.empty.XXXXXX)
 	touch "$empty_file"
 
-	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
 	run "$SCRIPT" -file "$empty_file"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "process_input::"
@@ -947,8 +940,6 @@ mock_curl_permalink_failure() {
 
 @test "main:: uses file and ignores stdin when both are provided" {
 	create_test_payload
-
-	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
 
 	local stdin_copy
 	stdin_copy=$(mktemp send-to-slack-tests.payload-stdin.XXXXXX)
@@ -961,7 +952,7 @@ mock_curl_permalink_failure() {
 }
 
 @test "main:: fails when no input is provided" {
-	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
+
 	# When stdin is empty (/dev/null), script will try to read and detect empty input
 	run "$SCRIPT" </dev/null
 	[[ "$status" -eq 1 ]]
@@ -972,7 +963,6 @@ mock_curl_permalink_failure() {
 @test "main:: fails when -file option is specified multiple times" {
 	create_test_payload
 
-	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
 	run "$SCRIPT" -file "$TEST_PAYLOAD_FILE" -file "$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "process_input::"
@@ -980,7 +970,7 @@ mock_curl_permalink_failure() {
 }
 
 @test "main:: fails with unknown option" {
-	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
+
 	run "$SCRIPT" --unknown-option
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "process_input::"
@@ -991,13 +981,13 @@ mock_curl_permalink_failure() {
 	create_test_payload
 
 	# Test with stdin
-	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
+
 	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
 	local stdin_status="$status"
 	local stdin_output="$output"
 
 	# Test with file option
-	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
+
 	run "$SCRIPT" -file "$TEST_PAYLOAD_FILE"
 	local file_status="$status"
 	local file_output="$output"

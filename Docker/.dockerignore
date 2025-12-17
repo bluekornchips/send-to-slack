@@ -1,0 +1,67 @@
+# Version control
+.git
+.gitignore
+.gitattributes
+.github
+
+# Documentation
+*.md
+docs/
+CHANGELOG.md
+LICENSE
+
+# IDE and editor files
+.vscode/
+.idea/
+.cursor/
+*.swp
+*.swo
+*~
+
+# Tests and test artifacts
+tests/
+.bats/
+*-tests.sh
+*-payload.json
+test-payload.*
+resource-out.json
+parse-payload-tests.test-payload.*
+acceptance-tests.test-upload*
+
+# Build and development tools
+Makefile
+install.sh
+uninstall.sh
+
+# Python
+.venv
+venv
+*.egg-info
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.ruff_cache/
+build/
+dist/
+
+# Concourse development files
+.concourse-pipeline.yml
+server.yaml
+fly
+examples/
+python/
+
+# Temporary files
+*.log
+*.pid
+*.tmp
+*.temp
+.tmp/
+tmp/
+
+# OS files
+.DS_Store
+Thumbs.db
+

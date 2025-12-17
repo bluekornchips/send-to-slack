@@ -382,23 +382,20 @@ crosspost_notification() {
 		# Write payload to temp file for parsing
 		local temp_payload
 		temp_payload=$(mktemp /tmp/send-to-slack.crosspost-payload.XXXXXX)
-		if ! chmod 700 "$temp_payload"; then
+		if ! chmod 0600 "${temp_payload}"; then
 			echo "crosspost_notification:: failed to secure temp payload ${temp_payload}" >&2
-			rm -f "$temp_payload"
+			rm -f "${temp_payload}"
 			return 1
 		fi
-		trap 'rm -f "$temp_payload"' RETURN EXIT
+		trap 'rm -f "$temp_payload"' RETURN EXIT ERR
 		echo "$crosspost_payload" >"$temp_payload"
 
 		# Parse the payload
 		local parsed_payload
 		if ! parsed_payload=$(parse_payload "$temp_payload"); then
 			echo "crosspost_notification:: failed to parse payload for channel $channel" >&2
-			rm -f "$temp_payload"
 			continue
 		fi
-
-		rm -f "$temp_payload"
 
 		# Send the notification
 		if ! send_notification "$parsed_payload"; then
@@ -706,7 +703,7 @@ send_notification() {
 			local error_code
 			error_code=$(echo "$response" | jq -r '.error // "unknown"' 2>/dev/null)
 
-			#error retryable or not
+			# Check if error is retryable or not
 			case "$error_code" in
 			"${ERROR_CODES_RETRYABLE[@]}")
 				echo "send_notification:: Rate limited, will retry" >&2
@@ -720,7 +717,7 @@ send_notification() {
 				return 1
 				;;
 			*)
-				#retrys okay
+				# Retries okay
 				echo "send_notification:: Slack API error: $error_code, will retry" >&2
 				echo "send_notification:: Error response:" >&2
 				echo "$response" | jq . >&2 2>/dev/null || echo "$response" >&2
@@ -834,7 +831,7 @@ process_input() {
 	fi
 
 	input_payload=$(mktemp /tmp/send-to-slack.resource-in.XXXXXX)
-	if ! chmod 700 "$input_payload"; then
+	if ! chmod 0600 "$input_payload"; then
 		echo "process_input:: failed to secure temp input ${input_payload}" >&2
 		rm -f "$input_payload"
 		return 1
@@ -881,69 +878,51 @@ process_input() {
 	return 0
 }
 
-# Initialize script environment and locate bin directory
-#
-# Side Effects:
-#   Sets SEND_TO_SLACK_ROOT and bin_dir variables
+# Find the root directory of the send-to-slack installation
 #
 # Outputs:
-#   Writes bin_dir path to stdout
+#   Writes root_dir path to stdout
 #
 # Returns:
 #   0 on success
-#   1 if bin directory cannot be located
-initialize_script_environment() {
+#   1 if root directory cannot be located
+find_root_dir() {
 	local script_dir
-	local bin_dir
-	local prefix_dir
+
+	script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+	if [[ -z "$script_dir" ]]; then
+		echo "find_root_dir:: cannot determine script directory" >&2
+		return 1
+	fi
+
+	echo "$script_dir"
+	return 0
+}
+
+# Initialize script environment and locate lib directory
+#
+# Outputs:
+#   Writes lib_dir path to stdout
+#
+# Returns:
+#   0 on success
+#   1 if lib directory cannot be located
+initialize_script_environment() {
+	local root_dir
 	local lib_dir
 
-	if [[ -z "${SEND_TO_SLACK_ROOT}" ]]; then
-		script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-
-		# Check for source/Docker layout: script_dir/lib exists
-		if [[ -d "$script_dir/lib" ]] && [[ -f "$script_dir/lib/parse-payload.sh" ]]; then
-			SEND_TO_SLACK_ROOT="$script_dir"
-			bin_dir="$script_dir/lib"
-		# Check for installed layout: helper scripts are in same directory as script
-		# In this case, SEND_TO_SLACK_ROOT should be parent so bin/blocks paths resolve correctly
-		elif [[ -f "$script_dir/parse-payload.sh" ]] && [[ -d "$script_dir/blocks" ]]; then
-			SEND_TO_SLACK_ROOT=$(dirname "$script_dir")
-			bin_dir="$script_dir"
-		# Check for standard installation: script in bin/, supporting files in lib/
-		# e.g., /usr/local/bin/send-to-slack -> supporting files in /usr/local/lib/send-to-slack/
-		elif [[ "$script_dir" == */bin ]] || [[ "$script_dir" == */bin/* ]]; then
-			# Extract prefix
-			prefix_dir=$(dirname "$script_dir")
-			lib_dir="$prefix_dir/lib/send-to-slack"
-			if [[ -d "$lib_dir/bin" ]] && [[ -f "$lib_dir/bin/parse-payload.sh" ]]; then
-				SEND_TO_SLACK_ROOT="$lib_dir"
-				bin_dir="$lib_dir/bin"
-			else
-				echo "initialize_script_environment:: cannot locate bin directory. Script location: $script_dir, checked: $lib_dir/bin" >&2
-				return 1
-			fi
-		else
-			echo "initialize_script_environment:: cannot locate bin directory. Script location: $script_dir" >&2
-			return 1
-		fi
+	if ! root_dir=$(find_root_dir); then
+		return 1
 	fi
 
-	# Determine bin_dir if SEND_TO_SLACK_ROOT was set externally
-	if [[ -z "${bin_dir}" ]]; then
-		if [[ -d "${SEND_TO_SLACK_ROOT}/lib" ]] && [[ -f "${SEND_TO_SLACK_ROOT}/lib/parse-payload.sh" ]]; then
-			bin_dir="${SEND_TO_SLACK_ROOT}/lib"
-		elif [[ -d "${SEND_TO_SLACK_ROOT}/bin" ]] && [[ -f "${SEND_TO_SLACK_ROOT}/bin/parse-payload.sh" ]]; then
-			bin_dir="${SEND_TO_SLACK_ROOT}/bin"
-		elif [[ -f "${SEND_TO_SLACK_ROOT}/bin/parse-payload.sh" ]] && [[ -d "${SEND_TO_SLACK_ROOT}/bin/blocks" ]]; then
-			bin_dir="${SEND_TO_SLACK_ROOT}/bin"
-		else
-			echo "initialize_script_environment:: cannot locate parse-payload.sh in ${SEND_TO_SLACK_ROOT}" >&2
-			return 1
-		fi
+	lib_dir="${root_dir}/lib"
+
+	if [[ ! -f "${lib_dir}/parse-payload.sh" ]]; then
+		echo "initialize_script_environment:: cannot locate parse-payload.sh (lib_dir: ${lib_dir})" >&2
+		return 1
 	fi
 
-	echo "$bin_dir"
+	echo "$lib_dir"
 
 	return 0
 }
@@ -967,7 +946,12 @@ parse_main_args() {
 	while [[ $# -gt 0 ]]; do
 		case $1 in
 		-v | --version)
-			print_version "${SEND_TO_SLACK_ROOT}"
+			local root_dir
+			if ! root_dir=$(find_root_dir); then
+				echo "parse_main_args:: cannot determine root directory" >&2
+				return 1
+			fi
+			print_version "$root_dir"
 			return 2
 			;;
 		-h | --help)
@@ -998,7 +982,7 @@ parse_main_args() {
 # - Sends message to Slack API
 # - Outputs informational messages to stdout for logging
 # - Outputs only JSON to stdout at the end
-# - Sets global environment variables (SEND_TO_SLACK_ROOT, PAYLOAD, etc.)
+# - Sets global environment variables (PAYLOAD, etc.)
 #
 # Returns:
 # - 0 on successful message delivery and output generation
@@ -1010,6 +994,12 @@ main() {
 	local parse_result
 
 	if ! bin_dir=$(initialize_script_environment); then
+		return 1
+	fi
+
+	local root_dir
+	if ! root_dir=$(find_root_dir); then
+		echo "main:: cannot determine root directory" >&2
 		return 1
 	fi
 
@@ -1029,7 +1019,7 @@ main() {
 	fi
 
 	local version
-	if ! version=$(get_version "${SEND_TO_SLACK_ROOT}"); then
+	if ! version=$(get_version "$root_dir"); then
 		version="unknown"
 	fi
 	echo "main:: send-to-slack ${version}"
@@ -1041,7 +1031,6 @@ main() {
 		return 0
 	fi
 
-	export SEND_TO_SLACK_ROOT
 	export SEND_TO_SLACK_BIN_DIR="$bin_dir"
 	export METADATA
 	export SHOW_METADATA
@@ -1059,7 +1048,7 @@ main() {
 		return 1
 	fi
 
-	trap 'rm -f "$input_payload"' EXIT
+	trap 'rm -f "$input_payload" "${parsed_payload_file:-}"' EXIT ERR
 
 	timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
@@ -1081,16 +1070,16 @@ main() {
 		return 1
 	fi
 
-	if [[ -f "${SEND_TO_SLACK_BIN_DIR}/parse-payload.sh" ]]; then
-		source "${SEND_TO_SLACK_BIN_DIR}/parse-payload.sh"
+	if [[ -f "${bin_dir}/parse-payload.sh" ]]; then
+		source "${bin_dir}/parse-payload.sh"
 	else
-		echo "main:: cannot locate parse-payload.sh at ${SEND_TO_SLACK_BIN_DIR}/parse-payload.sh" >&2
+		echo "main:: cannot locate parse-payload.sh at ${bin_dir}/parse-payload.sh" >&2
 		return 1
 	fi
 
 	local parsed_payload_file
 	parsed_payload_file=$(mktemp /tmp/send-to-slack.parsed-payload.XXXXXX)
-	if ! chmod 700 "$parsed_payload_file"; then
+	if ! chmod 0600 "${parsed_payload_file}"; then
 		echo "main:: failed to secure parsed payload file ${parsed_payload_file}" >&2
 		rm -f "${parsed_payload_file}"
 		return 1

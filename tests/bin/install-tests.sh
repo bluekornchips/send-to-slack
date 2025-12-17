@@ -44,9 +44,9 @@ setup_file() {
 	fixture_repo_dir="${FIXTURE_DIR}/send-to-slack-main"
 	mkdir -p "${fixture_repo_dir}/bin" "${fixture_repo_dir}/lib/blocks"
 
-	echo "#!/usr/bin/env bash" >"${fixture_repo_dir}/bin/send-to-slack.sh"
-	echo "echo test" >>"${fixture_repo_dir}/bin/send-to-slack.sh"
-	chmod +x "${fixture_repo_dir}/bin/send-to-slack.sh"
+	echo "#!/usr/bin/env bash" >"${fixture_repo_dir}/send-to-slack.sh"
+	echo "echo test" >>"${fixture_repo_dir}/send-to-slack.sh"
+	chmod +x "${fixture_repo_dir}/send-to-slack.sh"
 
 	echo "#!/usr/bin/env bash" >"${fixture_repo_dir}/lib/parse-payload.sh"
 	echo "echo test" >>"${fixture_repo_dir}/lib/parse-payload.sh"
@@ -151,7 +151,7 @@ run_installer() {
 	echo "$output" | grep -q "usage:"
 	echo "$output" | grep -q "Install send-to-slack from GitHub tarball"
 	echo "$output" | grep -q "Installs to ~/.local when run without sudo"
-	echo "$output" | grep -q "Installs to /usr/local when run with sudo"
+	echo "$output" | grep -q "Installs to /usr when run with sudo"
 	echo "$output" | grep -Fq -- "-h, --help"
 }
 
@@ -163,7 +163,7 @@ run_installer() {
 
 @test "install:: downloads and installs from main branch" {
 	mock_network_tools
-	# Note: This test requires sudo to install to /usr/local
+	# Note: This test requires sudo to install to /usr
 	# For now, we just verify the download logic works
 	# Actual installation tests would need root or a different approach
 	run_installer
@@ -177,8 +177,7 @@ run_installer() {
 @test "install:: outputs installation location" {
 	mock_network_tools
 	run_installer 2>&1 || true
-	# Check if it mentions /usr/local, even if installation failed due to permissions
-	echo "$output" | grep -q "/usr/local" || echo "$output" | grep -q "Installed send-to-slack to"
+	echo "$output" | grep -q "/send-to-slack/" || echo "$output" | grep -q "Installed send-to-slack to"
 }
 
 @test "install:: outputs resolved reference" {
@@ -195,3 +194,4 @@ run_installer() {
 	echo "$output" | grep -vq "main script not found"
 	echo "$output" | grep -vq "lib directory not found"
 }
+

@@ -2,12 +2,16 @@ VERSION := $(shell cat VERSION 2>/dev/null || echo "Unavailable")
 TARGET_VERSION ?= $(VERSION)
 SYSTEM_PREFIX := /usr/local
 
+lint:
+	find . -name "*.sh" -type f -print0 | xargs -0 shellcheck --shell=bash
+
 # Testing
 test:
 	clear && bats --timing --verbose-run \
 		./concourse/resource-type/tests/*tests.sh \
 		./tests/lib/file-upload-tests.sh \
 		./tests/bin/install-tests.sh \
+		./tests/bin/uninstall-tests.sh \
 		./tests/lib/parse-payload-tests.sh \
 		./tests/lib/resolve-mentions-tests.sh \
 		./tests/bin/send-to-slack-tests.sh \
@@ -30,7 +34,7 @@ test-all:
 		./tests/lib/blocks/*tests.sh
 
 test-in-docker:
-	clear && DOCKER_IMAGE_TAG=local MAKE_COMMAND="make test" ./tests/run-tests-in-docker.sh
+	clear && ./tests/run-tests-in-docker.sh --make "make test"
 
 # concourse
 check-docker-deps:
@@ -51,21 +55,3 @@ concourse-load-examples:
 			-v channel=$$CHANNEL \
 			|| exit 1; \
 	done
-
-# dev tools, not for production
-check-docker:
-	@command -v docker >/dev/null 2>&1 || { echo "Error: docker is required but not installed" >&2; exit 1; }
-
-ngrok-up: check-docker
-	docker run --net=host -it -e NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN} ngrok/ngrok http --url=${NGROK_URL} 3000
-
-check-python-deps:
-	@command -v python3 >/dev/null 2>&1 || { echo "Error: python3 is required but not installed" >&2; exit 1; }
-
-python-server: check-python-deps
-	cd python && \
-	if [ ! -d .venv ]; then \
-		python3 -m venv .venv; \
-	fi && \
-	.venv/bin/pip install flask requests || exit 1 && \
-	.venv/bin/python server.py

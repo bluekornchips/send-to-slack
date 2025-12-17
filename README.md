@@ -20,7 +20,7 @@ curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/bi
 
 Installs to `~/.local/bin/send-to-slack` and supporting files to `~/.local/lib/send-to-slack/`.
 
-**System installation (requires sudo):**
+System installation (requires sudo):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/bin/install.sh | sudo bash
@@ -35,43 +35,68 @@ For development or testing without installation, you can use the script directly
 ```bash
 git clone https://github.com/bluekornchips/send-to-slack.git
 cd send-to-slack
-alias send-to-slack="$(pwd)/bin/send-to-slack.sh"
+alias send-to-slack="$(pwd)/send-to-slack.sh"
 ```
 
 Or add the alias to your shell rc file:
 
 ```bash
-echo 'alias send-to-slack="path/to/send-to-slack/bin/send-to-slack.sh"' >> ~/.bashrc
+echo 'alias send-to-slack="path/to/send-to-slack/send-to-slack.sh"' >> ~/.bashrc
 ```
 
 ### Uninstallation
 
-Use the uninstall script to remove all installed files. For user-local installations:
+Use the uninstall script to remove all installed files. The script can work in two ways:
+
+1. Auto-detect installation (default): Finds the installation by resolving where the `send-to-slack` command points to:
 
 ```bash
-./bin/uninstall.sh ~/.local
+./bin/uninstall.sh
 ```
 
 For system installations:
 
 ```bash
+sudo ./bin/uninstall.sh
+```
+
+2. Specify prefix: Provide the installation prefix to uninstall from a specific location:
+
+```bash
+./bin/uninstall.sh ~/.local
 sudo ./bin/uninstall.sh /usr/local
 ```
 
-Or use `--force` flag for protected prefixes:
+Use `--force` flag for protected prefixes:
 
 ```bash
 sudo ./bin/uninstall.sh --force /usr/local
 ```
 
-The uninstall script uses the installation manifest at `$prefix/lib/send-to-slack/install_manifest.txt` to remove all files that were installed.
+The uninstall script removes the entire installation directory and the executable from bin/.
 
-## Container Image
+## Container Images
 
-The container image is available on Docker Hub as `sunflowersoftware/send-to-slack`.
+The container images are available on Docker Hub as `sunflowersoftware/send-to-slack`.
 
 ```bash
 docker pull sunflowersoftware/send-to-slack
+```
+
+### Building Images
+
+Three Dockerfiles are provided in the `Docker/` directory:
+
+- `Docker/Dockerfile`: CI image that installs from the local repo contents using the bundled installer
+- `Docker/Dockerfile.remote`: Minimal CI image that installs the latest main build via curl | bash
+- `Docker/Dockerfile.concourse`: Concourse resource-type image with only the runtime dependencies needed by the `check`, `in`, and `out` scripts
+
+Build examples (run from repo root):
+
+```bash
+docker build -f Docker/Dockerfile -t send-to-slack-ci:local .
+docker build -f Docker/Dockerfile.remote -t send-to-slack-ci:main .
+docker build -f Docker/Dockerfile.concourse -t send-to-slack-concourse .
 ```
 
 ### Development Usage
@@ -79,7 +104,7 @@ docker pull sunflowersoftware/send-to-slack
 For development or testing without installation, you can use the script directly:
 
 ```bash
-./bin/send-to-slack.sh
+./send-to-slack.sh
 ```
 
 When running directly from the repository, the script will automatically detect its location and find source files.
@@ -142,7 +167,7 @@ Blocks can also be provided from a file:
 send-to-slack --file payload.json
 ```
 
-When running directly from the repository, use `./bin/send-to-slack.sh` instead of `send-to-slack`.
+When running directly from the repository, use `./send-to-slack.sh` instead of `send-to-slack`.
 
 ## CLI Usage
 

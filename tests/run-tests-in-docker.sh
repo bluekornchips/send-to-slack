@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 #
 # Docker test script for send-to-slack
-# Builds a local Docker image and runs tests inside the container
+# Mounts the repo in a container and runs tests
 #
 set -eo pipefail
 
+DOCKER_IMAGE="${DOCKER_IMAGE:-}"
 DOCKER_IMAGE_NAME="${DOCKER_IMAGE_NAME:-send-to-slack}"
 DOCKER_IMAGE_TAG="${DOCKER_IMAGE_TAG:-local}"
-MAKE_COMMAND="${MAKE_COMMAND:-make test-smoke test-acceptance}"
+MAKE_COMMAND="${MAKE_COMMAND:-make test}"
 
 # Get the project root directory
 GIT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "")"
@@ -24,6 +25,7 @@ fi
 print_start_info() {
 	local token_status
 	local channel_status
+	local image_info
 
 	token_status="missing"
 	[[ -n "$SLACK_BOT_USER_OAUTH_TOKEN" ]] && token_status="present"
@@ -31,11 +33,16 @@ print_start_info() {
 	channel_status="<unset>"
 	[[ -n "$CHANNEL" ]] && channel_status="$CHANNEL"
 
+	if [[ -n "$DOCKER_IMAGE" ]]; then
+		image_info="Using existing image: ${DOCKER_IMAGE}"
+	else
+		image_info="Building image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} (from Docker/Dockerfile.test)"
+	fi
+
 	cat <<EOF
 Starting dockerized tests for send-to-slack
 Project root: ${GIT_ROOT}
-Image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}
-Dockerfile: tests/Dockerfile-test
+${image_info}
 Make command: ${MAKE_COMMAND}
 Platform: linux/amd64
 Channel: ${channel_status}
@@ -84,7 +91,7 @@ check_docker() {
 	return 0
 }
 
-# Build the Docker image using Dockerfile-test
+# Build the Docker image using Dockerfile.test
 #
 # Returns:
 # - 0 on success
@@ -95,9 +102,9 @@ build_image() {
 		return 1
 	fi
 
-	echo "Building Docker image ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} from tests/Dockerfile-test."
+	echo "Building Docker image ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} from Docker/Dockerfile.test."
 	cd "${GIT_ROOT}" || return 1
-	if ! docker build -t "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}" -f tests/Dockerfile-test .; then
+	if ! docker build -t "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}" -f Docker/Dockerfile.test .; then
 		echo "build_image:: failed to build Docker image" >&2
 		return 1
 	fi
@@ -118,11 +125,16 @@ run_tests() {
 	local temp_workspace
 	local docker_cmd
 	local docker_flags
-	local exit_code
+	local image_ref
 
-	if [[ -z "$DOCKER_IMAGE_NAME" ]] || [[ -z "$DOCKER_IMAGE_TAG" ]]; then
-		echo "run_tests:: DOCKER_IMAGE_NAME and DOCKER_IMAGE_TAG are required" >&2
-		return 1
+	if [[ -n "$DOCKER_IMAGE" ]]; then
+		image_ref="$DOCKER_IMAGE"
+	else
+		if [[ -z "$DOCKER_IMAGE_NAME" ]] || [[ -z "$DOCKER_IMAGE_TAG" ]]; then
+			echo "run_tests:: DOCKER_IMAGE_NAME and DOCKER_IMAGE_TAG are required when not using DOCKER_IMAGE" >&2
+			return 1
+		fi
+		image_ref="${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
 	fi
 
 	# Create isolated workspace copy to prevent container git ops from affecting host repo
@@ -156,11 +168,87 @@ EOF
 		docker_flags+=(-t)
 	fi
 
-	echo "Running tests in Docker container."
-	if ! docker run "${docker_flags[@]}" "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}" -c "$docker_cmd"; then
+	echo "Running tests in Docker container using image: ${image_ref}"
+	if ! docker run "${docker_flags[@]}" "$image_ref" -c "$docker_cmd"; then
 		echo "run_tests:: failed to run tests in container" >&2
 		return 1
 	fi
+
+	return 0
+}
+
+# Parse command line arguments
+#
+# Inputs:
+# - $@ - command line arguments
+#
+# Returns:
+# - 0 on success
+# - 1 on failure
+parse_args() {
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		-i | --image)
+			if [[ -z "${2:-}" ]]; then
+				echo "parse_args:: option $1 requires an argument" >&2
+				return 1
+			fi
+			DOCKER_IMAGE="$2"
+			shift 2
+			;;
+		-m | --make)
+			if [[ -z "${2:-}" ]]; then
+				echo "parse_args:: option $1 requires an argument" >&2
+				return 1
+			fi
+			MAKE_COMMAND="$2"
+			shift 2
+			;;
+		-h | --help)
+			cat <<EOF >&2
+usage: $0 [OPTIONS]
+
+Run tests in a Docker container by mounting the repo.
+
+OPTIONS:
+  -i, --image IMAGE    Docker image to use (optional)
+                       Can be a repo:tag (e.g., "myrepo:tag") or image ID (e.g., "c56903e46f90")
+                       If not provided, builds from Docker/Dockerfile.test
+  -m, --make COMMAND   Make command to run (default: make test)
+  -h, --help           Show this help message
+
+ENVIRONMENT VARIABLES:
+  DOCKER_IMAGE         Docker image to use (same as -i/--image, optional)
+  DOCKER_IMAGE_NAME    Image name when building (default: send-to-slack)
+  DOCKER_IMAGE_TAG     Image tag when building (default: local)
+  MAKE_COMMAND         Command to run in container (default: make test)
+  CHANNEL              Required: Slack channel for tests
+  SLACK_BOT_USER_OAUTH_TOKEN  Required: Slack OAuth token for tests
+
+EXAMPLES:
+  # Build and use default image (send-to-slack:local)
+  $0
+
+  # Use image by ID
+  $0 --image c56903e46f90
+
+  # Use image by repo:tag
+  $0 --image myrepo/send-to-slack:v1.0.0
+
+  # Use image and custom make command
+  $0 --image c56903e46f90 --make "make test-smoke test-acceptance"
+
+  # Use environment variable
+  DOCKER_IMAGE=c56903e46f90 $0
+EOF
+			return 2
+			;;
+		*)
+			echo "parse_args:: unknown option: $1" >&2
+			return 1
+			;;
+		esac
+	done
 
 	return 0
 }
@@ -171,6 +259,19 @@ EOF
 # - 0 on success
 # - 1 on failure
 main() {
+	local parse_result
+
+	parse_result=0
+	parse_args "$@" || parse_result=$?
+
+	if [[ $parse_result -eq 2 ]]; then
+		return 0
+	fi
+
+	if [[ $parse_result -ne 0 ]]; then
+		return 1
+	fi
+
 	print_start_info
 
 	if ! check_docker; then
@@ -181,8 +282,10 @@ main() {
 		return 1
 	fi
 
-	if ! build_image; then
-		return 1
+	if [[ -z "$DOCKER_IMAGE" ]]; then
+		if ! build_image; then
+			return 1
+		fi
 	fi
 
 	if ! run_tests; then

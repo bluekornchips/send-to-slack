@@ -12,7 +12,7 @@ setup_file() {
 
 	SCRIPT="$GIT_ROOT/lib/blocks/actions.sh"
 	EXAMPLES_FILE="$GIT_ROOT/examples/actions.yaml"
-	SEND_TO_SLACK_SCRIPT="$GIT_ROOT/bin/send-to-slack.sh"
+	SEND_TO_SLACK_SCRIPT="$GIT_ROOT/send-to-slack.sh"
 
 	if [[ ! -f "$SCRIPT" ]]; then
 		echo "Script not found: $SCRIPT" >&2
@@ -33,9 +33,6 @@ setup_file() {
 
 setup() {
 	source "$SCRIPT"
-
-	SEND_TO_SLACK_ROOT="$GIT_ROOT"
-	export SEND_TO_SLACK_ROOT
 
 	return 0
 }

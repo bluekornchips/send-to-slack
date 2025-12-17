@@ -11,6 +11,36 @@ umask 077
 # Ref: https://docs.slack.dev/messaging/working-with-files
 MAX_FILE_SIZE=$((1024 * 1024 * 1024)) # 1 GB in bytes
 
+# Get file permissions
+#
+# Arguments:
+#   $1 - file_path: Path to file
+#
+# Outputs:
+#   Writes file permissions to stdout
+#   Writes "unknown" if stat command fails or is unavailable, should never happen
+#
+# Returns:
+#   0 on success
+#   1 if file path is empty
+get_file_permissions() {
+	local file_path="$1"
+
+	if [[ -z "$file_path" ]]; then
+		echo "unknown"
+		return 1
+	fi
+
+	if stat -c "%a %A" "$file_path" 2>/dev/null; then
+		return 0
+	elif stat -f "%OLp %Sp" "$file_path" 2>/dev/null; then
+		return 0
+	else
+		echo "unknown"
+		return 1
+	fi
+}
+
 # Step 1 of Slack file upload: Request upload URL
 # Calls files.getUploadURLExternal API to obtain upload URL and file ID
 #
@@ -230,7 +260,7 @@ EOF
 	if [[ -n "$FILE_PATH" && -f "$FILE_PATH" ]]; then
 		local file_perms_after
 		local file_readable
-		file_perms_after=$(stat -c "%a %A" "$FILE_PATH" 2>/dev/null || stat -f "%OLp %Sp" "$FILE_PATH" 2>/dev/null || echo "unknown")
+		file_perms_after=$(get_file_permissions "$FILE_PATH")
 		file_readable=$([ -r "$FILE_PATH" ] && echo "yes" || echo "no")
 		cat >&2 <<-EOF
 			_complete_upload:: file permissions after upload: $file_perms_after
@@ -404,7 +434,7 @@ validate_file_path() {
 
 	# Print file permissions for debugging
 	local file_perms
-	file_perms=$(stat -c "%a %A" "$FILE_PATH" 2>/dev/null || stat -f "%OLp %Sp" "$FILE_PATH" 2>/dev/null || echo "unknown")
+	file_perms=$(get_file_permissions "$FILE_PATH")
 	echo "file_upload:: file permissions: $file_perms" >&2
 
 	if ((FILE_SIZE > MAX_FILE_SIZE)); then
@@ -544,12 +574,12 @@ file_upload() {
 
 	local upload_payload_file
 	upload_payload_file=$(mktemp /tmp/file-upload.sh.payload.XXXXXX)
-	if ! chmod 700 "$upload_payload_file"; then
+	if ! chmod 0600 "$upload_payload_file"; then
 		echo "file_upload:: failed to secure upload payload file ${upload_payload_file}" >&2
 		rm -f "$upload_payload_file"
 		return 1
 	fi
-	trap 'rm -f "$upload_payload_file"' RETURN EXIT
+	trap 'rm -f "$upload_payload_file"' RETURN EXIT ERR
 
 	jq -n \
 		--arg file_id "$FILE_ID" \
