@@ -499,6 +499,20 @@ send_notification() {
 
 	# Run send-to-slack in container
 	echo "Sending notification to channel: ${CHANNEL}"
+
+	# Determine the correct path to send-to-slack based on Dockerfile type
+	local send_to_slack_cmd
+	case "$DOCKERFILE_TYPE" in
+	concourse)
+		# Concourse Dockerfile installs to /opt/resource/send-to-slack and adds /opt/resource to PATH
+		send_to_slack_cmd="send-to-slack"
+		;;
+	*)
+		# Default and remote Dockerfiles install to /usr/local/bin
+		send_to_slack_cmd="/usr/local/bin/send-to-slack"
+		;;
+	esac
+
 	docker run --rm \
 		--platform linux/amd64 \
 		-v "${temp_workspace}:/workspace" \
@@ -506,7 +520,7 @@ send_notification() {
 		-e SLACK_BOT_USER_OAUTH_TOKEN="${SLACK_BOT_USER_OAUTH_TOKEN}" \
 		-w /workspace \
 		"$image_ref" \
-		/usr/local/bin/send-to-slack -f /workspace/payload.json
+		"$send_to_slack_cmd" -f /workspace/payload.json
 
 	local exit_code=$?
 	rm -rf "$temp_workspace"

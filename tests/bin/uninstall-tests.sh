@@ -137,7 +137,7 @@ run_uninstaller() {
 }
 
 @test "uninstall:: validates lib directory exists" {
-	rm -rf "$TEST_INSTALL_DIR/lib"
+	rm -rf "${TEST_INSTALL_DIR:?}/lib"
 	run_uninstaller "$TEST_PREFIX"
 	[[ "$status" -ne 0 ]]
 	echo "$output" | grep -q "lib directory not found"
