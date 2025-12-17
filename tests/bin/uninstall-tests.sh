@@ -24,7 +24,7 @@ setup_file() {
 
 	local tmp_root="${BATS_TEST_TMPDIR:-/tmp}"
 	TEST_PREFIX=$(mktemp -d "${tmp_root}/uninstall-tests.prefix.XXXXXX")
-	TEST_INSTALL_DIR="$TEST_PREFIX/send-to-slack"
+	TEST_INSTALL_DIR="$TEST_PREFIX/bin/send-to-slack"
 	TEST_BIN_DIR="$TEST_PREFIX/bin"
 
 	mkdir -p "$TEST_INSTALL_DIR/lib/blocks" "$TEST_BIN_DIR"
@@ -63,22 +63,19 @@ setup() {
 	# Create VERSION file
 	echo "0.1.2" >"$TEST_INSTALL_DIR/VERSION"
 
-	# Copy executable to bin/ for PATH access
-	cp "$TEST_INSTALL_DIR/send-to-slack" "$TEST_BIN_DIR/send-to-slack"
-
 	return 0
 }
 
 teardown() {
-	# Clean up after each test - remove executable but keep directories for next test
-	rm -f "$TEST_BIN_DIR/send-to-slack" 2>/dev/null || true
+	# Clean up after each test - directories will be recreated in next test's setup
 	return 0
 }
 
 run_uninstaller() {
 	local args=("$@")
 	local old_path="$PATH"
-	export PATH="$TEST_BIN_DIR:$PATH"
+	# PATH should include TEST_INSTALL_DIR so command -v can find send-to-slack
+	export PATH="$TEST_INSTALL_DIR:$PATH"
 	run bash -c "\"$UNINSTALL_SCRIPT\" ${args[*]}"
 	local exit_code=$?
 	export PATH="$old_path"
@@ -112,7 +109,8 @@ run_uninstaller() {
 @test "uninstall:: removes executable when auto-detecting" {
 	run_uninstaller
 	[[ "$status" -eq 0 ]]
-	[[ ! -f "$TEST_BIN_DIR/send-to-slack" ]]
+	[[ ! -f "$TEST_INSTALL_DIR/send-to-slack" ]]
+	[[ ! -d "$TEST_INSTALL_DIR" ]]
 }
 
 @test "uninstall:: works with prefix argument" {
@@ -120,6 +118,7 @@ run_uninstaller() {
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "removed installation directory"
 	[[ ! -d "$TEST_INSTALL_DIR" ]]
+	[[ ! -f "$TEST_INSTALL_DIR/send-to-slack" ]]
 }
 
 @test "uninstall:: validates installation directory exists" {

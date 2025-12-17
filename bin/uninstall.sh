@@ -176,14 +176,17 @@ main() {
 		fi
 		# Make install_dir absolute for consistent path comparison
 		install_dir=$(cd "$install_dir" && pwd)
+		# Make prefix absolute for consistent path comparison
+		prefix=$(cd "$prefix" && pwd)
 	else
 		if ! install_dir=$(find_installation_directory); then
 			echo "uninstall:: failed to find installation directory" >&2
 			return 1
 		fi
+		# Calculate prefix from install_dir: if install_dir is $prefix/bin/send-to-slack, prefix is $prefix
+		# So we need to go up two levels from install_dir
+		prefix=$(cd "$(dirname "$(dirname "$install_dir")")" && pwd)
 	fi
-
-	prefix=$(dirname "$install_dir")
 
 	if is_protected_prefix "$prefix" && [[ "$force" != "true" ]]; then
 		echo "uninstall:: refusing to uninstall from protected prefix: $prefix (use --force to override)" >&2
