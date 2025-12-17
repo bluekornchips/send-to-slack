@@ -177,7 +177,7 @@ run_installer() {
 @test "install:: outputs installation location" {
 	mock_network_tools
 	run_installer 2>&1 || true
-	echo "$output" | grep -q "Installed send-to-slack to" || echo "$output" | grep -q "/send-to-slack"
+	echo "$output" | grep -q "this script will install:"
 }
 
 @test "install:: outputs resolved reference" {
@@ -187,9 +187,9 @@ run_installer() {
 	# The resolved reference is only output on successful installation
 	# On failure, we verify the installer ran (installation location test covers this)
 	# This test primarily verifies successful installations output the resolved reference
-	if echo "$output" | grep -q "Installed send-to-slack to"; then
+	if echo "$output" | grep -q "installed send-to-slack"; then
 		# Success case - check for resolved reference
-		echo "$output" | grep -q "Resolved reference:"
+		echo "$output" | grep -q "resolved reference:"
 	else
 		# Failure case - installer ran but failed (likely permissions)
 		# The fact that it ran is sufficient verification

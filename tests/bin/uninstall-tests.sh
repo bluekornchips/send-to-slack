@@ -24,10 +24,8 @@ setup_file() {
 
 	local tmp_root="${BATS_TEST_TMPDIR:-/tmp}"
 	TEST_PREFIX=$(mktemp -d "${tmp_root}/uninstall-tests.prefix.XXXXXX")
-	TEST_INSTALL_DIR="$TEST_PREFIX/bin/send-to-slack"
+	TEST_INSTALL_DIR="$TEST_PREFIX/send-to-slack"
 	TEST_BIN_DIR="$TEST_PREFIX/bin"
-
-	mkdir -p "$TEST_INSTALL_DIR/lib/blocks" "$TEST_BIN_DIR"
 
 	export UNINSTALL_SCRIPT
 	export TEST_PREFIX
@@ -39,19 +37,19 @@ setup_file() {
 }
 
 teardown_file() {
-	rm -rf "${TEST_INSTALL_DIR}" "${TEST_PREFIX}" "${TEST_BIN_DIR}"
+	rm -rf "${TEST_PREFIX}"
 }
 
 setup() {
-	# Create a fresh installation for each test (recreate if removed by previous test)
+	# Create fresh installation matching repo structure
 	mkdir -p "$TEST_INSTALL_DIR/lib/blocks" "$TEST_BIN_DIR"
 
-	# Create send-to-slack executable
+	# Create executable (matches repo: send-to-slack)
 	echo "#!/usr/bin/env bash" >"$TEST_INSTALL_DIR/send-to-slack"
 	echo "echo test" >>"$TEST_INSTALL_DIR/send-to-slack"
 	chmod +x "$TEST_INSTALL_DIR/send-to-slack"
 
-	# Create lib files
+	# Create lib files (matches repo structure)
 	echo "#!/usr/bin/env bash" >"$TEST_INSTALL_DIR/lib/parse-payload.sh"
 	echo "echo test" >>"$TEST_INSTALL_DIR/lib/parse-payload.sh"
 	chmod +x "$TEST_INSTALL_DIR/lib/parse-payload.sh"
@@ -60,22 +58,25 @@ setup() {
 	echo "echo test" >>"$TEST_INSTALL_DIR/lib/blocks/actions.sh"
 	chmod +x "$TEST_INSTALL_DIR/lib/blocks/actions.sh"
 
-	# Create VERSION file
+	# Create VERSION file (matches repo structure)
 	echo "0.1.2" >"$TEST_INSTALL_DIR/VERSION"
+
+	# Create symlink in bin/ for PATH access
+	ln -sf "$TEST_INSTALL_DIR/send-to-slack" "$TEST_BIN_DIR/send-to-slack"
 
 	return 0
 }
 
 teardown() {
-	# Clean up after each test - directories will be recreated in next test's setup
+	# Clean up after each test
+	rm -rf "$TEST_BIN_DIR/send-to-slack" "$TEST_INSTALL_DIR" 2>/dev/null || true
 	return 0
 }
 
 run_uninstaller() {
 	local args=("$@")
 	local old_path="$PATH"
-	# PATH should include TEST_INSTALL_DIR so command -v can find send-to-slack
-	export PATH="$TEST_INSTALL_DIR:$PATH"
+	export PATH="$TEST_BIN_DIR:$PATH"
 	run bash -c "\"$UNINSTALL_SCRIPT\" ${args[*]}"
 	local exit_code=$?
 	export PATH="$old_path"
@@ -99,26 +100,29 @@ run_uninstaller() {
 	echo "$output" | grep -q "unknown option"
 }
 
-@test "uninstall:: auto-detects installation directory" {
+@test "uninstall:: auto-detects installation prefix" {
 	run_uninstaller
 	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "removed symlink"
 	echo "$output" | grep -q "removed installation directory"
+	[[ ! -f "$TEST_BIN_DIR/send-to-slack" ]]
 	[[ ! -d "$TEST_INSTALL_DIR" ]]
 }
 
 @test "uninstall:: removes executable when auto-detecting" {
 	run_uninstaller
 	[[ "$status" -eq 0 ]]
-	[[ ! -f "$TEST_INSTALL_DIR/send-to-slack" ]]
+	[[ ! -f "$TEST_BIN_DIR/send-to-slack" ]]
 	[[ ! -d "$TEST_INSTALL_DIR" ]]
 }
 
 @test "uninstall:: works with prefix argument" {
 	run_uninstaller "$TEST_PREFIX"
 	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "removed symlink"
 	echo "$output" | grep -q "removed installation directory"
+	[[ ! -f "$TEST_BIN_DIR/send-to-slack" ]]
 	[[ ! -d "$TEST_INSTALL_DIR" ]]
-	[[ ! -f "$TEST_INSTALL_DIR/send-to-slack" ]]
 }
 
 @test "uninstall:: validates installation directory exists" {
@@ -128,15 +132,15 @@ run_uninstaller() {
 	echo "$output" | grep -q "installation directory not found"
 }
 
-@test "uninstall:: validates send-to-slack executable exists" {
+@test "uninstall:: validates executable exists" {
 	rm -f "$TEST_INSTALL_DIR/send-to-slack"
 	run_uninstaller "$TEST_PREFIX"
 	[[ "$status" -ne 0 ]]
-	echo "$output" | grep -q "send-to-slack executable not found"
+	echo "$output" | grep -q "executable not found"
 }
 
 @test "uninstall:: validates lib directory exists" {
-	rm -rf "${TEST_INSTALL_DIR:?}/lib"
+	rm -rf "$TEST_INSTALL_DIR/lib"
 	run_uninstaller "$TEST_PREFIX"
 	[[ "$status" -ne 0 ]]
 	echo "$output" | grep -q "lib directory not found"
@@ -144,7 +148,6 @@ run_uninstaller() {
 
 @test "uninstall:: requires --force for protected prefixes" {
 	local protected_prefix="/usr/local"
-	# Skip if we can't create the directory
 	if mkdir -p "$protected_prefix/send-to-slack/lib" 2>/dev/null; then
 		echo "#!/usr/bin/env bash" >"$protected_prefix/send-to-slack/send-to-slack"
 		chmod +x "$protected_prefix/send-to-slack/send-to-slack"
@@ -157,7 +160,6 @@ run_uninstaller() {
 
 @test "uninstall:: --force allows uninstalling from protected prefixes" {
 	local protected_prefix="/usr/local"
-	# Skip if we can't create the directory
 	if mkdir -p "$protected_prefix/send-to-slack/lib" 2>/dev/null; then
 		echo "#!/usr/bin/env bash" >"$protected_prefix/send-to-slack/send-to-slack"
 		chmod +x "$protected_prefix/send-to-slack/send-to-slack"
@@ -169,7 +171,6 @@ run_uninstaller() {
 }
 
 @test "uninstall:: fails when send-to-slack command not found in PATH" {
-	# Mock command -v to return nothing for send-to-slack
 	command() {
 		if [[ "$1" == "-v" ]] && [[ "$2" == "send-to-slack" ]]; then
 			return 1

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Uninstall script for send-to-slack
-# Finds installation directory by resolving where send-to-slack command points to
+# Removes installation directory matching repo structure
 #
 set -eo pipefail
 
@@ -9,7 +9,7 @@ usage() {
 	cat <<EOF >&2
 usage: $0 [--force] [<prefix>]
 
-If prefix is provided, uninstalls from <prefix>/send-to-slack/
+If prefix is provided, uninstalls from <prefix>/send-to-slack
 If prefix is omitted, finds installation by resolving send-to-slack command location
 
 OPTIONS:
@@ -23,17 +23,8 @@ EXAMPLES:
 EOF
 }
 
-# Check if a prefix path is protected from uninstallation
-#
-# Arguments:
-#   $1 - prefix: Installation prefix path to check
-#
-# Returns:
-#   0 if prefix is protected (requires --force to uninstall)
-#   1 if prefix is not protected
 is_protected_prefix() {
 	local prefix="$1"
-
 	case "$prefix" in
 	"/" | "/usr" | "/usr/local" | "/bin" | "/usr/bin")
 		return 0
@@ -44,17 +35,6 @@ is_protected_prefix() {
 	esac
 }
 
-# Resolve path following symlinks
-#
-# Arguments:
-#   $1 - path: Path to resolve
-#
-# Outputs:
-#   Writes resolved path to stdout
-#
-# Returns:
-#   0 on success
-#   1 on failure
 resolve_path() {
 	local p="$1"
 	if [[ "$p" != */* ]]; then
@@ -75,61 +55,35 @@ resolve_path() {
 	echo "$p"
 }
 
-# Find installation directory by resolving send-to-slack command
-#
-# Outputs:
-#   Writes installation directory path to stdout
-#
-# Returns:
-#   0 on success
-#   1 if send-to-slack command not found or installation directory cannot be determined
-find_installation_directory() {
+find_installation_prefix() {
 	local send_to_slack_cmd
 	local resolved_path
 	local install_dir
+	local prefix
 
 	if ! send_to_slack_cmd=$(command -v send-to-slack 2>/dev/null); then
-		echo "find_installation_directory:: send-to-slack command not found in PATH" >&2
+		echo "find_installation_prefix:: send-to-slack command not found in PATH" >&2
 		return 1
 	fi
 
 	if ! resolved_path=$(resolve_path "$send_to_slack_cmd"); then
-		echo "find_installation_directory:: failed to resolve path: $send_to_slack_cmd" >&2
+		echo "find_installation_prefix:: failed to resolve path: $send_to_slack_cmd" >&2
 		return 1
 	fi
 
+	# Resolved path is $prefix/send-to-slack/send-to-slack
+	# Get directory: $prefix/send-to-slack
 	install_dir=$(cd "$(dirname "$resolved_path")" && pwd)
 
-	# If we're in a bin/ directory, check if there's a send-to-slack directory here
-	if [[ "$(basename "$install_dir")" == "bin" ]]; then
-		if [[ -d "$install_dir/send-to-slack" ]] && [[ -f "$install_dir/send-to-slack/send-to-slack" ]] && [[ -d "$install_dir/send-to-slack/lib" ]]; then
-			install_dir="$install_dir/send-to-slack"
-		fi
-	fi
-
-	if [[ ! -d "$install_dir" ]]; then
-		echo "find_installation_directory:: installation directory not found: $install_dir" >&2
-		return 1
-	fi
-
-	if [[ ! -f "$install_dir/send-to-slack" ]]; then
-		echo "find_installation_directory:: send-to-slack executable not found in: $install_dir" >&2
-		return 1
-	fi
-
-	if [[ ! -d "$install_dir/lib" ]]; then
-		echo "find_installation_directory:: lib directory not found in: $install_dir" >&2
-		return 1
-	fi
-
-	echo "$install_dir"
+	# Get prefix: parent of send-to-slack directory
+	prefix=$(dirname "$install_dir")
+	echo "$prefix"
 	return 0
 }
 
 main() {
 	local force="false"
 	local prefix=""
-	local install_dir
 
 	while [[ $# -gt 0 ]]; do
 		case "$1" in
@@ -159,33 +113,31 @@ main() {
 		esac
 	done
 
-	# If prefix provided, use it directly; otherwise find by resolving command
 	if [[ -n "$prefix" ]]; then
-		install_dir="$prefix/bin/send-to-slack"
-		if [[ ! -d "$install_dir" ]]; then
-			echo "uninstall:: installation directory not found: $install_dir" >&2
-			return 1
-		fi
-		if [[ ! -f "$install_dir/send-to-slack" ]]; then
-			echo "uninstall:: send-to-slack executable not found in: $install_dir" >&2
-			return 1
-		fi
-		if [[ ! -d "$install_dir/lib" ]]; then
-			echo "uninstall:: lib directory not found in: $install_dir" >&2
-			return 1
-		fi
-		# Make install_dir absolute for consistent path comparison
-		install_dir=$(cd "$install_dir" && pwd)
-		# Make prefix absolute for consistent path comparison
 		prefix=$(cd "$prefix" && pwd)
 	else
-		if ! install_dir=$(find_installation_directory); then
-			echo "uninstall:: failed to find installation directory" >&2
+		if ! prefix=$(find_installation_prefix); then
+			echo "uninstall:: failed to find installation prefix" >&2
 			return 1
 		fi
-		# Calculate prefix from install_dir: if install_dir is $prefix/bin/send-to-slack, prefix is $prefix
-		# So we need to go up two levels from install_dir
-		prefix=$(cd "$(dirname "$(dirname "$install_dir")")" && pwd)
+	fi
+
+	local install_dir="${prefix}/send-to-slack"
+	local bin_symlink="${prefix}/bin/send-to-slack"
+
+	if [[ ! -d "$install_dir" ]]; then
+		echo "uninstall:: installation directory not found: $install_dir" >&2
+		return 1
+	fi
+
+	if [[ ! -f "$install_dir/send-to-slack" ]]; then
+		echo "uninstall:: executable not found: $install_dir/send-to-slack" >&2
+		return 1
+	fi
+
+	if [[ ! -d "$install_dir/lib" ]]; then
+		echo "uninstall:: lib directory not found: $install_dir/lib" >&2
+		return 1
 	fi
 
 	if is_protected_prefix "$prefix" && [[ "$force" != "true" ]]; then
@@ -193,21 +145,13 @@ main() {
 		return 1
 	fi
 
-	# Remove executable copy in bin/ if it exists
-	local bin_executable
-	bin_executable="$prefix/bin/send-to-slack"
-	if [[ -f "$bin_executable" ]]; then
-		rm -f "$bin_executable"
-		echo "uninstall:: removed executable: $bin_executable"
-	fi
+	rm -f "$bin_symlink"
+	echo "uninstall:: removed symlink: $bin_symlink"
 
-	# Remove installation directory
-	if [[ -d "$install_dir" ]]; then
-		rm -rf "$install_dir"
-		echo "uninstall:: removed installation directory: $install_dir"
-	fi
+	rm -rf "$install_dir"
+	echo "uninstall:: removed installation directory: $install_dir"
 
-	echo "Uninstalled send-to-slack from $install_dir"
+	echo "Uninstalled send-to-slack from $prefix"
 
 	return 0
 }

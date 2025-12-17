@@ -77,7 +77,6 @@ EOF
 # - 0 on success, 1 on missing
 get_version() {
 	local root_path="$1"
-	local candidates
 	local version_path
 	local version_value
 
@@ -85,17 +84,15 @@ get_version() {
 		return 1
 	fi
 
-	candidates=("${root_path}/VERSION")
+	version_path="${root_path}/VERSION"
 
-	for version_path in "${candidates[@]}"; do
-		if [[ -f "$version_path" ]]; then
-			version_value=$(tr -d '\r' <"$version_path" | tr -d '\n')
-			if [[ -n "$version_value" ]]; then
-				echo "$version_value"
-				return 0
-			fi
+	if [[ -f "$version_path" ]]; then
+		version_value=$(tr -d '\r' <"$version_path" | tr -d '\n')
+		if [[ -n "$version_value" ]]; then
+			echo "$version_value"
+			return 0
 		fi
-	done
+	fi
 
 	return 1
 }
@@ -887,9 +884,16 @@ process_input() {
 #   0 on success
 #   1 if root directory cannot be located
 find_root_dir() {
+	local script_path
 	local script_dir
 
-	script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+	# Get the actual path of the script, resolving symlinks
+	script_path="${BASH_SOURCE[0]}"
+	if [[ -L "$script_path" ]]; then
+		script_path=$(readlink -f "$script_path" 2>/dev/null || readlink "$script_path")
+	fi
+
+	script_dir=$(cd "$(dirname "$script_path")" && pwd)
 	if [[ -z "$script_dir" ]]; then
 		echo "find_root_dir:: cannot determine script directory" >&2
 		return 1
@@ -908,14 +912,14 @@ find_root_dir() {
 #   0 on success
 #   1 if lib directory cannot be located
 initialize_script_environment() {
-	local root_dir
+	local script_dir
 	local lib_dir
 
-	if ! root_dir=$(find_root_dir); then
+	if ! script_dir=$(find_root_dir); then
 		return 1
 	fi
 
-	lib_dir="${root_dir}/lib"
+	lib_dir="${script_dir}/lib"
 
 	if [[ ! -f "${lib_dir}/parse-payload.sh" ]]; then
 		echo "initialize_script_environment:: cannot locate parse-payload.sh (lib_dir: ${lib_dir})" >&2

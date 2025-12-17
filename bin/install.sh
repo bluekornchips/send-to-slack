@@ -248,30 +248,22 @@ validate_prerequisites() {
 install_files() {
 	local script_root="$1"
 	local prefix="$2"
-	local install_dir="${prefix}/bin/send-to-slack"
+	local install_dir="${prefix}/send-to-slack"
 	local lib_dir="${install_dir}/lib"
 
 	echo "install_files:: installing to ${install_dir}"
 
-	# Create installation directory
-	if ! install -d -m 755 "$install_dir"; then
-		echo "install_files:: failed to create installation directory: ${install_dir}" >&2
+	# Create installation directory matching repo structure
+	if ! install -d -m 755 "${install_dir}/lib/blocks" "${prefix}/bin"; then
+		echo "install_files:: failed to create directories" >&2
 		return 1
 	fi
 
-	# Install executable
-	if ! install -m 755 "$script_root/send-to-slack.sh" "$install_dir/send-to-slack"; then
+	if ! install -m 755 "$script_root/send-to-slack.sh" "${install_dir}/send-to-slack"; then
 		echo "install_files:: failed to install executable" >&2
 		return 1
 	fi
 
-	# Install lib directory structure
-	if ! install -d -m 755 "$lib_dir/blocks"; then
-		echo "install_files:: failed to create lib directory: ${lib_dir}/blocks" >&2
-		return 1
-	fi
-
-	# Install lib files
 	for file in "$script_root/lib"/*; do
 		if [[ -f "$file" ]]; then
 			if ! install -m 755 "$file" "$lib_dir/"; then
@@ -292,10 +284,16 @@ install_files() {
 
 	# Install VERSION file
 	if [[ -f "${script_root}/${VERSION_FILE_NAME}" ]]; then
-		if ! install -m 644 "${script_root}/${VERSION_FILE_NAME}" "$install_dir/${VERSION_FILE_NAME}"; then
+		if ! install -m 644 "${script_root}/${VERSION_FILE_NAME}" "${install_dir}/${VERSION_FILE_NAME}"; then
 			echo "install_files:: failed to install VERSION file" >&2
 			return 1
 		fi
+	fi
+
+	# Create symlink in bin/ for PATH access
+	if ! ln -sf "${install_dir}/send-to-slack" "${prefix}/bin/send-to-slack"; then
+		echo "install_files:: failed to create symlink" >&2
+		return 1
 	fi
 
 	return 0
@@ -382,11 +380,12 @@ main() {
 	done
 
 	install_prefix=$(determine_install_prefix)
-	install_dir="${install_prefix}/bin/send-to-slack"
+	install_dir="${install_prefix}/send-to-slack"
 
 	echo "main:: this script will install:"
 	echo "main::   ${install_dir}/send-to-slack"
 	echo "main::   ${install_dir}/lib/"
+	echo "main::   ${install_dir}/VERSION"
 
 	if ! install_latest_main "$install_prefix"; then
 		echo "main:: installation failed. See error messages above for details." >&2
@@ -394,28 +393,28 @@ main() {
 	fi
 
 	echo "main:: installed send-to-slack to ${install_dir}"
-	echo "main:: executable available at ${install_dir}/send-to-slack"
+	echo "main:: executable available at ${install_prefix}/bin/send-to-slack"
 	echo "main:: resolved reference: ${RESOLVED_REF}"
 
-	if [[ ":${PATH}:" != *":${install_dir}:"* ]]; then
-		echo "main:: ${install_dir} is not in your PATH." >&2
+	if [[ ":${PATH}:" != *":${install_prefix}/bin:"* ]]; then
+		echo "main:: ${install_prefix}/bin is not in your PATH." >&2
 		echo "main:: add it to your PATH by running:"
-		echo "main::   export PATH=\"${install_dir}:\$PATH\""
+		echo "main::   export PATH=\"${install_prefix}/bin:\$PATH\""
 		echo
 		echo "main:: to make this permanent, add the above line to your shell configuration file:"
 		case "${SHELL}" in
 		*/bash*)
 			if [[ "$(uname)" == "Linux" ]]; then
-				echo "main::   echo 'export PATH=\"${install_dir}:\$PATH\"' >> ~/.bashrc"
+				echo "main::   echo 'export PATH=\"${install_prefix}/bin:\$PATH\"' >> ~/.bashrc"
 			else
-				echo "main::   echo 'export PATH=\"${install_dir}:\$PATH\"' >> ~/.bash_profile"
+				echo "main::   echo 'export PATH=\"${install_prefix}/bin:\$PATH\"' >> ~/.bash_profile"
 			fi
 			;;
 		*/zsh*)
-			echo "main::   echo 'export PATH=\"${install_dir}:\$PATH\"' >> ~/.zshrc"
+			echo "main::   echo 'export PATH=\"${install_prefix}/bin:\$PATH\"' >> ~/.zshrc"
 			;;
 		*)
-			echo "main::   echo 'export PATH=\"${install_dir}:\$PATH\"' >> ~/.profile"
+			echo "main::   echo 'export PATH=\"${install_prefix}/bin:\$PATH\"' >> ~/.profile"
 			;;
 		esac
 	fi
