@@ -102,10 +102,22 @@ EOF
 }
 
 # Check for required external commands
+#
+# Arguments:
+#   $1 - mode: "full" (default) requires all deps including docker, "artifact" skips docker
+#
 # Returns 0 on success, 1 on missing commands
 check_dependencies() {
+	local mode="${1:-full}"
 	local missing_deps=()
-	local required_commands=("jq" "curl" "envsubst" "rsync" "docker" "git" "tar")
+	local required_commands
+
+	if [[ "$mode" == "artifact" ]]; then
+		# Artifact builds don't need docker, jq, curl, envsubst, or rsync
+		required_commands=("git" "tar" "gzip")
+	else
+		required_commands=("jq" "curl" "envsubst" "rsync" "docker" "git" "tar")
+	fi
 
 	for cmd in "${required_commands[@]}"; do
 		if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -119,6 +131,110 @@ check_dependencies() {
 		return 1
 	fi
 
+	return 0
+}
+
+# Get version from argument or VERSION file
+#
+# Arguments:
+#   $1 - version override (optional)
+#
+# Outputs:
+#   The resolved version string
+#
+# Returns:
+#   0 on success, 1 on failure
+get_version() {
+	local version_override="${1:-}"
+
+	if [[ -n "$version_override" ]]; then
+		echo "$version_override"
+		return 0
+	fi
+
+	local version_file="${GIT_ROOT}/VERSION"
+	if [[ -f "$version_file" ]]; then
+		local version
+		version=$(tr -d '[:space:]' <"$version_file")
+		if [[ -n "$version" ]]; then
+			echo "v${version#v}"
+			return 0
+		fi
+	fi
+
+	echo "get_version:: could not determine version" >&2
+	return 1
+}
+
+# Build a release tarball
+#
+# Arguments:
+#   $1 - version tag (e.g., v0.1.3)
+#   $2 - output directory
+#
+# Returns:
+#   0 on success, 1 on failure
+build_tarball() {
+	local version="${1:-}"
+	local output_dir="${2:-./artifacts}"
+
+	if [[ -z "$version" ]]; then
+		echo "build_tarball:: version is required" >&2
+		return 1
+	fi
+
+	# Detect OS and architecture
+	local os_name arch_name
+	os_name=$(uname -s | tr '[:upper:]' '[:lower:]')
+	arch_name=$(uname -m)
+
+	# Normalize architecture names
+	case "$arch_name" in
+	x86_64)
+		arch_name="amd64"
+		;;
+	aarch64 | arm64)
+		arch_name="arm64"
+		;;
+	esac
+
+	local artifact_name="send-to-slack-${version}-${os_name}-${arch_name}"
+	local tarball_name="${artifact_name}.tar.gz"
+
+	# Create output directory
+	mkdir -p "$output_dir"
+
+	# Create staging directory
+	local staging_dir
+	staging_dir=$(mktemp -d)
+	local artifact_dir="${staging_dir}/${artifact_name}"
+	mkdir -p "${artifact_dir}/lib/blocks"
+
+	# Copy files to staging
+	cp "${GIT_ROOT}/bin/send-to-slack.sh" "${artifact_dir}/send-to-slack"
+	cp "${GIT_ROOT}/lib/"*.sh "${artifact_dir}/lib/"
+	cp "${GIT_ROOT}/lib/blocks/"*.sh "${artifact_dir}/lib/blocks/"
+	cp "${GIT_ROOT}/VERSION" "${artifact_dir}/"
+	cp "${GIT_ROOT}/LICENSE" "${artifact_dir}/" 2>/dev/null || true
+	cp "${GIT_ROOT}/README.md" "${artifact_dir}/" 2>/dev/null || true
+
+	# Make scripts executable
+	chmod +x "${artifact_dir}/send-to-slack"
+	chmod +x "${artifact_dir}/lib/"*.sh
+	chmod +x "${artifact_dir}/lib/blocks/"*.sh
+
+	# Create tarball
+	echo "build_tarball:: creating ${tarball_name}"
+	if ! tar -czf "${output_dir}/${tarball_name}" -C "$staging_dir" "$artifact_name"; then
+		echo "build_tarball:: failed to create tarball" >&2
+		rm -rf "$staging_dir"
+		return 1
+	fi
+
+	# Cleanup
+	rm -rf "$staging_dir"
+
+	echo "build_tarball:: created ${output_dir}/${tarball_name}"
 	return 0
 }
 
@@ -429,29 +545,44 @@ main() {
 		return 1
 	fi
 
-	if ! check_dependencies; then
-		return 1
+	# Determine if this is an artifact-only build (no Docker needed)
+	local artifact_only="false"
+	if [[ "$CREATE_BUILD_ARTIFACT" == "true" ]] && \
+	   [[ "$SEND_HEALTHCHECK_QUERY" != "true" ]] && \
+	   [[ "$SEND_TEST_MESSAGE" != "true" ]] && \
+	   [[ -z "$DOCKERFILE_CHOICE" ]]; then
+		artifact_only="true"
 	fi
 
-	if [[ "$GITHUB_ACTION" == "true" ]]; then
-		if ! extract_github_metadata; then
+	if [[ "$artifact_only" == "true" ]]; then
+		if ! check_dependencies "artifact"; then
 			return 1
 		fi
-	fi
-
-	if ! build_image; then
-		return 1
-	fi
-
-	if [[ "$SEND_HEALTHCHECK_QUERY" == "true" ]]; then
-		if ! run_healthcheck; then
+	else
+		if ! check_dependencies "full"; then
 			return 1
 		fi
-	fi
 
-	if [[ "$SEND_TEST_MESSAGE" == "true" ]]; then
-		if ! send_test_message; then
+		if [[ "$GITHUB_ACTION" == "true" ]]; then
+			if ! extract_github_metadata; then
+				return 1
+			fi
+		fi
+
+		if ! build_image; then
 			return 1
+		fi
+
+		if [[ "$SEND_HEALTHCHECK_QUERY" == "true" ]]; then
+			if ! run_healthcheck; then
+				return 1
+			fi
+		fi
+
+		if [[ "$SEND_TEST_MESSAGE" == "true" ]]; then
+			if ! send_test_message; then
+				return 1
+			fi
 		fi
 	fi
 
