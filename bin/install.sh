@@ -310,6 +310,68 @@ download_file() {
 	return 0
 }
 
+# Extract and install from a downloaded tarball
+#
+# Inputs:
+# - $1 - tarball_path: Path to the downloaded .tar.gz file
+# - $2 - prefix: Target installation directory
+#
+# Returns:
+# - 0 on success, 1 on failure
+install_from_tarball() {
+	local tarball_path="$1"
+	local prefix="$2"
+	local extract_dir
+	local source_script
+	local target
+
+	if [[ ! -f "$tarball_path" ]]; then
+		echo "install_from_tarball:: tarball not found: $tarball_path" >&2
+		return 1
+	fi
+
+	extract_dir=$(mktemp -d)
+
+	if ! tar -xzf "$tarball_path" -C "$extract_dir"; then
+		echo "install_from_tarball:: failed to extract tarball" >&2
+		rm -rf "$extract_dir"
+		return 1
+	fi
+
+	# Find the send-to-slack.sh script in the extracted contents
+	source_script="${extract_dir}/send-to-slack/bin/send-to-slack.sh"
+
+	if [[ ! -f "$source_script" ]]; then
+		echo "install_from_tarball:: send-to-slack.sh not found in tarball" >&2
+		rm -rf "$extract_dir"
+		return 1
+	fi
+
+	target="${prefix}/${INSTALL_BASENAME}"
+
+	if ! cp "$source_script" "$target"; then
+		echo "install_from_tarball:: failed to copy to $target" >&2
+		rm -rf "$extract_dir"
+		return 1
+	fi
+
+	if ! chmod 0755 "$target"; then
+		echo "install_from_tarball:: chmod failed on $target" >&2
+		rm -rf "$extract_dir"
+		return 1
+	fi
+
+	if ! printf '\n%s\n' "$INSTALL_SIGNATURE" >>"$target"; then
+		echo "install_from_tarball:: failed to append signature" >&2
+		rm -rf "$extract_dir"
+		return 1
+	fi
+
+	rm -rf "$extract_dir"
+	echo "install_from_tarball:: installed $target"
+	return 0
+}
+
 main() {
 	local prefix
 	local force
