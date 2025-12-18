@@ -10,8 +10,8 @@ setup_file() {
 		exit 1
 	fi
 
-	INSTALL_SCRIPT="${GIT_ROOT}/install.sh"
-	UNINSTALL_SCRIPT="${GIT_ROOT}/uninstall.sh"
+	INSTALL_SCRIPT="${GIT_ROOT}/bin/install.sh"
+	UNINSTALL_SCRIPT="${GIT_ROOT}/bin/uninstall.sh"
 
 	if [[ ! -f "$INSTALL_SCRIPT" ]]; then
 		echo "setup_file:: install script missing: $INSTALL_SCRIPT" >&2
@@ -61,7 +61,7 @@ teardown() {
 }
 
 @test "uninstall.sh:: removes signed binary" {
-	run "$INSTALL_SCRIPT" --prefix "$PREFIX_DIR"
+	run "$INSTALL_SCRIPT" --version local --prefix "$PREFIX_DIR"
 	[[ "$status" -eq 0 ]]
 
 	run "$UNINSTALL_SCRIPT" --prefix "$PREFIX_DIR"

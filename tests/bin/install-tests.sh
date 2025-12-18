@@ -10,7 +10,7 @@ setup_file() {
 		exit 1
 	fi
 
-	INSTALL_SCRIPT="${GIT_ROOT}/install.sh"
+	INSTALL_SCRIPT="${GIT_ROOT}/bin/install.sh"
 
 	if [[ ! -f "$INSTALL_SCRIPT" ]]; then
 		echo "setup_file:: install script missing: $INSTALL_SCRIPT" >&2

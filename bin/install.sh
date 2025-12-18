@@ -5,7 +5,7 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UPSTREAM_REPO="bluekornchips/send-to-slack"
-SOURCE_SCRIPT="${SCRIPT_DIR}/bin/send-to-slack.sh"
+SOURCE_SCRIPT="${SCRIPT_DIR}/send-to-slack.sh"
 DEFAULT_PREFIX="${HOME}/.local/bin"
 INSTALL_BASENAME="send-to-slack"
 INSTALL_SIGNATURE="# send-to-slack install signature: v1"
