@@ -52,11 +52,14 @@ resolve_user_id() {
 	local cursor=""
 	while true; do
 		local api_response
-		api_response=$(curl -s -X GET \
+		if ! api_response=$(curl -s -X GET \
 			-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
 			--max-time 30 \
 			--connect-timeout 10 \
-			"https://slack.com/api/users.list?limit=100&cursor=${cursor}")
+			"https://slack.com/api/users.list?limit=100&cursor=${cursor}" 2>&1); then
+			echo "resolve_user_id:: curl failed to send request" >&2
+			return 1
+		fi
 
 		if [[ -z "$api_response" ]]; then
 			echo "resolve_user_id:: empty response from Slack API" >&2
@@ -140,11 +143,14 @@ resolve_channel_id() {
 	local cursor=""
 	while true; do
 		local api_response
-		api_response=$(curl -s -X GET \
+		if ! api_response=$(curl -s -X GET \
 			-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
 			--max-time 30 \
 			--connect-timeout 10 \
-			"https://slack.com/api/conversations.list?limit=100&types=public_channel,private_channel&cursor=${cursor}")
+			"https://slack.com/api/conversations.list?limit=100&types=public_channel,private_channel&cursor=${cursor}" 2>&1); then
+			echo "resolve_channel_id:: curl failed to send request" >&2
+			return 1
+		fi
 
 		if [[ -z "$api_response" ]]; then
 			echo "resolve_channel_id:: empty response from Slack API" >&2
@@ -227,13 +233,16 @@ resolve_dm_id() {
 
 	# Open or get DM with the resolved user
 	local api_response
-	api_response=$(curl -s -X POST \
+	if ! api_response=$(curl -s -X POST \
 		-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
 		-H "Content-Type: application/x-www-form-urlencoded" \
 		--data-urlencode "users=$user_id" \
 		--max-time 30 \
 		--connect-timeout 10 \
-		"https://slack.com/api/conversations.open")
+		"https://slack.com/api/conversations.open" 2>&1); then
+		echo "resolve_dm_id:: curl failed to send request" >&2
+		return 1
+	fi
 
 	if [[ -z "$api_response" ]]; then
 		echo "resolve_dm_id:: empty response from Slack API" >&2

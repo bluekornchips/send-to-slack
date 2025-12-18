@@ -1,445 +1,420 @@
 #!/usr/bin/env bash
 #
-# Installation script for send-to-slack
-# Installs send-to-slack from GitHub tarball to the specified prefix directory
-# Supports curl | bash installation.
+# Install helper for send-to-slack
 #
-set -euo pipefail
-IFS=$' \n\t'
 
-# Fail fast with a concise message when not using bash
-# Single brackets for POSIX yo
-if [ -z "${BASH_VERSION:-}" ]; then
-	# Use echo here since abort() may not be defined yet if bash isn't running
-	echo "Bash is required to interpret this script." >&2
-	exit 1
-fi
-
-# Check bash version - requires 3.1+ for BASH_SOURCE array support
-# Note: BASH_VERSINFO may not be available in very old bash versions
-if [[ -n "${BASH_VERSINFO[0]:-}" ]]; then
-	if [[ "${BASH_VERSINFO[0]}" -lt 3 ]] || [[ "${BASH_VERSINFO[0]}" -eq 3 && "${BASH_VERSINFO[1]:-0}" -lt 1 ]]; then
-		echo "Bash 3.1 or later is required (current version: ${BASH_VERSION})" >&2
-		exit 1
-	fi
-fi
-
-# Check if script is run in POSIX mode
-if [[ -n "${POSIXLY_CORRECT+1}" ]]; then
-	echo "Bash must not run in POSIX mode. Please unset POSIXLY_CORRECT and try again." >&2
-	exit 1
-fi
-
-VERSION_FILE_NAME="VERSION"
-DEFAULT_REPO_URL="https://github.com/bluekornchips/send-to-slack"
-DEFAULT_REPO_BRANCH="main"
-CLEANUP_ROOT=""
-RESOLVED_REF=""
-
-# Network configuration
-CURL_TIMEOUT=30
-CURL_MAX_RETRIES=3
-CURL_RETRY_DELAY=2
-
-# Abort with error message
-#
-# Inputs:
-# - $@ - error message(s) to display
-#
-# Side Effects:
-# - Outputs error message(s) to stderr
-# - Exits with status 1
-abort() {
-	printf "%s\n" "$@" >&2
-	exit 1
-}
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+UPSTREAM_REPO="bluekornchips/send-to-slack"
+SOURCE_SCRIPT="${SCRIPT_DIR}/bin/send-to-slack.sh"
+DEFAULT_PREFIX="${HOME}/.local/bin"
+INSTALL_BASENAME="send-to-slack"
+INSTALL_SIGNATURE="# send-to-slack install signature: v1"
+GITHUB_REPO="${GITHUB_REPO:-${UPSTREAM_REPO}}"
 
 # Display usage information
 #
 # Side Effects:
-# - Outputs usage message to stderr
-usage() {
-	cat <<EOF >&2
-usage: $0 [OPTIONS]
-
-Install send-to-slack from GitHub tarball.
-- Installs to ~/.local when run without sudo (default)
-- Installs to /usr/local when run with sudo
-
-OPTIONS:
-  -h, --help         Show this help message
-
-ENVIRONMENT VARIABLES:
-  SEND_TO_SLACK_REPO_URL    Override repository URL (default: ${DEFAULT_REPO_URL})
-
-EXAMPLES:
-  # Install to ~/.local (no sudo required)
-  curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/bin/install.sh | bash
-
-  # Install to /usr/local (requires sudo)
-  curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/bin/install.sh | sudo bash
-EOF
-}
-
-# Remove temporary working directory when present
+# - Outputs usage details to stdout
 #
 # Returns:
 # - 0 always
-cleanup() {
-	if [[ -n "$CLEANUP_ROOT" && -d "$CLEANUP_ROOT" ]]; then
-		rm -rf "$CLEANUP_ROOT"
-	fi
+usage() {
+	cat <<EOF
+Usage: $(basename "$0") [--prefix <dir>] [--force] [--version <tag>|local] [--help]
 
+Options:
+  --prefix <dir>   Target directory for installation (default: ${DEFAULT_PREFIX})
+  --force          Overwrite existing file even if unsigned
+  --version <tag>  Install from GitHub Releases (default: latest). Use "local" to install from the current repo.
+  -h, --help       Show this help message
+
+Behavior:
+  - Copies bin/send-to-slack.sh to the target directory as "send-to-slack"
+  - Appends a signature comment for safe uninstall validation
+  - Refuses system prefixes like /usr or /etc; choose a writable user path
+  - Creates the prefix if missing and sets mode 0755 on the installed file
+EOF
 	return 0
 }
 
-trap cleanup EXIT
-
-# Ensure required commands exist
-#
-# Inputs:
-# - $@ - commands to verify
+# Validate required external commands
 #
 # Returns:
-# - 0 when all commands exist
-# - 1 when a command is missing
-require_commands() {
+# - 0 on success, 1 on missing commands
+check_dependencies() {
+	local missing=()
+	local commands=("cp" "chmod" "mkdir" "grep" "curl" "tar")
 	local cmd
 
-	for cmd in "$@"; do
+	for cmd in "${commands[@]}"; do
 		if ! command -v "$cmd" >/dev/null 2>&1; then
-			echo "require_commands:: missing required command: ${cmd}" >&2
-			return 1
+			missing+=("$cmd")
 		fi
 	done
 
+	if [[ ${#missing[@]} -gt 0 ]]; then
+		echo "check_dependencies:: missing commands: ${missing[*]}" >&2
+		return 1
+	fi
+
 	return 0
 }
 
-# Check if running as root
+# Normalize prefix and preserve root
 #
+# Inputs:
+# - $1 - path to normalize
+# Outputs:
+# - Writes normalized path to stdout
 # Returns:
-# - 0 if running as root
-# - 1 if not running as root
-is_root() {
-	if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+# - 0 on success, 1 on empty input
+normalize_prefix() {
+	local path="$1"
+
+	if [[ -z "$path" ]]; then
+		echo "normalize_prefix:: prefix is empty" >&2
+		return 1
+	fi
+
+	if [[ "$path" == "/" ]]; then
+		echo "/"
 		return 0
 	fi
+
+	echo "${path%/}"
+	return 0
+}
+
+# Verify source script exists and is readable
+# Returns:
+# - 0 on success, 1 on failure
+ensure_source() {
+	if [[ ! -f "$SOURCE_SCRIPT" ]]; then
+		echo "ensure_source:: source missing: $SOURCE_SCRIPT" >&2
+		return 1
+	fi
+
+	if [[ ! -r "$SOURCE_SCRIPT" ]]; then
+		echo "ensure_source:: source not readable: $SOURCE_SCRIPT" >&2
+		return 1
+	fi
+
+	return 0
+}
+
+# Check if prefix is allowed and writable; create if missing
+#
+# Inputs:
+# - $1 - target prefix
+# Returns:
+# - 0 on success, 1 on failure
+ensure_prefix() {
+	local prefix="$1"
+
+	if [[ -z "$prefix" ]]; then
+		echo "ensure_prefix:: prefix is empty" >&2
+		return 1
+	fi
+
+	case "$prefix" in
+	/usr/* | /etc/*)
+		echo "ensure_prefix:: refusing system prefix: $prefix" >&2
+		return 1
+		;;
+	esac
+
+	if [[ ! -d "$prefix" ]]; then
+		if ! mkdir -p "$prefix"; then
+			echo "ensure_prefix:: cannot create prefix: $prefix" >&2
+			return 1
+		fi
+	fi
+
+	if [[ ! -w "$prefix" ]]; then
+		echo "ensure_prefix:: prefix not writable: $prefix" >&2
+		return 1
+	fi
+
+	return 0
+}
+
+# Check for install signature on an existing file
+#
+# Inputs:
+# - $1 - file path
+# Returns:
+# - 0 when signature is present, 1 otherwise
+file_has_signature() {
+	local path="$1"
+
+	if [[ ! -f "$path" ]]; then
+		return 1
+	fi
+
+	if grep -Fq "$INSTALL_SIGNATURE" "$path"; then
+		return 0
+	fi
+
 	return 1
 }
 
-# Determine installation prefix based on whether running as root
-#
-# Outputs:
-# - Writes installation prefix to stdout
-#
-# Returns:
-# - 0 always
-determine_install_prefix() {
-	if is_root; then
-		echo "/usr/local"
-	else
-		echo "${HOME}/.local"
-	fi
-}
-
-# Download URL with retry and timeout
+# Install binary to prefix with signature and mode
 #
 # Inputs:
-# - $1 - url: URL to download
-# - $2 - output: Output file path
-#
+# - $1 - prefix
+# - $2 - force flag (1 enables overwrite without signature)
 # Returns:
-# - 0 on success
-# - 1 on failure
-download_with_retry() {
+# - 0 on success, 1 on failure
+install_binary() {
+	local prefix="$1"
+	local force="$2"
+	local normalized_prefix
+	local target
+
+	if ! normalized_prefix=$(normalize_prefix "$prefix"); then
+		return 1
+	fi
+
+	target="${normalized_prefix}/${INSTALL_BASENAME}"
+
+	if [[ -d "$target" ]]; then
+		echo "install_binary:: target is a directory: $target" >&2
+		return 1
+	fi
+
+	if [[ -f "$target" ]] && ((force != 1)); then
+		if ! file_has_signature "$target"; then
+			echo "install_binary:: existing file lacks signature, use --force to overwrite: $target" >&2
+			return 1
+		fi
+	fi
+
+	if ! cp "$SOURCE_SCRIPT" "$target"; then
+		echo "install_binary:: copy failed to $target" >&2
+		return 1
+	fi
+
+	if ! chmod 0755 "$target"; then
+		echo "install_binary:: chmod failed on $target" >&2
+		return 1
+	fi
+
+	if ! printf '\n%s\n' "$INSTALL_SIGNATURE" >>"$target"; then
+		echo "install_binary:: failed to append signature to $target" >&2
+		return 1
+	fi
+
+	if ! file_has_signature "$target"; then
+		echo "install_binary:: signature verification failed for $target" >&2
+		return 1
+	fi
+
+	echo "install_binary:: installed $target"
+	return 0
+}
+
+# Provide post-install guidance
+# Inputs:
+# - $1 - prefix
+# Returns:
+# - 0 always
+print_next_steps() {
+	local prefix="$1"
+	local normalized_prefix
+
+	if ! normalized_prefix=$(normalize_prefix "$prefix"); then
+		return 0
+	fi
+
+	if [[ ":${PATH}:" != *":${normalized_prefix}:"* ]]; then
+		echo "print_next_steps:: add to PATH: export PATH=\"${normalized_prefix}:\$PATH\""
+	fi
+
+	echo "print_next_steps:: installed binary: ${normalized_prefix}/${INSTALL_BASENAME}"
+	return 0
+}
+
+# Detect OS/arch (amd64 only)
+# Outputs OS_ARCH string, returns 0 on success
+detect_os_arch() {
+	local os
+	local arch
+
+	os=$(uname -s | tr '[:upper:]' '[:lower:]')
+	case "$os" in
+	linux | darwin) ;;
+	*)
+		echo "detect_os_arch:: unsupported OS: $os" >&2
+		return 1
+		;;
+	esac
+
+	arch=$(uname -m | tr '[:upper:]' '[:lower:]')
+	case "$arch" in
+	x86_64 | amd64)
+		arch="amd64"
+		;;
+	*)
+		echo "detect_os_arch:: unsupported architecture: $arch (only amd64 supported)" >&2
+		return 1
+		;;
+	esac
+
+	echo "${os}_${arch}"
+	return 0
+}
+
+# Resolve latest tag from GitHub
+resolve_latest_version() {
+	local api_url
+	local version
+
+	api_url="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
+
+	if ! version=$(curl --proto "=https" --tlsv1.2 --fail --show-error --silent --location "$api_url" | grep -o '"tag_name":"[^"]*"' | cut -d'"' -f4); then
+		echo "resolve_latest_version:: failed to fetch latest version" >&2
+		return 1
+	fi
+
+	if [[ -z "$version" ]]; then
+		echo "resolve_latest_version:: no version found" >&2
+		return 1
+	fi
+
+	echo "$version"
+	return 0
+}
+
+# Build release artifact URL
+build_artifact_url() {
+	local version="$1"
+	local os_arch="$2"
+	local base_url
+
+	base_url="https://github.com/${GITHUB_REPO}/releases/download/${version}"
+	ARTIFACT_URL="${base_url}/send-to-slack_${version#v}_${os_arch}.tar.gz"
+
+	return 0
+}
+
+# Download file
+download_file() {
 	local url="$1"
 	local output="$2"
 
-	if curl -fsSL \
-		--connect-timeout "$CURL_TIMEOUT" \
-		--max-time "$((CURL_TIMEOUT * 3))" \
-		--retry "$CURL_MAX_RETRIES" \
-		--retry-delay "$CURL_RETRY_DELAY" \
-		--retry-all-errors \
-		-o "$output" \
-		"$url"; then
-		return 0
+	if ! curl --proto "=https" --tlsv1.2 --fail --show-error --location --output "$output" "$url"; then
+		echo "download_file:: failed to download $url" >&2
+		return 1
 	fi
 
-	echo "download_with_retry:: failed to download ${url} after ${CURL_MAX_RETRIES} attempts" >&2
-	return 1
+	return 0
 }
 
-# Download and unpack GitHub tarball from main branch
-#
-# Outputs:
-# - Writes extracted root path to stdout on success
-#
-# Returns:
-# - 0 on success
-# - 1 on failure
-download_and_unpack() {
-	local repo_url="${SEND_TO_SLACK_REPO_URL:-$DEFAULT_REPO_URL}"
-	local tarball_url
+main() {
+	local prefix
+	local force
+	local version
+	local artifact_url
+	local os_arch
 	local temp_dir
-	local tarball_file
-	local extracted_root
+	local tarball_path
 
-	repo_url="${repo_url%.git}"
-	tarball_url="${repo_url}/archive/${DEFAULT_REPO_BRANCH}.tar.gz"
+	prefix="$DEFAULT_PREFIX"
+	force=0
+	version=""
+	artifact_url=""
 
-	temp_dir=$(mktemp -d /tmp/install.XXXXXX)
-	CLEANUP_ROOT="$temp_dir"
-	tarball_file="${temp_dir}/source.tar.gz"
-
-	if ! download_with_retry "$tarball_url" "$tarball_file"; then
-		echo "download_and_unpack:: failed to download tarball" >&2
-		return 1
-	fi
-
-	if ! require_commands tar; then
-		echo "download_and_unpack:: tar command not found" >&2
-		return 1
-	fi
-
-	if ! tar -xzf "$tarball_file" -C "$temp_dir"; then
-		echo "download_and_unpack:: failed to extract tarball" >&2
-		return 1
-	fi
-
-	# GitHub tarballs extract to a single directory named send-to-slack-<ref>
-	# Find the extracted directory by looking for the expected files
-	local dirs
-	dirs=()
-	while IFS= read -r dir; do
-		if [[ -d "$dir" ]] && [[ -f "$dir/bin/send-to-slack.sh" ]] && [[ -d "$dir/lib" ]]; then
-			dirs+=("$dir")
-		fi
-	done < <(find "$temp_dir" -maxdepth 1 -mindepth 1 -type d)
-
-	if [[ ${#dirs[@]} -eq 0 ]]; then
-		echo "download_and_unpack:: failed to locate extracted directory with expected files in ${temp_dir}" >&2
-		return 1
-	fi
-
-	if [[ ${#dirs[@]} -gt 1 ]]; then
-		echo "download_and_unpack:: found multiple extracted directories, expected exactly one" >&2
-		return 1
-	fi
-
-	extracted_root="${dirs[0]}"
-
-	echo "$extracted_root"
-	return 0
-}
-
-# Validate installation prerequisites
-#
-# Inputs:
-# - $1 - script_root: Root directory containing bin/send-to-slack.sh and lib/
-#
-# Returns:
-# - 0 if all prerequisites are met
-# - 1 if prerequisites are missing
-validate_prerequisites() {
-	local script_root="$1"
-
-	if [[ ! -f "$script_root/bin/send-to-slack.sh" ]]; then
-		echo "validate_prerequisites:: main script not found: ${script_root}/bin/send-to-slack.sh" >&2
-		return 1
-	fi
-
-	if [[ ! -d "$script_root/lib" ]]; then
-		echo "validate_prerequisites:: lib directory not found: ${script_root}/lib" >&2
-		return 1
-	fi
-
-	return 0
-}
-
-# Perform the installation
-#
-# Inputs:
-# - $1 - script_root: Root directory containing bin/send-to-slack.sh and lib/
-# - $2 - prefix: Installation prefix directory
-# - $3 - manifest_file: Manifest recording installed files
-#
-# Returns:
-# - 0 on success
-# - 1 on failure
-install_files() {
-	local script_root="$1"
-	local prefix="$2"
-	local manifest_file="$3"
-	local install_root
-	local manifest_dir
-	local manifest_entries=()
-
-	# Install supporting files to $prefix/lib/send-to-slack/ maintaining repo structure
-	install_root="$prefix/lib/send-to-slack"
-	manifest_dir=$(dirname "$manifest_file")
-	install -d -m 755 "$install_root/bin/blocks"
-	install -d -m 755 "$manifest_dir"
-	install -d -m 755 "$prefix/bin"
-
-	if [[ -L "$prefix/bin/send-to-slack" ]] || [[ -f "$prefix/bin/send-to-slack" ]]; then
-		rm -f "$prefix/bin/send-to-slack"
-	fi
-	install -m 755 "$script_root/bin/send-to-slack.sh" "$prefix/bin/send-to-slack"
-	manifest_entries+=("$prefix/bin/send-to-slack")
-
-	# Install lib/ directory files (excluding blocks subdirectory)
-	for file in "$script_root/lib"/*; do
-		if [[ -f "$file" ]]; then
-			install -m 755 "$file" "$install_root/bin/"
-			manifest_entries+=("$install_root/bin/$(basename "$file")")
-		fi
-	done
-
-	# Install lib/blocks/ directory files
-	for file in "$script_root/lib/blocks"/*; do
-		if [[ -f "$file" ]]; then
-			install -m 755 "$file" "$install_root/bin/blocks/"
-			manifest_entries+=("$install_root/bin/blocks/$(basename "$file")")
-		fi
-	done
-
-	# Install VERSION file at root of install directory (matching repo structure)
-	if [[ -f "${script_root}/${VERSION_FILE_NAME}" ]]; then
-		install -m 644 "${script_root}/${VERSION_FILE_NAME}" "$install_root/${VERSION_FILE_NAME}"
-		manifest_entries+=("$install_root/${VERSION_FILE_NAME}")
-	fi
-
-	printf '%s\n' "${manifest_entries[@]}" >"$manifest_file"
-
-	return 0
-}
-
-# Perform installation from resolved script root
-#
-# Inputs:
-# - $1 - script_root: Root directory containing bin/send-to-slack.sh and lib/
-# - $2 - prefix: Installation prefix directory
-#
-# Returns:
-# - 0 on success
-# - 1 on failure
-perform_installation() {
-	local script_root="$1"
-	local prefix="$2"
-	local manifest_file
-
-	if ! validate_prerequisites "$script_root"; then
-		return 1
-	fi
-
-	manifest_file="$prefix/lib/send-to-slack/install_manifest.txt"
-
-	if ! install_files "$script_root" "$prefix" "$manifest_file"; then
-		return 1
-	fi
-
-	return 0
-}
-
-# Install from main branch
-#
-# Inputs:
-# - $1 - prefix: Installation prefix directory
-#
-# Returns:
-# - 0 on success
-# - 1 on failure
-install_latest_main() {
-	local prefix="$1"
-	local script_root
-
-	if ! require_commands curl tar; then
-		echo "install_latest_main:: required commands not found (curl, tar)" >&2
-		return 1
-	fi
-
-	if ! script_root=$(download_and_unpack); then
-		echo "install_latest_main:: failed to download and unpack from main branch" >&2
-		return 1
-	fi
-
-	RESOLVED_REF="${DEFAULT_REPO_BRANCH}"
-
-	if ! perform_installation "$script_root" "$prefix"; then
-		return 1
-	fi
-
-	return 0
-}
-
-# Parse command line arguments
-#
-# Inputs:
-# - $@ - command line arguments
-#
-# Returns:
-# - 0 on success
-# - 1 on failure
-parse_args() {
 	while [[ $# -gt 0 ]]; do
 		case "$1" in
+		--prefix)
+			shift
+			if [[ -z "${1:-}" ]]; then
+				echo "main:: --prefix requires a value" >&2
+				return 1
+			fi
+			prefix="$1"
+			;;
+		--force)
+			force=1
+			;;
+		--version)
+			shift
+			if [[ -z "${1:-}" ]]; then
+				echo "main:: --version requires a value" >&2
+				return 1
+			fi
+			version="$1"
+			;;
 		-h | --help)
 			usage
-			return 2
+			return 0
 			;;
 		*)
-			echo "parse_args:: unknown option: $1" >&2
+			echo "main:: unknown option: $1" >&2
 			return 1
 			;;
 		esac
+		shift
 	done
 
-	return 0
-}
-
-# Main entry point
-#
-# Inputs:
-# - CLI flags
-#
-# Returns:
-# - 0 on success
-# - 1 on failure
-main() {
-	local parse_result
-	local install_prefix
-
-	parse_result=0
-	parse_args "$@" || parse_result=$?
-
-	if [[ $parse_result -eq 2 ]]; then
+	if [[ "$version" == "local" ]]; then
+		if ! check_dependencies; then
+			return 1
+		fi
+		if ! ensure_source; then
+			return 1
+		fi
+		if ! ensure_prefix "$prefix"; then
+			return 1
+		fi
+		if ! install_binary "$prefix" "$force"; then
+			return 1
+		fi
+		print_next_steps "$prefix"
 		return 0
 	fi
 
-	if [[ $parse_result -ne 0 ]]; then
-		usage
-		abort "Invalid arguments. See usage above."
+	if ! check_dependencies; then
+		return 1
 	fi
 
-	# Determine install prefix based on whether running as root
-	install_prefix=$(determine_install_prefix)
-
-	if ! install_latest_main "$install_prefix"; then
-		abort "Installation failed. See error messages above for details."
+	if ! os_arch=$(detect_os_arch); then
+		return 1
 	fi
 
-	echo "Installed send-to-slack to ${install_prefix}/bin/send-to-slack"
-	echo "Supporting files installed to ${install_prefix}/lib/send-to-slack/"
-	echo "Resolved reference: ${RESOLVED_REF}"
+	if [[ -z "$version" ]]; then
+		if ! version=$(resolve_latest_version); then
+			return 1
+		fi
+	fi
 
+	build_artifact_url "$version" "$os_arch"
+	artifact_url="$ARTIFACT_URL"
+
+	if ! ensure_prefix "$prefix"; then
+		return 1
+	fi
+
+	temp_dir=$(mktemp -d)
+	umask 077
+	tarball_path="${temp_dir}/send-to-slack.tar.gz"
+
+	if ! download_file "$artifact_url" "$tarball_path"; then
+		rm -rf "$temp_dir"
+		return 1
+	fi
+
+	if ! install_from_tarball "$tarball_path" "$prefix"; then
+		rm -rf "$temp_dir"
+		return 1
+	fi
+
+	rm -rf "$temp_dir"
+	print_next_steps "$prefix"
 	return 0
 }
 
-# Only run main when script is executed directly, not when sourced
-# This should safely allow piping and sourcing the script for unit testing while still working when piped
-if [[ "${BASH_SOURCE[0]:-}" == "${0}" ]] || [[ -z "${BASH_SOURCE[0]:-}" ]]; then
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
 	main "$@"
 	exit $?
 fi

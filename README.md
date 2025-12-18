@@ -8,75 +8,123 @@ Bash is lightweight, powerful, and easily integrated into existing workflows tha
 
 Measure twice, send once.
 
-## Installation
+## Running Locally
 
-### Quick Install
-
-Install to `~/.local` (default, no sudo required):
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/bin/install.sh | bash
-```
-
-Installs to `~/.local/bin/send-to-slack` and supporting files to `~/.local/lib/send-to-slack/`.
-
-**System installation (requires sudo):**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/bin/install.sh | sudo bash
-```
-
-Installs to `/usr/local/bin/send-to-slack` and supporting files to `/usr/local/lib/send-to-slack/`.
-
-### From Source
-
-For development or testing without installation, you can use the script directly from the repository:
+Clone the repository and run the script directly:
 
 ```bash
 git clone https://github.com/bluekornchips/send-to-slack.git
 cd send-to-slack
+./bin/send-to-slack.sh -h
+```
+
+To make the command available in your current shell session without moving files:
+
+```bash
 alias send-to-slack="$(pwd)/bin/send-to-slack.sh"
 ```
 
-Or add the alias to your shell rc file:
+Persist the alias by adding it to your shell rc file:
 
 ```bash
 echo 'alias send-to-slack="path/to/send-to-slack/bin/send-to-slack.sh"' >> ~/.bashrc
 ```
 
-### Uninstallation
+## Remote Install (curl | bash)
 
-Use the uninstall script to remove all installed files. For user-local installations:
-
-```bash
-./bin/uninstall.sh ~/.local
-```
-
-For system installations:
+Install directly from GitHub Releases with a single command:
 
 ```bash
-sudo ./bin/uninstall.sh /usr/local
+curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/install.sh | bash
 ```
 
-Or use `--force` flag for protected prefixes:
+The installer:
+
+- Downloads artifacts from GitHub Releases
+- Installs to `${HOME}/.local/bin` by default (override with `--prefix`)
+- Refuses system paths like `/usr` or `/etc` (no sudo required)
+- Only supports amd64 on Linux and macOS
+
+Options:
+
+- `--version <tag>` - Version to install (default: latest stable)
+- `--prefix <dir>` - Target directory (default: `${HOME}/.local/bin`)
+- `--local` - Install from local repo (use only when running the script from a clone)
+
+Example with custom prefix (useful in containers):
 
 ```bash
-sudo ./bin/uninstall.sh --force /usr/local
+curl --proto "=https" --tlsv1.2 --fail --show-error --location \
+  https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/install.sh | \
+  bash -s -- --prefix /tmp/send-to-slack/bin
 ```
 
-The uninstall script uses the installation manifest at `$prefix/lib/send-to-slack/install_manifest.txt` to remove all files that were installed.
+After installation, add the prefix to your PATH if needed:
 
-## Container Image
+```bash
+export PATH="${HOME}/.local/bin:${PATH}"
+```
 
-The container image is available on Docker Hub as `sunflowersoftware/send-to-slack`.
+## Install
+
+Run from the cloned repository:
+
+```bash
+./install.sh
+```
+
+- Default prefix is ${HOME}/.local/bin; override with --prefix when the default is not writable (for example --prefix /tmp/send-to-slack/bin inside containers).
+- If the prefix is not on PATH, add it: `export PATH="${HOME}/.local/bin:${PATH}"` (or the prefix you chose).
+- Install copies bin/send-to-slack.sh to the prefix as send-to-slack, marks it executable, and adds a small signature comment used by uninstall.
+
+## Uninstall
+
+Run from the cloned repository:
+
+```bash
+./uninstall.sh
+```
+
+- Uninstall removes the installed send-to-slack shim only when it carries the install signature; use --force to override.
+- It is safe to run when the file is already absent (no-op).
+
+## Container Images
+
+The container images are available on Docker Hub as `sunflowersoftware/send-to-slack`.
 
 ```bash
 docker pull sunflowersoftware/send-to-slack
 ```
 
+### Building Images
+
+Two Dockerfiles are provided in the `Docker/` directory:
+
+- `Docker/Dockerfile`: CI image that copies the repository into `/usr/local/send-to-slack` and exposes `send-to-slack` on `PATH`
+- `Docker/Dockerfile.concourse`: Concourse resource-type image with only the runtime dependencies needed by the `check`, `in`, and `out` scripts
+
+Build examples (run from repo root):
+
+```bash
+docker build -f Docker/Dockerfile -t send-to-slack-ci:local .
+docker build -f Docker/Dockerfile.concourse -t send-to-slack-concourse .
+```
+
+### CI Build Helper
+
+`ci/build.sh` builds the Docker image and can optionally run a healthcheck and send a test message using the local script:
+
+```bash
+# Build only
+ci/build.sh
+
+# Build + healthcheck + test message (requires CHANNEL and SLACK_BOT_USER_OAUTH_TOKEN)
+CHANNEL=test SLACK_BOT_USER_OAUTH_TOKEN=token ci/build.sh --healthcheck --send-test-message
+```
+
 ### Development Usage
 
-For development or testing without installation, you can use the script directly:
+For development or testing, you can run the script directly:
 
 ```bash
 ./bin/send-to-slack.sh

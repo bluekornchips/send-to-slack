@@ -31,8 +31,6 @@ setup_file() {
 setup() {
 	source "$SCRIPT"
 
-	SEND_TO_SLACK_ROOT="$GIT_ROOT"
-
 	TEST_FILE="$GIT_ROOT/test.txt"
 	CHANNEL="test-channel"
 	COMMENT="test comment"
@@ -41,7 +39,6 @@ setup() {
 
 	echo "Test file content" >"$TEST_FILE"
 
-	export SEND_TO_SLACK_ROOT
 	export TEST_FILE
 	export CHANNEL
 	export COMMENT

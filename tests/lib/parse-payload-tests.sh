@@ -35,9 +35,6 @@ setup() {
 
 	source "$SCRIPT"
 
-	SEND_TO_SLACK_ROOT="$GIT_ROOT"
-	export SEND_TO_SLACK_ROOT
-
 	TEST_PAYLOAD_FILE=$(mktemp parse-payload-tests.test-payload.XXXXXX)
 	export TEST_PAYLOAD_FILE
 	create_test_payload
@@ -1846,4 +1843,387 @@ create_test_payload() {
 	# Colored blocks should be in attachments
 	echo "$payload_output" | jq -e '.attachments | length == 1' >/dev/null
 	echo "$payload_output" | jq -e '.attachments[0].color == "#4CAF50"' >/dev/null
+}
+
+########################################################
+# _sanitize_payload
+########################################################
+
+@test "_sanitize_payload:: redacts slack_bot_user_oauth_token to [REDACTED]" {
+	local test_payload
+	test_payload=$(jq -n '{
+		source: {
+			slack_bot_user_oauth_token: "xoxb-secret-token-12345"
+		},
+		params: {
+			channel: "test-channel",
+			blocks: []
+		}
+	}')
+
+	local sanitized
+	sanitized=$(_sanitize_payload "$test_payload")
+
+	# Token should be redacted
+	echo "$sanitized" | jq -e '.source.slack_bot_user_oauth_token == "[REDACTED]"' >/dev/null
+	# Other fields should remain
+	echo "$sanitized" | jq -e '.params.channel == "test-channel"' >/dev/null
+}
+
+@test "_sanitize_payload:: handles payload without source" {
+	local test_payload
+	test_payload=$(jq -n '{
+		params: {
+			channel: "test-channel",
+			blocks: []
+		}
+	}')
+
+	local sanitized
+	sanitized=$(_sanitize_payload "$test_payload")
+
+	# Should not error and preserve structure
+	echo "$sanitized" | jq -e '.params.channel == "test-channel"' >/dev/null
+}
+
+@test "_sanitize_payload:: handles payload with source but no token" {
+	local test_payload
+	test_payload=$(jq -n '{
+		source: {
+			some_other_field: "value"
+		},
+		params: {
+			channel: "test-channel",
+			blocks: []
+		}
+	}')
+
+	local sanitized
+	sanitized=$(_sanitize_payload "$test_payload")
+
+	# Should preserve source structure and add token as [REDACTED]
+	echo "$sanitized" | jq -e '.source.some_other_field == "value"' >/dev/null
+	echo "$sanitized" | jq -e '.source.slack_bot_user_oauth_token == "[REDACTED]"' >/dev/null
+	echo "$sanitized" | jq -e '.params.channel == "test-channel"' >/dev/null
+}
+
+@test "_sanitize_payload:: handles invalid JSON" {
+	local invalid_json="not valid json {"
+
+	run _sanitize_payload "$invalid_json"
+	# Should return the input unchanged (but function returns error code)
+	[[ "$status" -eq 1 ]]
+	[[ "$output" == "$invalid_json" ]]
+}
+
+########################################################
+# _log_sanitized_payload
+########################################################
+
+@test "_log_sanitized_payload:: logs sanitized payload to stderr" {
+	local test_payload
+	test_payload=$(jq -n \
+		--arg channel "$CHANNEL" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "xoxb-secret-token-12345"
+			},
+			params: {
+				channel: $channel,
+				blocks: [{
+					section: {
+						type: "text",
+						text: { type: "plain_text", text: "Test" }
+					}
+				}]
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
+	export INPUT_PAYLOAD
+
+	run _log_sanitized_payload
+	[[ "$status" -eq 0 ]]
+
+	# Should log to stderr (captured in output)
+	echo "$output" | grep -q "parse_payload:: input payload (sanitized):"
+	# Token should be redacted, not present in original form
+	echo "$output" | grep -qv "xoxb-secret-token-12345"
+	echo "$output" | grep -q "[REDACTED]"
+	# Other fields should be present
+	echo "$output" | grep -q "$CHANNEL"
+}
+
+@test "_log_sanitized_payload:: handles missing payload file" {
+	INPUT_PAYLOAD="/nonexistent/file.json"
+	export INPUT_PAYLOAD
+
+	run _log_sanitized_payload
+	[[ "$status" -eq 1 ]]
+}
+
+########################################################
+# parse_payload sanitization logging
+########################################################
+
+@test "parse_payload:: logs sanitized payload when params.debug is true" {
+	local test_payload
+	test_payload=$(jq -n \
+		--arg channel "$CHANNEL" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "xoxb-secret-token-12345"
+			},
+			params: {
+				channel: $channel,
+				debug: true,
+				blocks: [{
+					section: {
+						type: "text",
+						text: { type: "plain_text", text: "Test message" }
+					}
+				}]
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+
+	# Should log sanitized payload when debug is enabled
+	echo "$output" | grep -q "parse_payload:: input payload (sanitized):"
+	# Token should be redacted, not present in original form
+	echo "$output" | grep -qv "xoxb-secret-token-12345"
+	echo "$output" | grep -q "[REDACTED]"
+	# Channel and other non-sensitive fields should be present
+	echo "$output" | grep -q "$CHANNEL"
+	echo "$output" | grep -q "Test message"
+}
+
+@test "parse_payload:: does not log sanitized payload when params.debug is false" {
+	local test_payload
+	test_payload=$(jq -n \
+		--arg channel "$CHANNEL" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "xoxb-secret-token-12345"
+			},
+			params: {
+				channel: $channel,
+				debug: false,
+				blocks: [{
+					section: {
+						type: "text",
+						text: { type: "plain_text", text: "Test message" }
+					}
+				}]
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+
+	# Should NOT log sanitized payload when debug is disabled
+	echo "$output" | grep -qv "parse_payload:: input payload (sanitized):"
+}
+
+@test "parse_payload:: does not log sanitized payload when params.debug is not set" {
+	local test_payload
+	test_payload=$(jq -n \
+		--arg channel "$CHANNEL" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "xoxb-secret-token-12345"
+			},
+			params: {
+				channel: $channel,
+				blocks: [{
+					section: {
+						type: "text",
+						text: { type: "plain_text", text: "Test message" }
+					}
+				}]
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+
+	# Should NOT log sanitized payload when debug is not set (defaults to false)
+	echo "$output" | grep -qv "parse_payload:: input payload (sanitized):"
+}
+
+@test "parse_payload:: sanitized payload logging works with params.raw when debug enabled" {
+	local raw_params
+	raw_params=$(jq -n '{
+		channel: "raw-channel",
+		blocks: [{
+			section: {
+				type: "text",
+				text: { type: "plain_text", text: "Raw params test" }
+			}
+		}]
+	}')
+
+	local test_payload
+	test_payload=$(jq -n \
+		--arg raw_params "$(echo "$raw_params" | jq -c .)" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "xoxb-secret-token-raw"
+			},
+			params: {
+				raw: $raw_params,
+				debug: true
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+
+	# Should log sanitized payload after processing raw params when debug is enabled
+	echo "$output" | grep -q "parse_payload:: input payload (sanitized):"
+	# Token should be redacted, not present in original form
+	echo "$output" | grep -qv "xoxb-secret-token-raw"
+	echo "$output" | grep -q "[REDACTED]"
+	# Raw params content should be present
+	echo "$output" | grep -q "raw-channel"
+}
+
+@test "parse_payload:: sanitized payload logging works with params.from_file when debug enabled" {
+	local file_params
+	file_params=$(jq -n '{
+		channel: "file-channel",
+		blocks: [{
+			section: {
+				type: "text",
+				text: { type: "plain_text", text: "File params test" }
+			}
+		}]
+	}')
+
+	local params_file
+	params_file=$(mktemp parse-payload-tests.params.XXXXXX)
+	echo "$file_params" >"$params_file"
+
+	local test_payload
+	test_payload=$(jq -n \
+		--arg params_file "$params_file" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "xoxb-secret-token-file"
+			},
+			params: {
+				from_file: $params_file,
+				debug: true
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+
+	# Should log sanitized payload after processing from_file when debug is enabled
+	echo "$output" | grep -q "parse_payload:: input payload (sanitized):"
+	# Token should be redacted, not present in original form
+	echo "$output" | grep -qv "xoxb-secret-token-file"
+	echo "$output" | grep -q "[REDACTED]"
+	# File params content should be present
+	echo "$output" | grep -q "file-channel"
+
+	rm -f "$params_file"
+}
+
+@test "parse_payload:: debug logs original payload with params.raw before transformation" {
+	local raw_params
+	raw_params=$(jq -n '{
+		channel: "raw-channel",
+		blocks: [{
+			section: {
+				type: "text",
+				text: { type: "plain_text", text: "Raw params test" }
+			}
+		}]
+	}')
+
+	local test_payload
+	test_payload=$(jq -n \
+		--arg raw_params "$(echo "$raw_params" | jq -c .)" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "xoxb-secret-token-raw"
+			},
+			params: {
+				raw: $raw_params,
+				debug: true
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+
+	# Should log sanitized payload BEFORE params.raw is processed
+	# The logged payload should still contain "raw" showing original structure
+	echo "$output" | grep -q "parse_payload:: input payload (sanitized):"
+	echo "$output" | grep -q '"raw"'
+	# Token should be redacted
+	echo "$output" | grep -qv "xoxb-secret-token-raw"
+	echo "$output" | grep -q "[REDACTED]"
+}
+
+@test "parse_payload:: debug logs original payload with params.from_file before transformation" {
+	local file_params
+	file_params=$(jq -n '{
+		channel: "file-channel",
+		blocks: [{
+			section: {
+				type: "text",
+				text: { type: "plain_text", text: "File params test" }
+			}
+		}]
+	}')
+
+	local params_file
+	params_file=$(mktemp parse-payload-tests.params.XXXXXX)
+	echo "$file_params" >"$params_file"
+
+	local test_payload
+	test_payload=$(jq -n \
+		--arg params_file "$params_file" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "xoxb-secret-token-file"
+			},
+			params: {
+				from_file: $params_file,
+				debug: true
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+
+	# Should log sanitized payload BEFORE params.from_file is processed
+	# The logged payload should still contain "from_file" showing original structure
+	echo "$output" | grep -q "parse_payload:: input payload (sanitized):"
+	echo "$output" | grep -q '"from_file"'
+	# Token should be redacted
+	echo "$output" | grep -qv "xoxb-secret-token-file"
+	echo "$output" | grep -q "[REDACTED]"
+
+	rm -f "$params_file"
 }

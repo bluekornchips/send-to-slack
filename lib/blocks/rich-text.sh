@@ -27,12 +27,12 @@ handle_oversize_text() {
 
 	local file_path
 	file_path=$(mktemp /tmp/rich-text.sh.oversize.XXXXXX)
-	if ! chmod 700 "$file_path"; then
+	if ! chmod 0600 "$file_path"; then
 		echo "handle_oversize_text:: failed to secure temp file ${file_path}" >&2
 		rm -f "$file_path"
 		return 1
 	fi
-	trap 'rm -f "$file_path"' RETURN EXIT
+	trap 'rm -f "$file_path"' RETURN EXIT ERR
 
 	# Write the extracted text to the file
 	echo "$extracted_text" >"$file_path"
@@ -43,18 +43,26 @@ handle_oversize_text() {
 	if [[ "$UPLOAD_FILE_SCRIPT" = /* ]]; then
 		upload_script_path="$UPLOAD_FILE_SCRIPT"
 	else
-		local base_root="${SEND_TO_SLACK_ROOT:-.}"
-		local lib_path="${base_root%/}/${UPLOAD_FILE_SCRIPT}"
-		local bin_path="${base_root%/}/${UPLOAD_FILE_SCRIPT/lib\/file-upload.sh/bin\/file-upload.sh}"
+		local blocks_dir
+		local lib_dir
+		local root_dir
 
-		# Check lib/ layout first (source layout)
+		blocks_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+		if [[ -z "$blocks_dir" ]]; then
+			echo "handle_oversize_text:: cannot determine blocks directory" >&2
+			return 1
+		fi
+
+		lib_dir=$(dirname "$blocks_dir")
+		root_dir=$(dirname "$lib_dir")
+
+		local lib_path="${root_dir}/${UPLOAD_FILE_SCRIPT}"
+
+		# Check lib/ layout (source layout)
 		if [[ -f "$lib_path" ]]; then
 			upload_script_path="$lib_path"
-		# Check bin/ layout (installed layout)
-		elif [[ -f "$bin_path" ]]; then
-			upload_script_path="$bin_path"
 		else
-			echo "handle_oversize_text:: file upload script not found: checked ${lib_path} and ${bin_path}" >&2
+			echo "handle_oversize_text:: file upload script not found: ${lib_path}" >&2
 			return 1
 		fi
 	fi
@@ -103,12 +111,12 @@ create_rich_text() {
 
 	local input_json
 	input_json=$(mktemp /tmp/rich-text.sh.input-json.XXXXXX)
-	if ! chmod 700 "$input_json"; then
+	if ! chmod 0600 "$input_json"; then
 		echo "create_rich_text:: failed to secure temp file ${input_json}" >&2
 		rm -f "$input_json"
 		return 1
 	fi
-	trap 'rm -f "$input_json"' RETURN EXIT
+	trap 'rm -f "$input_json"' RETURN EXIT ERR
 	echo "$input" >"$input_json"
 
 	if ! jq . "$input_json" >/dev/null 2>&1; then

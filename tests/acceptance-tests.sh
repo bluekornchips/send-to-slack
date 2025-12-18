@@ -37,9 +37,7 @@ setup_file() {
 setup() {
 	source "$SCRIPT"
 
-	SEND_TO_SLACK_ROOT="$GIT_ROOT"
-
-	source "$SEND_TO_SLACK_ROOT/lib/parse-payload.sh"
+	source "$GIT_ROOT/lib/parse-payload.sh"
 
 	SLACK_BOT_USER_OAUTH_TOKEN="test-token"
 	MESSAGE="test message"
@@ -58,7 +56,6 @@ setup() {
 
 	TEST_PAYLOAD_FILE=$(mktemp acceptance-tests.test-payload.XXXXXX)
 
-	export SEND_TO_SLACK_ROOT
 	export SLACK_BOT_USER_OAUTH_TOKEN
 	export CHANNEL
 	export MESSAGE
@@ -138,7 +135,6 @@ teardown() {
 		return 1
 	fi
 
-	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
 	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "version"
@@ -228,7 +224,6 @@ teardown() {
 		return 1
 	fi
 
-	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
 	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "version"
@@ -308,7 +303,6 @@ teardown() {
 		return 1
 	fi
 
-	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
 	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "version"
@@ -382,7 +376,6 @@ teardown() {
 		return 1
 	fi
 
-	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
 	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "version"
@@ -440,7 +433,6 @@ teardown() {
 		return 1
 	fi
 
-	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
 	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "version"
@@ -536,7 +528,6 @@ teardown() {
 		return 1
 	fi
 
-	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
 	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "version"
@@ -623,7 +614,6 @@ teardown() {
 		return 1
 	fi
 
-	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
 	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "version"
@@ -679,7 +669,6 @@ teardown() {
 		return 1
 	fi
 
-	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
 	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "version"
@@ -742,7 +731,6 @@ teardown() {
 		return 1
 	fi
 
-	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
 	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "version"
@@ -805,7 +793,6 @@ teardown() {
 		return 1
 	fi
 
-	export SEND_TO_SLACK_ROOT="$GIT_ROOT"
 	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "version"

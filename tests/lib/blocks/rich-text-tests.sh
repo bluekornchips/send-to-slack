@@ -34,10 +34,6 @@ setup_file() {
 setup() {
 	source "$SCRIPT"
 
-	SEND_TO_SLACK_ROOT="$GIT_ROOT"
-
-	export SEND_TO_SLACK_ROOT
-
 	return 0
 }
 

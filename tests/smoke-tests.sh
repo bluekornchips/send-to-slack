@@ -36,8 +36,6 @@ setup_file() {
 }
 
 setup() {
-	SEND_TO_SLACK_ROOT="$GIT_ROOT"
-	export SEND_TO_SLACK_ROOT
 
 	source "$GIT_ROOT/lib/parse-payload.sh"
 	source "$SEND_TO_SLACK_SCRIPT"
