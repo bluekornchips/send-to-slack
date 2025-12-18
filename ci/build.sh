@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Build script for send-to-slack Docker image
-# Builds the Dockerfile and optionally runs healthcheck/test message and builds release artifacts
+# Builds the Dockerfile and optionally runs healthcheck/test message
 #
 set -eo pipefail
 
@@ -11,11 +11,7 @@ GITHUB_ACTION="${GITHUB_ACTION:-false}"
 NO_CACHE="${NO_CACHE:-true}"
 SEND_HEALTHCHECK_QUERY="${SEND_HEALTHCHECK_QUERY:-false}"
 SEND_TEST_MESSAGE="${SEND_TEST_MESSAGE:-false}"
-CREATE_BUILD_ARTIFACT="${CREATE_BUILD_ARTIFACT:-false}"
-ARTIFACT_VERSION="${ARTIFACT_VERSION:-}"
-ARTIFACT_OUTPUT="${ARTIFACT_OUTPUT:-./artifacts}"
 DOCKERFILE_CHOICE="${DOCKERFILE_CHOICE:-}"
-SKIP_DOCKER_BUILD="${SKIP_DOCKER_BUILD:-false}"
 
 # Get the project root directory
 GIT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "")"
@@ -44,11 +40,7 @@ OPTIONS:
   --no-cache                Disable Docker build cache (default: disabled)
   --healthcheck             Run ./bin/send-to-slack.sh --health-check after build
   --send-test-message       Send a test message after build (requires CHANNEL and SLACK_BOT_USER_OAUTH_TOKEN)
-  --build-artifact          Build a release tarball into the artifacts directory (default: ./artifacts)
-  --artifact-version <tag>  Version tag for artifact (default: read from VERSION)
-  --artifact-output <dir>   Output directory for artifact (default: ./artifacts)
   --dockerfile <name>       Which Dockerfile to build: concourse | test | remote (default: Docker/Dockerfile)
-  --skip-docker-build       Skip Docker image build (useful for artifact-only builds)
   -h, --help                Show this help message
 
 ENVIRONMENT VARIABLES:
@@ -95,7 +87,7 @@ EOF
 # Returns 0 on success, 1 on missing commands
 check_dependencies() {
 	local missing_deps=()
-	local required_commands=("jq" "curl" "envsubst" "rsync" "docker" "git" "tar")
+	local required_commands=("jq" "curl" "envsubst" "docker" "git")
 
 	for cmd in "${required_commands[@]}"; do
 		if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -135,28 +127,6 @@ parse_args() {
 			;;
 		--send-test-message)
 			SEND_TEST_MESSAGE="true"
-			shift
-			;;
-		--build-artifact)
-			CREATE_BUILD_ARTIFACT="true"
-			shift
-			;;
-		--artifact-version)
-			shift
-			if [[ -z "${1:-}" ]]; then
-				echo "parse_args:: option --artifact-version requires an argument" >&2
-				return 1
-			fi
-			ARTIFACT_VERSION="$1"
-			shift
-			;;
-		--artifact-output)
-			shift
-			if [[ -z "${1:-}" ]]; then
-				echo "parse_args:: option --artifact-output requires an argument" >&2
-				return 1
-			fi
-			ARTIFACT_OUTPUT="$1"
 			shift
 			;;
 		--dockerfile)
@@ -400,168 +370,6 @@ EOF
 	return 0
 }
 
-# Get version from argument or VERSION file
-#
-# Inputs:
-# - $1 - version (optional, reads from VERSION if empty)
-#
-# Outputs:
-# - Writes version string to stdout
-#
-# Returns:
-# - 0 on success, 1 on failure
-get_version() {
-	local version_arg="${1:-}"
-	local version_file="${GIT_ROOT}/VERSION"
-
-	if [[ -n "$version_arg" ]]; then
-		echo "$version_arg"
-		return 0
-	fi
-
-	if [[ -f "$version_file" ]]; then
-		local version_value
-		version_value=$(tr -d '\r\n' <"$version_file")
-		if [[ -n "$version_value" ]]; then
-			echo "v${version_value}"
-			return 0
-		fi
-	fi
-
-	echo "get_version:: could not determine version" >&2
-	return 1
-}
-
-# Detect OS and architecture
-#
-# Outputs:
-# - Writes os_arch string to stdout (e.g., linux_amd64, darwin_amd64)
-#
-# Returns:
-# - 0 on success, 1 on unsupported platform
-detect_os_arch() {
-	local os
-	local arch
-
-	os=$(uname -s | tr '[:upper:]' '[:lower:]')
-	case "$os" in
-	linux | darwin) ;;
-	*)
-		echo "detect_os_arch:: unsupported OS: $os" >&2
-		return 1
-		;;
-	esac
-
-	arch=$(uname -m | tr '[:upper:]' '[:lower:]')
-	case "$arch" in
-	x86_64 | amd64)
-		arch="amd64"
-		;;
-	arm64 | aarch64)
-		arch="arm64"
-		;;
-	*)
-		echo "detect_os_arch:: unsupported architecture: $arch" >&2
-		return 1
-		;;
-	esac
-
-	echo "${os}_${arch}"
-	return 0
-}
-
-# Build a release tarball
-#
-# Inputs:
-# - $1 - version (e.g., v0.1.3)
-# - $2 - output directory
-#
-# Returns:
-# - 0 on success, 1 on failure
-build_tarball() {
-	local version="$1"
-	local output_dir="$2"
-	local os_arch
-	local tarball_name
-	local staging_dir
-	local version_stripped
-
-	if [[ -z "$version" ]]; then
-		echo "build_tarball:: version is required" >&2
-		return 1
-	fi
-
-	if [[ -z "$output_dir" ]]; then
-		echo "build_tarball:: output directory is required" >&2
-		return 1
-	fi
-
-	if ! os_arch=$(detect_os_arch); then
-		return 1
-	fi
-
-	# Strip leading 'v' for tarball naming
-	version_stripped="${version#v}"
-	tarball_name="send-to-slack_${version_stripped}_${os_arch}.tar.gz"
-
-	echo "build_tarball:: creating ${tarball_name}"
-
-	# Create output directory
-	if ! mkdir -p "$output_dir"; then
-		echo "build_tarball:: failed to create output directory: $output_dir" >&2
-		return 1
-	fi
-
-	# Create staging directory
-	staging_dir=$(mktemp -d)
-	local package_dir="${staging_dir}/send-to-slack"
-
-	if ! mkdir -p "$package_dir"; then
-		echo "build_tarball:: failed to create staging directory" >&2
-		rm -rf "$staging_dir"
-		return 1
-	fi
-
-	# Copy files to staging
-	if ! cp -r "${GIT_ROOT}/bin" "$package_dir/"; then
-		echo "build_tarball:: failed to copy bin directory" >&2
-		rm -rf "$staging_dir"
-		return 1
-	fi
-
-	if ! cp -r "${GIT_ROOT}/lib" "$package_dir/"; then
-		echo "build_tarball:: failed to copy lib directory" >&2
-		rm -rf "$staging_dir"
-		return 1
-	fi
-
-	if ! cp "${GIT_ROOT}/VERSION" "$package_dir/"; then
-		echo "build_tarball:: failed to copy VERSION file" >&2
-		rm -rf "$staging_dir"
-		return 1
-	fi
-
-	if ! cp "${GIT_ROOT}/LICENSE" "$package_dir/" 2>/dev/null; then
-		echo "build_tarball:: warning: LICENSE file not found, skipping"
-	fi
-
-	if ! cp "${GIT_ROOT}/README.md" "$package_dir/" 2>/dev/null; then
-		echo "build_tarball:: warning: README.md file not found, skipping"
-	fi
-
-	# Create tarball
-	if ! tar -czf "${output_dir}/${tarball_name}" -C "$staging_dir" send-to-slack; then
-		echo "build_tarball:: failed to create tarball" >&2
-		rm -rf "$staging_dir"
-		return 1
-	fi
-
-	rm -rf "$staging_dir"
-
-	echo "build_tarball:: created ${output_dir}/${tarball_name}"
-	return 0
-}
-
 # Main entry point
 #
 # Returns:
@@ -603,16 +411,6 @@ main() {
 
 	if [[ "$SEND_TEST_MESSAGE" == "true" ]]; then
 		if ! send_test_message; then
-			return 1
-		fi
-	fi
-
-	if [[ "$CREATE_BUILD_ARTIFACT" == "true" ]]; then
-		local resolved_version
-		if ! resolved_version=$(get_version "$ARTIFACT_VERSION"); then
-			return 1
-		fi
-		if ! build_tarball "$resolved_version" "$ARTIFACT_OUTPUT"; then
 			return 1
 		fi
 	fi

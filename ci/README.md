@@ -49,14 +49,13 @@ If `tests/smoke-tests.sh` changes, the script runs that test file directly.
 
 ## build.sh
 
-Builds the send-to-slack Docker image and optionally runs checks and produces release artifacts.
+Builds the send-to-slack Docker image and optionally runs checks.
 
 ### Behavior
 
 - Builds `Docker/Dockerfile` for `linux/amd64`
 - Optional healthcheck using `./bin/send-to-slack.sh --health-check`
 - Optional test message via `./bin/send-to-slack.sh --file <payload>`
-- Optional release artifact tarball (same format used in GitHub Releases)
 - Supports GitHub Actions mode (`--gha`) to extract repo/branch metadata
 
 ### Usage
@@ -73,18 +72,6 @@ Build + healthcheck + test message (requires CHANNEL and SLACK_BOT_USER_OAUTH_TO
 CHANNEL=#test SLACK_BOT_USER_OAUTH_TOKEN=token ./ci/build.sh --healthcheck --send-test-message
 ```
 
-Build artifact only:
-
-```bash
-./ci/build.sh --build-artifact
-```
-
-Build artifact with explicit version/output:
-
-```bash
-./ci/build.sh --build-artifact --artifact-version v0.1.3 --artifact-output ./artifacts
-```
-
 GitHub Actions mode:
 
 ```bash
@@ -97,9 +84,7 @@ GitHub Actions mode:
 - `--no-cache` Disable Docker build cache
 - `--healthcheck` Run local health check after build
 - `--send-test-message` Send a test message after build (requires CHANNEL and SLACK_BOT_USER_OAUTH_TOKEN)
-- `--build-artifact` Produce release tarball(s) into `--artifact-output` (default: ./artifacts)
-- `--artifact-version <tag>` Version to embed in artifact name (default: read from VERSION)
-- `--artifact-output <dir>` Output directory for artifacts (default: ./artifacts)
+- `--dockerfile <name>` Which Dockerfile to build: concourse | test | remote (default: Docker/Dockerfile)
 - `-h, --help` Show help
 
 ### Environment Variables
@@ -108,12 +93,59 @@ GitHub Actions mode:
 - `DOCKER_IMAGE_TAG` (default: local)
 - `NO_CACHE` (default: true)
 - `CHANNEL`, `SLACK_BOT_USER_OAUTH_TOKEN` (required for `--send-test-message`)
-- `ARTIFACT_VERSION`, `ARTIFACT_OUTPUT` (defaults noted above)
 
 ### GitHub Actions variables (used with `--gha`)
 
 - `GITHUB_EVENT_NAME`, `GITHUB_HEAD_REF`, `GITHUB_REF_NAME`, `GITHUB_SHA`, `GITHUB_REPOSITORY`, `GITHUB_SERVER_URL`, `GITHUB_RUN_ID`, `GITHUB_EVENT_PULL_REQUEST_NUMBER`, `GITHUB_EVENT_PULL_REQUEST_HTML_URL`
 
+## release.sh
+
+Creates release tarballs for distribution. Used by the release workflow.
+
+### Behavior
+
+- Creates platform-specific tarballs (e.g., `send-to-slack_0.1.3_linux_amd64.tar.gz`)
+- Includes `bin/`, `lib/`, `VERSION`, `LICENSE`, and `README.md`
+- Supports dry-run mode for testing
+
+### Usage
+
+Build artifact using VERSION file:
+
+```bash
+./ci/release.sh
+```
+
+Build artifact with explicit version:
+
+```bash
+./ci/release.sh --version v0.1.3
+```
+
+Build artifact to custom directory:
+
+```bash
+./ci/release.sh --version v0.1.3 --output ./release
+```
+
+Dry run to see what would be created:
+
+```bash
+./ci/release.sh --dry-run
+```
+
+### Options
+
+- `--version <tag>` Version tag for artifact (e.g., v0.1.3). Default: read from VERSION file
+- `--output <dir>` Output directory for artifacts (default: ./artifacts)
+- `--dry-run` Show what would be created without actually creating it
+- `-h, --help` Show help
+
+### Environment Variables
+
+- `ARTIFACT_VERSION` Version tag (alternative to --version)
+- `ARTIFACT_OUTPUT` Output directory (alternative to --output)
+
 ### Notes
 
-- build-verification.sh and notification.json are removed; the test-message flow now lives behind `--send-test-message`.
+- build-verification.sh and notification.json are removed; the test-message flow now lives behind `--send-test-message` in build.sh.
