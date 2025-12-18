@@ -51,10 +51,52 @@ DOC_URL_BLOCK_KIT_SECTION="https://docs.slack.dev/reference/block-kit/blocks/sec
 DOC_URL_BLOCK_KIT_VIDEO="https://docs.slack.dev/reference/block-kit/blocks/video-block"
 DOC_URL_LEGACY_ATTACHMENTS="https://api.slack.com/reference/messaging/payload#legacy"
 
-# Resolve script path, checking both lib/ and bin/ layouts
+# Find the root directory based on this script's location
+# This script is in lib/, so the root is the parent directory
+# Resolves symlinks in a cool way with cd and pwd
+#
+# Outputs:
+#   Writes root_dir path to stdout
+#
+# Returns:
+#   0 on success
+#   1 if root directory cannot be located
+_find_root_dir() {
+	local lib_dir
+	local root_dir
+	local script_path
+
+	if [[ -z "${BASH_SOURCE[0]:-}" ]]; then
+		echo "_find_root_dir:: BASH_SOURCE[0] is not set" >&2
+		return 1
+	fi
+
+	# Get the absolute path of the directory containing this script
+	script_path="${BASH_SOURCE[0]}"
+	if [[ ! "$script_path" = /* ]]; then
+		script_path=$(cd "$(dirname "$script_path")" && pwd)/$(basename "$script_path")
+	fi
+
+	lib_dir=$(cd "$(dirname "$script_path")" && pwd)
+	if [[ -z "$lib_dir" ]]; then
+		echo "_find_root_dir:: cannot determine lib directory" >&2
+		return 1
+	fi
+
+	root_dir=$(dirname "$lib_dir")
+	if [[ -z "$root_dir" ]]; then
+		echo "_find_root_dir:: cannot determine root directory from lib_dir: ${lib_dir}" >&2
+		return 1
+	fi
+
+	echo "$root_dir"
+	return 0
+}
+
+# Resolve script path relative to root directory
 #
 # Arguments:
-#   $1 - script_path: Relative path to script from SEND_TO_SLACK_ROOT (lib/ layout)
+#   $1 - script_path: Relative path to script from root (lib/ layout)
 #
 # Outputs:
 #   Writes resolved path to stdout
@@ -64,27 +106,16 @@ DOC_URL_LEGACY_ATTACHMENTS="https://api.slack.com/reference/messaging/payload#le
 #   1 if script not found
 _resolve_block_script_path() {
 	local script_path="$1"
-	local lib_path="${SEND_TO_SLACK_ROOT}/${script_path}"
-	local bin_path
+	local root_dir
+	local full_path
 
-	# Convert lib/ paths to bin/ paths for installed layout
-	if [[ "$script_path" == lib/blocks/* ]]; then
-		bin_path="${SEND_TO_SLACK_ROOT}/${script_path/lib\/blocks/bin\/blocks}"
-	elif [[ "$script_path" == lib/file-upload.sh ]]; then
-		bin_path="${SEND_TO_SLACK_ROOT}/bin/file-upload.sh"
-	else
-		bin_path="${SEND_TO_SLACK_ROOT}/bin/$(basename "$script_path")"
+	if ! root_dir=$(_find_root_dir); then
+		return 1
 	fi
 
-	# Check lib/ layout first (source layout)
-	if [[ -f "$lib_path" ]]; then
-		echo "$lib_path"
-		return 0
-	fi
-
-	# Check bin/ layout (installed layout)
-	if [[ -f "$bin_path" ]]; then
-		echo "$bin_path"
+	full_path="${root_dir}/${script_path}"
+	if [[ -f "$full_path" ]]; then
+		echo "$full_path"
 		return 0
 	fi
 
@@ -94,7 +125,7 @@ _resolve_block_script_path() {
 # Validate that a block script file exists
 #
 # Arguments:
-#   $1 - script_path: Relative path to script from SEND_TO_SLACK_ROOT
+#   $1 - script_path: Relative path to script from root
 #
 # Returns:
 #   0 if script exists and is executable
@@ -104,7 +135,9 @@ _validate_block_script() {
 	local resolved_path
 
 	if ! resolved_path=$(_resolve_block_script_path "$script_path"); then
-		echo "_validate_block_script:: block script not found: ${SEND_TO_SLACK_ROOT}/${script_path} (checked lib/ and bin/ layouts)" >&2
+		local root_dir
+		root_dir=$(_find_root_dir 2>/dev/null || echo "unknown")
+		echo "_validate_block_script:: block script not found: ${root_dir}/${script_path}" >&2
 		return 1
 	fi
 
@@ -304,9 +337,21 @@ _sanitize_payload() {
 #
 # Side Effects:
 #   Writes sanitized payload to stderr for debugging
+#
+# Returns:
+#   0 on success
+#   1 if payload file is missing or cannot be read
 _log_sanitized_payload() {
+	if [[ ! -f "$INPUT_PAYLOAD" ]]; then
+		echo "parse_payload:: payload file not found: $INPUT_PAYLOAD" >&2
+		return 1
+	fi
+
 	local payload_content
-	payload_content=$(cat "$INPUT_PAYLOAD")
+	if ! payload_content=$(cat "$INPUT_PAYLOAD" 2>/dev/null); then
+		echo "parse_payload:: failed to read payload file: $INPUT_PAYLOAD" >&2
+		return 1
+	fi
 
 	local sanitized
 	if ! sanitized=$(_sanitize_payload "$payload_content"); then
@@ -693,7 +738,7 @@ parse_payload() {
 		return 1
 	fi
 
-	# Log sanitized payloa if params.debug is true
+	# Log sanitized payload if params.debug is true
 	# This is one of the few options that can be used take precedence over the .from_file and .raw options
 	local debug_enabled
 	debug_enabled=$(jq -r '.params.debug // false' "$INPUT_PAYLOAD")

@@ -1,0 +1,44 @@
+name: PR Build Test
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  build-and-test:
+    name: Build and Test (${{ matrix.label }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: main
+            dockerfile: ""
+          - label: concourse
+            dockerfile: "concourse"
+          - label: test
+            dockerfile: "test"
+          - label: remote
+            dockerfile: "remote"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build, healthcheck, and test message
+        env:
+          CHANNEL: ${{ vars.SLACK_CHANNEL || secrets.SLACK_CHANNEL || '#test' }}
+          SLACK_BOT_USER_OAUTH_TOKEN: ${{ secrets.SLACK_BOT_USER_OAUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+          ARGS=(--gha --healthcheck --send-test-message)
+          if [[ -n "${{ matrix.dockerfile }}" ]]; then
+            ARGS+=(--dockerfile "${{ matrix.dockerfile }}")
+          fi
+          ./ci/build.sh "${ARGS[@]}"

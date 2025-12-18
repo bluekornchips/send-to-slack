@@ -26,8 +26,6 @@ tests/
 test-payload.*
 resource-out.json
 parse-payload-tests.test-payload.*
-parse-payload-tests.output.*
-*.output.*
 acceptance-tests.test-upload*
 
 # Build and development tools
@@ -66,3 +64,4 @@ tmp/
 # OS files
 .DS_Store
 Thumbs.db
+

@@ -1,0 +1,16 @@
+# Minimal CI image that installs the latest main build via curl | bash
+FROM --platform=amd64 alpine:3.20
+
+RUN apk update && \
+    apk add --no-cache \
+        bash \
+        ca-certificates \
+        curl \
+        envsubst \
+        git \
+        tar
+
+# Install send-to-slack using the simplified curl installer
+RUN curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/bin/install.sh | bash
+
+CMD ["/bin/bash"]

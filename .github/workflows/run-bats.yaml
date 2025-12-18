@@ -1,10 +1,10 @@
-name: test
+name: run-bats-tests
 
 on:
   pull_request:
 
 jobs:
-  test:
+  run-bats:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -1,0 +1,34 @@
+# Concourse resource-type image: only what the resource scripts need at runtime.
+# Build from repo root so bin/, lib/, and VERSION are in context:
+#   docker build -f concourse/Dockerfile.concourse .
+FROM alpine:3.20
+
+RUN apk add --no-cache \
+        bash \
+        ca-certificates \
+        curl \
+        gettext \
+        jq && \
+    update-ca-certificates && \
+    mkdir -p /opt/resource
+
+WORKDIR /opt/resource
+
+# Concourse interface scripts.
+COPY ./concourse/resource-type/scripts/check.sh /opt/resource/check
+COPY ./concourse/resource-type/scripts/in.sh /opt/resource/in
+COPY ./concourse/resource-type/scripts/out.sh /opt/resource/out
+
+# Core tool and support libs.
+COPY ./bin/send-to-slack.sh /opt/resource/send-to-slack
+COPY ./lib/ /opt/resource/lib/
+COPY ./VERSION /opt/resource/VERSION
+
+ENV PATH="/opt/resource:${PATH}"
+
+RUN chmod +x /opt/resource/check /opt/resource/in /opt/resource/out && \
+    chmod +x /opt/resource/send-to-slack && \
+    chmod +x /opt/resource/lib/*.sh && \
+    chmod +x /opt/resource/lib/blocks/*.sh
+
+ENTRYPOINT ["/bin/bash"]

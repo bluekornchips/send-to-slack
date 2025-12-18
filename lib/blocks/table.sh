@@ -36,12 +36,12 @@ create_table() {
 
 	local input_json
 	input_json=$(mktemp /tmp/table.sh.input-json.XXXXXX)
-	if ! chmod 700 "$input_json"; then
+	if ! chmod 0600 "$input_json"; then
 		echo "create_table:: failed to secure temp file ${input_json}" >&2
 		rm -f "$input_json"
 		return 1
 	fi
-	trap 'rm -f "$input_json"' RETURN EXIT
+	trap 'rm -f "$input_json"' RETURN EXIT ERR
 	echo "$input" >"$input_json"
 
 	if ! jq . "$input_json" >/dev/null 2>&1; then

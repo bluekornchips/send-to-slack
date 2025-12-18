@@ -27,12 +27,12 @@ main() {
 	local version
 
 	payload=$(mktemp /tmp/resource-in.XXXXXX)
-	if ! chmod 700 "$payload"; then
+	if ! chmod 0600 "$payload"; then
 		echo "in:: failed to secure temp payload ${payload}" >&2
 		rm -f "${payload}"
 		return 1
 	fi
-	trap 'rm -f "${payload}"' EXIT RETURN
+	trap 'rm -f "${payload}"' EXIT ERR RETURN
 
 	cat >"${payload}" <&0
 

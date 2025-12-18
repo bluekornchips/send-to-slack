@@ -35,19 +35,18 @@ main() {
 
 	# Create temporary files
 	SEND_TO_SLACK_OUTPUT=$(mktemp /tmp/resource-out.XXXXXX)
-	if ! chmod 700 "$SEND_TO_SLACK_OUTPUT"; then
+	if ! chmod 0600 "$SEND_TO_SLACK_OUTPUT"; then
 		echo "out:: failed to secure output file ${SEND_TO_SLACK_OUTPUT}" >&2
 		rm -f "${SEND_TO_SLACK_OUTPUT}"
 		return 1
 	fi
-	trap 'rm -f "${SEND_TO_SLACK_OUTPUT}"' EXIT RETURN
 	input_file=$(mktemp /tmp/resource-in.XXXXXX)
-	if ! chmod 700 "$input_file"; then
+	if ! chmod 0600 "$input_file"; then
 		echo "out:: failed to secure input file ${input_file}" >&2
-		rm -f "${input_file}"
+		rm -f "${input_file}" "${SEND_TO_SLACK_OUTPUT}"
 		return 1
 	fi
-	trap 'rm -f "${input_file}"' EXIT RETURN
+	trap 'rm -f "${SEND_TO_SLACK_OUTPUT}" "${input_file}"' EXIT ERR RETURN
 
 	# Read the contents of stdin into the input file
 	cat >"${input_file}"
@@ -62,11 +61,9 @@ main() {
 	fi
 
 	# Set SEND_TO_SLACK_OUTPUT so send-to-slack.sh writes JSON to this file
-	SEND_TO_SLACK_ROOT="/opt/resource"
-	export SEND_TO_SLACK_ROOT
 	export SEND_TO_SLACK_OUTPUT
 
-	local send_to_slack_script="${SEND_TO_SLACK_SCRIPT:-/opt/resource/send-to-slack.sh}"
+	local send_to_slack_script="${SEND_TO_SLACK_SCRIPT:-/opt/resource/send-to-slack}"
 
 	# Validate that send-to-slack.sh script exists
 	if [[ ! -f "${send_to_slack_script}" ]]; then
