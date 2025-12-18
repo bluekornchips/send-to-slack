@@ -68,7 +68,7 @@ setup_file() {
 	echo "echo test" >>"${fixture_repo_dir}/lib/blocks/rich-text.sh"
 	chmod +x "${fixture_repo_dir}/lib/blocks/rich-text.sh"
 
-	echo "0.1.2" >"${fixture_repo_dir}/VERSION"
+	echo "0.1.3" >"${fixture_repo_dir}/VERSION"
 
 	pushd "${FIXTURE_DIR}" >/dev/null || exit 1
 	tar -czf "${FIXTURE_DIR}/fixture.tar.gz" -C "${FIXTURE_DIR}" send-to-slack-main
