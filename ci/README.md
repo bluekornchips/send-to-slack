@@ -82,7 +82,7 @@ Build artifact only:
 Build artifact with explicit version/output:
 
 ```bash
-./ci/build.sh --build-artifact --artifact-version v0.1.2 --artifact-output ./artifacts
+./ci/build.sh --build-artifact --artifact-version v0.1.3 --artifact-output ./artifacts
 ```
 
 GitHub Actions mode:
