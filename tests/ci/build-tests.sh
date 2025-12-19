@@ -14,11 +14,6 @@ setup_file() {
 		fail "setup_file:: build script missing: $BUILD_SCRIPT"
 	fi
 
-	# shellcheck source=/dev/null
-	source "$BUILD_SCRIPT"
-	# Disable strict mode for tests that expect failures
-	set +e +o pipefail
-
 	ORIGINAL_GIT_ROOT="$GIT_ROOT"
 	VERSION_VALUE="$(tr -d '\r\n' <"${ORIGINAL_GIT_ROOT}/VERSION")"
 
@@ -33,6 +28,17 @@ setup() {
 
 	export OUTPUT_DIR
 	export GIT_ROOT
+
+	local old_e
+	local old_pipefail
+	old_e="$(set +o | grep 'set -e' || true)"
+	old_pipefail="$(set +o | grep 'pipefail' || true)"
+	set +e +o pipefail
+	# shellcheck source=/dev/null
+	source "$BUILD_SCRIPT" || true
+	eval "$old_e" || true
+	eval "$old_pipefail" || true
+	set +e +o pipefail
 }
 
 teardown() {
@@ -84,4 +90,47 @@ teardown() {
 		tar -tzf "$tarball_path" | grep -q "^VERSION$"
 		tar -xzOf "$tarball_path" VERSION | grep -qx "$VERSION_VALUE"
 	done
+}
+
+@test "build.sh:: parse_args accepts all as dockerfile choice" {
+	DOCKERFILE_CHOICE=""
+	run parse_args --dockerfile all
+	[[ "$status" -eq 0 ]]
+	[[ "$DOCKERFILE_CHOICE" == "all" ]]
+}
+
+@test "build.sh:: parse_args accepts concourse as dockerfile choice" {
+	DOCKERFILE_CHOICE=""
+	run parse_args --dockerfile concourse
+	[[ "$status" -eq 0 ]]
+	[[ "$DOCKERFILE_CHOICE" == "concourse" ]]
+}
+
+@test "build.sh:: parse_args accepts test as dockerfile choice" {
+	DOCKERFILE_CHOICE=""
+	run parse_args --dockerfile test
+	[[ "$status" -eq 0 ]]
+	[[ "$DOCKERFILE_CHOICE" == "test" ]]
+}
+
+@test "build.sh:: parse_args accepts remote as dockerfile choice" {
+	DOCKERFILE_CHOICE=""
+	run parse_args --dockerfile remote
+	[[ "$status" -eq 0 ]]
+	[[ "$DOCKERFILE_CHOICE" == "remote" ]]
+}
+
+@test "build.sh:: parse_args rejects invalid dockerfile choice" {
+	DOCKERFILE_CHOICE=""
+	run parse_args --dockerfile invalid
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "invalid dockerfile choice"
+	echo "$output" | grep -q "allowed: concourse|test|remote|all"
+}
+
+@test "build.sh:: parse_args requires argument for --dockerfile" {
+	DOCKERFILE_CHOICE=""
+	run parse_args --dockerfile
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "option --dockerfile requires an argument"
 }

@@ -58,7 +58,8 @@ OPTIONS:
   --build-artifact          Build a release tarball into the artifacts directory (default: ./artifacts)
   --artifact-version <tag>  Version tag for artifact (default: read from VERSION)
   --artifact-output <dir>   Output directory for artifact (default: ./artifacts)
-  --dockerfile <name>       Which Dockerfile to build: concourse | test | remote (default: Docker/Dockerfile)
+  --dockerfile <name>       Which Dockerfile to build: concourse | test | remote | all (default: Docker/Dockerfile)
+                            Use "all" to build all Dockerfiles one by one
   -h, --help                Show this help message
 
 ENVIRONMENT VARIABLES:
@@ -176,11 +177,11 @@ parse_args() {
 				return 1
 			fi
 			case "$1" in
-			concourse | test | remote | "")
+			concourse | test | remote | all | "")
 				DOCKERFILE_CHOICE="$1"
 				;;
 			*)
-				echo "parse_args:: invalid dockerfile choice: $1 (allowed: concourse|test|remote)" >&2
+				echo "parse_args:: invalid dockerfile choice: $1 (allowed: concourse|test|remote|all)" >&2
 				return 1
 				;;
 			esac
@@ -446,6 +447,46 @@ build_image() {
 	return 0
 }
 
+# Build all Dockerfiles sequentially
+#
+# Returns:
+# - 0 on success
+# - 1 on failure
+build_all_images() {
+	local dockerfiles=("" "concourse" "test" "remote")
+	local dockerfile_names=("Dockerfile" "Dockerfile.concourse" "Dockerfile.test" "Dockerfile.remote")
+	local original_choice="$DOCKERFILE_CHOICE"
+	local build_count=0
+	local failed_count=0
+
+	echo "build_all_images:: building all Dockerfiles"
+	for i in "${!dockerfiles[@]}"; do
+		local choice="${dockerfiles[$i]}"
+		local name="${dockerfile_names[$i]}"
+		local current_num
+		DOCKERFILE_CHOICE="$choice"
+		current_num=$((i + 1))
+
+		echo "build_all_images:: building ${name} (${current_num}/${#dockerfiles[@]})"
+		if ! build_image; then
+			echo "build_all_images:: failed to build ${name}" >&2
+			((failed_count++))
+		else
+			((build_count++))
+		fi
+	done
+
+	DOCKERFILE_CHOICE="$original_choice"
+
+	if [[ $failed_count -gt 0 ]]; then
+		echo "build_all_images:: completed with ${failed_count} failure(s), ${build_count} success(es)" >&2
+		return 1
+	fi
+
+	echo "build_all_images:: successfully built all ${build_count} Dockerfile(s)"
+	return 0
+}
+
 # Run healthcheck using local script
 run_healthcheck() {
 	local script_path="${GIT_ROOT}/bin/send-to-slack.sh"
@@ -484,6 +525,15 @@ send_test_message() {
 		return 1
 	fi
 
+	local dockerfile_display
+	if [[ -z "$DOCKERFILE_CHOICE" ]]; then
+		dockerfile_display="Dockerfile"
+	elif [[ "$DOCKERFILE_CHOICE" == "all" ]]; then
+		dockerfile_display="all"
+	else
+		dockerfile_display="Dockerfile.${DOCKERFILE_CHOICE}"
+	fi
+
 	payload_file=$(mktemp)
 	cat >"$payload_file" <<EOF
 {
@@ -497,7 +547,7 @@ send_test_message() {
         "type": "section",
         "text": {
           "type": "plain_text",
-          "text": "send-to-slack build test message"
+          "text": "Dockerfile Choice: ${dockerfile_display}. Send test message to slack success."
         }
       }
     ]
@@ -545,21 +595,55 @@ main() {
 		fi
 	fi
 
-	if ! build_image; then
-		return 1
-	fi
+	local dockerfiles
+	local dockerfile_names
+	local original_choice="$DOCKERFILE_CHOICE"
 
-	if [[ "$SEND_HEALTHCHECK_QUERY" == "true" ]]; then
-		if ! run_healthcheck; then
+	if [[ "$DOCKERFILE_CHOICE" == "all" ]]; then
+		if ! build_all_images; then
 			return 1
+		fi
+		dockerfiles=("" "concourse" "test" "remote")
+		dockerfile_names=("Dockerfile" "Dockerfile.concourse" "Dockerfile.test" "Dockerfile.remote")
+	else
+		if ! build_image; then
+			return 1
+		fi
+		dockerfiles=("$DOCKERFILE_CHOICE")
+		if [[ -z "$DOCKERFILE_CHOICE" ]]; then
+			dockerfile_names=("Dockerfile")
+		else
+			dockerfile_names=("Dockerfile.${DOCKERFILE_CHOICE}")
 		fi
 	fi
 
-	if [[ "$SEND_TEST_MESSAGE" == "true" ]]; then
-		if ! send_test_message; then
-			return 1
+	for i in "${!dockerfiles[@]}"; do
+		local choice="${dockerfiles[$i]}"
+		local name="${dockerfile_names[$i]}"
+		DOCKERFILE_CHOICE="$choice"
+
+		if [[ "$SEND_HEALTHCHECK_QUERY" == "true" ]]; then
+			if [[ "$original_choice" == "all" ]]; then
+				echo "Running healthcheck for ${name}"
+			fi
+			if ! run_healthcheck; then
+				DOCKERFILE_CHOICE="$original_choice"
+				return 1
+			fi
 		fi
-	fi
+
+		if [[ "$SEND_TEST_MESSAGE" == "true" ]]; then
+			if [[ "$original_choice" == "all" ]]; then
+				echo "Sending test message for ${name}"
+			fi
+			if ! send_test_message; then
+				DOCKERFILE_CHOICE="$original_choice"
+				return 1
+			fi
+		fi
+	done
+
+	DOCKERFILE_CHOICE="$original_choice"
 
 	if [[ "$CREATE_BUILD_ARTIFACT" == "true" ]]; then
 		local resolved_version
