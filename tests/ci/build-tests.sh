@@ -40,36 +40,31 @@ teardown() {
 
 @test "build.sh:: parse_args accepts all as dockerfile choice" {
 	DOCKERFILE_CHOICE=""
-	parse_args --dockerfile all
-	[[ $? -eq 0 ]]
+	parse_args --dockerfile all || return 1
 	[[ "$DOCKERFILE_CHOICE" == "all" ]]
 }
 
 @test "build.sh:: parse_args accepts concourse as dockerfile choice" {
 	DOCKERFILE_CHOICE=""
-	parse_args --dockerfile concourse
-	[[ $? -eq 0 ]]
+	parse_args --dockerfile concourse || return 1
 	[[ "$DOCKERFILE_CHOICE" == "concourse" ]]
 }
 
 @test "build.sh:: parse_args accepts test as dockerfile choice" {
 	DOCKERFILE_CHOICE=""
-	parse_args --dockerfile test
-	[[ $? -eq 0 ]]
+	parse_args --dockerfile test || return 1
 	[[ "$DOCKERFILE_CHOICE" == "test" ]]
 }
 
 @test "build.sh:: parse_args accepts remote as dockerfile choice" {
 	DOCKERFILE_CHOICE=""
-	parse_args --dockerfile remote
-	[[ $? -eq 0 ]]
+	parse_args --dockerfile remote || return 1
 	[[ "$DOCKERFILE_CHOICE" == "remote" ]]
 }
 
 @test "build.sh:: parse_args accepts empty string as dockerfile choice" {
 	DOCKERFILE_CHOICE=""
-	parse_args --dockerfile ""
-	[[ $? -eq 0 ]]
+	parse_args --dockerfile "" || return 1
 	[[ "$DOCKERFILE_CHOICE" == "" ]]
 }
 
@@ -90,36 +85,31 @@ teardown() {
 
 @test "build.sh:: parse_args accepts --gha flag" {
 	GITHUB_ACTION="false"
-	parse_args --gha
-	[[ $? -eq 0 ]]
+	parse_args --gha || return 1
 	[[ "$GITHUB_ACTION" == "true" ]]
 }
 
 @test "build.sh:: parse_args accepts --github-action flag" {
 	GITHUB_ACTION="false"
-	parse_args --github-action
-	[[ $? -eq 0 ]]
+	parse_args --github-action || return 1
 	[[ "$GITHUB_ACTION" == "true" ]]
 }
 
 @test "build.sh:: parse_args accepts --no-cache flag" {
 	NO_CACHE="false"
-	parse_args --no-cache
-	[[ $? -eq 0 ]]
+	parse_args --no-cache || return 1
 	[[ "$NO_CACHE" == "true" ]]
 }
 
 @test "build.sh:: parse_args accepts --healthcheck flag" {
 	SEND_HEALTHCHECK_QUERY="false"
-	parse_args --healthcheck
-	[[ $? -eq 0 ]]
+	parse_args --healthcheck || return 1
 	[[ "$SEND_HEALTHCHECK_QUERY" == "true" ]]
 }
 
 @test "build.sh:: parse_args accepts --send-test-message flag" {
 	SEND_TEST_MESSAGE="false"
-	parse_args --send-test-message
-	[[ $? -eq 0 ]]
+	parse_args --send-test-message || return 1
 	[[ "$SEND_TEST_MESSAGE" == "true" ]]
 }
 
