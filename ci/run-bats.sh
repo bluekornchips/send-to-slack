@@ -90,7 +90,6 @@ check_dependencies() {
 
 main() {
 	local base_ref
-	local current_branch
 	local all_changed_sh
 	local test_files
 	local test_files_list
@@ -101,17 +100,16 @@ main() {
 
 	if [[ -n "${GITHUB_BASE_REF}" ]]; then
 		base_ref="${GITHUB_BASE_REF}"
+		if ! git fetch origin "${base_ref}" 2>/dev/null; then
+			echo "main:: Failed to fetch origin/${base_ref}" >&2
+			return 1
+		fi
+		base_ref="origin/${base_ref}"
 	else
 		base_ref="${BASE_BRANCH}"
-		current_branch=$(git rev-parse --abbrev-ref HEAD)
 	fi
 
-	if ! git fetch origin "${base_ref}" 2>/dev/null; then
-		echo "main:: Failed to fetch origin/${base_ref}" >&2
-		return 1
-	fi
-
-	all_changed_sh=$(git diff --name-only --diff-filter="${DIFF_FILTER}" "origin/${base_ref}..HEAD" |
+	all_changed_sh=$(git diff --name-only --diff-filter="${DIFF_FILTER}" "${base_ref}..HEAD" |
 		grep -E "\.(${FILE_EXTENSIONS})$" || true)
 
 	if [[ -z "${all_changed_sh}" ]]; then
