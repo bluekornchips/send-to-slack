@@ -29,7 +29,7 @@ Usage: $(basename "$0") [--prefix <dir>] [--force] [--version <tag>|local] [--he
 Options:
   --prefix <dir>   Target directory for installation (default: ${DEFAULT_PREFIX})
   --force          Overwrite existing file even if unsigned
-  --version <tag>  Install from GitHub Releases (default: latest). Use "local" to install from the current repo.
+  --version <tag>  Install from specific branch/tag (default: main). Use "local" to install from the current repo.
   -h, --help       Show this help message
 
 Behavior:
@@ -47,7 +47,7 @@ EOF
 # - 0 on success, 1 on missing commands
 check_dependencies() {
 	local missing=()
-	local commands=("cp" "chmod" "mkdir" "grep" "curl" "tar")
+	local commands=("unzip")
 	local cmd
 
 	for cmd in "${commands[@]}"; do
@@ -218,65 +218,103 @@ install_binary() {
 	return 0
 }
 
-# Install from a release tarball
+# Install from extracted source directory
 # Inputs:
-# - $1 - tarball path
+# - $1 - source directory path
 # - $2 - prefix
 # - $3 - force flag (1 enables overwrite without signature)
-install_from_tarball() {
-	local tarball="$1"
+install_from_source() {
+	local source_dir="$1"
 	local prefix="$2"
 	local force="${3:-0}"
-	local extract_dir
-	local temp_source
-	local original_source
-	local status
+	local normalized_prefix
+	local install_root
+	local target_binary
 
-	if [[ -z "$tarball" ]] || [[ ! -f "$tarball" ]]; then
-		echo "install_from_tarball:: tarball not found: $tarball" >&2
+	if [[ -z "$source_dir" ]] || [[ ! -d "$source_dir" ]]; then
+		echo "install_from_source:: source directory not found: $source_dir" >&2
 		return 1
 	fi
 
-	extract_dir=$(mktemp -d)
-	if [[ ! -d "$extract_dir" ]]; then
-		echo "install_from_tarball:: failed to create temp dir" >&2
+	if ! normalized_prefix=$(normalize_prefix "$prefix"); then
 		return 1
 	fi
 
-	if ! tar -xzf "$tarball" -C "$extract_dir"; then
-		echo "install_from_tarball:: failed to extract $tarball" >&2
-		rm -rf "$extract_dir"
+	if [[ ! -f "${source_dir}/bin/send-to-slack.sh" ]]; then
+		echo "install_from_source:: missing bin/send-to-slack.sh" >&2
 		return 1
 	fi
 
-	temp_source="${extract_dir}/${INSTALL_BASENAME}"
-
-	if [[ ! -f "$temp_source" ]]; then
-		echo "install_from_tarball:: missing ${INSTALL_BASENAME} in tarball" >&2
-		rm -rf "$extract_dir"
+	if [[ ! -d "${source_dir}/lib" ]]; then
+		echo "install_from_source:: missing lib directory" >&2
 		return 1
 	fi
 
-	if [[ ! -x "$temp_source" ]]; then
-		if ! chmod 0755 "$temp_source"; then
-			echo "install_from_tarball:: failed to chmod ${temp_source}" >&2
-			rm -rf "$extract_dir"
+	if [[ ! -f "${source_dir}/lib/parse-payload.sh" ]]; then
+		echo "install_from_source:: missing lib/parse-payload.sh" >&2
+		return 1
+	fi
+
+	if [[ ! -d "${source_dir}/lib/blocks" ]]; then
+		echo "install_from_source:: missing lib/blocks directory" >&2
+		return 1
+	fi
+
+	install_root="/usr/local/send-to-slack"
+	target_binary="${normalized_prefix}/${INSTALL_BASENAME}"
+
+	if [[ -f "$target_binary" ]] && ((force != 1)); then
+		if ! file_has_signature "$target_binary"; then
+			echo "install_from_source:: existing file lacks signature, use --force to overwrite: $target_binary" >&2
 			return 1
 		fi
 	fi
 
-	original_source="$SOURCE_SCRIPT"
-	SOURCE_SCRIPT="$temp_source"
-
-	if ! install_binary "$prefix" "$force"; then
-		status=$?
-		SOURCE_SCRIPT="$original_source"
-		rm -rf "$extract_dir"
-		return $status
+	if ! install -d -m 755 "${install_root}/lib/blocks" "$(dirname "$target_binary")"; then
+		echo "install_from_source:: failed to create installation directories" >&2
+		return 1
 	fi
 
-	SOURCE_SCRIPT="$original_source"
-	rm -rf "$extract_dir"
+	if ! cp "${source_dir}/bin/send-to-slack.sh" "${install_root}/send-to-slack"; then
+		echo "install_from_source:: failed to copy script" >&2
+		return 1
+	fi
+
+	if ! chmod 0755 "${install_root}/send-to-slack"; then
+		echo "install_from_source:: failed to chmod script" >&2
+		return 1
+	fi
+
+	if ! cp "${source_dir}/lib"/*.sh "${install_root}/lib/"; then
+		echo "install_from_source:: failed to copy lib files" >&2
+		return 1
+	fi
+
+	if ! cp "${source_dir}/lib/blocks"/*.sh "${install_root}/lib/blocks/"; then
+		echo "install_from_source:: failed to copy lib/blocks files" >&2
+		return 1
+	fi
+
+	if [[ -L "$target_binary" ]] || [[ -f "$target_binary" ]]; then
+		rm -f "$target_binary"
+	fi
+
+	if ! ln -sf "${install_root}/send-to-slack" "$target_binary"; then
+		echo "install_from_source:: failed to create symlink" >&2
+		return 1
+	fi
+
+	if ! printf '\n%s\n' "$INSTALL_SIGNATURE" >>"${install_root}/send-to-slack"; then
+		echo "install_from_source:: failed to append signature" >&2
+		return 1
+	fi
+
+	if ! file_has_signature "${install_root}/send-to-slack"; then
+		echo "install_from_source:: signature verification failed" >&2
+		return 1
+	fi
+
+	echo "install_from_source:: installed $target_binary"
 	return 0
 }
 
@@ -301,66 +339,18 @@ print_next_steps() {
 	return 0
 }
 
-# Detect OS/arch (amd64 only)
-# Outputs OS_ARCH string, returns 0 on success
-detect_os_arch() {
-	local os
-	local arch
-
-	os=$(uname -s | tr '[:upper:]' '[:lower:]')
-	case "$os" in
-	linux | darwin) ;;
-	*)
-		echo "detect_os_arch:: unsupported OS: $os" >&2
-		return 1
-		;;
-	esac
-
-	arch=$(uname -m | tr '[:upper:]' '[:lower:]')
-	case "$arch" in
-	x86_64 | amd64)
-		arch="amd64"
-		;;
-	*)
-		echo "detect_os_arch:: unsupported architecture: $arch (only amd64 supported)" >&2
-		return 1
-		;;
-	esac
-
-	echo "${os}_${arch}"
-	return 0
-}
-
-# Resolve latest tag from GitHub
-resolve_latest_version() {
-	local api_url
-	local version
-
-	api_url="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
-
-	if ! version=$(curl --proto "=https" --tlsv1.2 --fail --show-error --silent --location "$api_url" | grep -o '"tag_name":"[^"]*"' | cut -d'"' -f4); then
-		echo "resolve_latest_version:: failed to fetch latest version" >&2
-		return 1
-	fi
-
-	if [[ -z "$version" ]]; then
-		echo "resolve_latest_version:: no version found" >&2
-		return 1
-	fi
-
-	echo "$version"
-	return 0
-}
-
-# Build release artifact URL
-build_artifact_url() {
-	local version="$1"
-	local os_arch="$2"
+# Build source archive URL for a branch/tag
+build_source_archive_url() {
+	local ref="$1"
 	local base_url
 
-	base_url="https://github.com/${GITHUB_REPO}/releases/download/${version}"
-	ARTIFACT_URL="${base_url}/send-to-slack_${version#v}_${os_arch}.tar.gz"
+	base_url="https://github.com/${GITHUB_REPO}/archive/refs/heads/${ref}.zip"
+	# If ref looks like a tag (starts with v), use tags instead of heads
+	if [[ "$ref" =~ ^v[0-9] ]]; then
+		base_url="https://github.com/${GITHUB_REPO}/archive/refs/tags/${ref}.zip"
+	fi
 
+	ARTIFACT_URL="$base_url"
 	return 0
 }
 
@@ -382,9 +372,10 @@ main() {
 	local force
 	local version
 	local artifact_url
-	local os_arch
 	local temp_dir
-	local tarball_path
+	local zip_path
+	local extract_dir
+	local source_dir
 
 	prefix="$DEFAULT_PREFIX"
 	force=0
@@ -445,17 +436,9 @@ main() {
 		return 1
 	fi
 
-	if ! os_arch=$(detect_os_arch); then
-		return 1
-	fi
+	local git_ref="${version:-main}"
 
-	if [[ -z "$version" ]]; then
-		if ! version=$(resolve_latest_version); then
-			return 1
-		fi
-	fi
-
-	build_artifact_url "$version" "$os_arch"
+	build_source_archive_url "$git_ref"
 	artifact_url="$ARTIFACT_URL"
 
 	if ! ensure_prefix "$prefix"; then
@@ -464,14 +447,35 @@ main() {
 
 	temp_dir=$(mktemp -d)
 	umask 077
-	tarball_path="${temp_dir}/send-to-slack.tar.gz"
+	zip_path="${temp_dir}/source.zip"
 
-	if ! download_file "$artifact_url" "$tarball_path"; then
+	if ! download_file "$artifact_url" "$zip_path"; then
+		echo "main:: failed to download source archive from ${artifact_url}" >&2
 		rm -rf "$temp_dir"
 		return 1
 	fi
 
-	if ! install_from_tarball "$tarball_path" "$prefix" "$force"; then
+	extract_dir="${temp_dir}/extract"
+	if ! mkdir -p "$extract_dir"; then
+		echo "main:: failed to create extract directory" >&2
+		rm -rf "$temp_dir"
+		return 1
+	fi
+
+	if ! unzip -q "$zip_path" -d "$extract_dir"; then
+		echo "main:: failed to extract source archive" >&2
+		rm -rf "$temp_dir"
+		return 1
+	fi
+
+	source_dir=$(find "$extract_dir" -maxdepth 1 -type d -name "send-to-slack-*" | head -1)
+	if [[ -z "$source_dir" ]]; then
+		echo "main:: failed to find extracted source directory" >&2
+		rm -rf "$temp_dir"
+		return 1
+	fi
+
+	if ! install_from_source "$source_dir" "$prefix" "$force"; then
 		rm -rf "$temp_dir"
 		return 1
 	fi

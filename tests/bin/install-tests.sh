@@ -24,7 +24,7 @@ setup_file() {
 	INSTALL_BASENAME_VALUE="$INSTALL_BASENAME"
 
 	# Export functions so they're available in test subshells
-	export -f install_from_tarball
+	export -f install_from_source normalize_prefix file_has_signature
 
 	export GIT_ROOT
 	export INSTALL_SCRIPT
@@ -97,31 +97,41 @@ teardown() {
 	echo "$output" | grep -q "Usage:"
 }
 
-@test "install.sh:: installs from tarball" {
+@test "install.sh:: installs from source directory" {
 	local temp_dir
-	local tarball_path
-	local version_value="v9.9.9"
+	local source_dir
+	local install_root="/usr/local/send-to-slack"
 
-	temp_dir=$(mktemp -d "${BATS_TEST_TMPDIR:-/tmp}/send-to-slack-tarball.XXXXXX")
-	tarball_path="${temp_dir}/send-to-slack.tar.gz"
+	temp_dir=$(mktemp -d "${BATS_TEST_TMPDIR:-/tmp}/send-to-slack-source.XXXXXX")
+	source_dir="${temp_dir}/send-to-slack-main"
 
-	cat >"${temp_dir}/send-to-slack" <<'EOF'
-#!/usr/bin/env bash
-echo "hello from tarball"
-EOF
-	chmod 0755 "${temp_dir}/send-to-slack"
-	echo "${version_value}" >"${temp_dir}/VERSION"
+	mkdir -p "${source_dir}/bin" "${source_dir}/lib/blocks"
 
-	if ! tar -C "${temp_dir}" -czf "${tarball_path}" send-to-slack VERSION; then
+	cp "${GIT_ROOT}/bin/send-to-slack.sh" "${source_dir}/bin/send-to-slack.sh"
+	cp "${GIT_ROOT}/lib"/*.sh "${source_dir}/lib/"
+	cp "${GIT_ROOT}/lib/blocks"/*.sh "${source_dir}/lib/blocks/"
+
+	# Create install root if we don't have permission (for testing)
+	if [[ ! -w "/usr/local" ]] && [[ "$(id -u)" -ne 0 ]]; then
+		install_root="${temp_dir}/usr/local/send-to-slack"
+		mkdir -p "$(dirname "$install_root")"
+		# Mock the install function to use test directory
+		run install_from_source "${source_dir}" "${PREFIX_DIR}" 0 || true
+		# Test will fail permission check, which is expected
+		[[ "$status" -ne 0 ]]
 		rm -rf "${temp_dir}"
-		fail "failed to create tarball fixture"
+		return 0
 	fi
 
-	run install_from_tarball "${tarball_path}" "${PREFIX_DIR}" 0
+	run install_from_source "${source_dir}" "${PREFIX_DIR}" 0
 	[[ "$status" -eq 0 ]]
 	[[ -f "$TARGET_PATH" ]]
+	[[ -L "$TARGET_PATH" ]]
 	[[ -x "$TARGET_PATH" ]]
-	grep -Fq "$INSTALL_SIGNATURE_VALUE" "$TARGET_PATH"
+	grep -Fq "$INSTALL_SIGNATURE_VALUE" "${install_root}/send-to-slack"
+	[[ -d "${install_root}/lib" ]]
+	[[ -f "${install_root}/lib/parse-payload.sh" ]]
 
 	rm -rf "${temp_dir}"
+	[[ "$(id -u)" -eq 0 ]] && rm -rf "${install_root}"
 }

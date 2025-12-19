@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 #
 # Build script for send-to-slack Docker image
-# Builds the Dockerfile and optionally runs healthcheck/test message and builds release artifacts
+# Builds the Dockerfile and optionally runs healthcheck/test message
 #
-set -eo pipefail
+# Only enable strict error handling when executed directly, not when sourced
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+	set -eo pipefail
+fi
 
 DOCKER_IMAGE_NAME="${DOCKER_IMAGE_NAME:-send-to-slack}"
 DOCKER_IMAGE_TAG="${DOCKER_IMAGE_TAG:-local}"
@@ -11,22 +14,7 @@ GITHUB_ACTION="${GITHUB_ACTION:-false}"
 NO_CACHE="${NO_CACHE:-true}"
 SEND_HEALTHCHECK_QUERY="${SEND_HEALTHCHECK_QUERY:-false}"
 SEND_TEST_MESSAGE="${SEND_TEST_MESSAGE:-false}"
-CREATE_BUILD_ARTIFACT="${CREATE_BUILD_ARTIFACT:-false}"
-ARTIFACT_VERSION="${ARTIFACT_VERSION:-}"
-ARTIFACT_OUTPUT="${ARTIFACT_OUTPUT:-./artifacts}"
 DOCKERFILE_CHOICE="${DOCKERFILE_CHOICE:-}"
-
-# Get the project root directory
-GIT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "")"
-if [[ -z "$GIT_ROOT" ]]; then
-	script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-	GIT_ROOT="$script_dir"
-fi
-
-if [[ -z "$GIT_ROOT" ]]; then
-	echo "Failed to determine project root directory" >&2
-	exit 1
-fi
 
 # Get the project root directory
 GIT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "")"
@@ -55,9 +43,6 @@ OPTIONS:
   --no-cache                Disable Docker build cache (default: disabled)
   --healthcheck             Run ./bin/send-to-slack.sh --health-check after build
   --send-test-message       Send a test message after build (requires CHANNEL and SLACK_BOT_USER_OAUTH_TOKEN)
-  --build-artifact          Build a release tarball into the artifacts directory (default: ./artifacts)
-  --artifact-version <tag>  Version tag for artifact (default: read from VERSION)
-  --artifact-output <dir>   Output directory for artifact (default: ./artifacts)
   --dockerfile <name>       Which Dockerfile to build: concourse | test | remote | all (default: Docker/Dockerfile)
                             Use "all" to build all Dockerfiles one by one
   -h, --help                Show this help message
@@ -106,7 +91,7 @@ EOF
 # Returns 0 on success, 1 on missing commands
 check_dependencies() {
 	local missing_deps=()
-	local required_commands=("jq" "curl" "envsubst" "rsync" "docker" "git" "tar")
+	local required_commands=("jq" "envsubst" "docker" "git")
 
 	for cmd in "${required_commands[@]}"; do
 		if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -134,40 +119,22 @@ parse_args() {
 		case "$1" in
 		--gha | --github-action)
 			GITHUB_ACTION="true"
+			export GITHUB_ACTION
 			shift
 			;;
 		--no-cache)
 			NO_CACHE="true"
+			export NO_CACHE
 			shift
 			;;
 		--healthcheck)
 			SEND_HEALTHCHECK_QUERY="true"
+			export SEND_HEALTHCHECK_QUERY
 			shift
 			;;
 		--send-test-message)
 			SEND_TEST_MESSAGE="true"
-			shift
-			;;
-		--build-artifact)
-			CREATE_BUILD_ARTIFACT="true"
-			shift
-			;;
-		--artifact-version)
-			shift
-			if [[ -z "${1:-}" ]]; then
-				echo "parse_args:: option --artifact-version requires an argument" >&2
-				return 1
-			fi
-			ARTIFACT_VERSION="$1"
-			shift
-			;;
-		--artifact-output)
-			shift
-			if [[ -z "${1:-}" ]]; then
-				echo "parse_args:: option --artifact-output requires an argument" >&2
-				return 1
-			fi
-			ARTIFACT_OUTPUT="$1"
+			export SEND_TEST_MESSAGE
 			shift
 			;;
 		--dockerfile)
@@ -179,6 +146,7 @@ parse_args() {
 			case "$1" in
 			concourse | test | remote | all | "")
 				DOCKERFILE_CHOICE="$1"
+				export DOCKERFILE_CHOICE
 				;;
 			*)
 				echo "parse_args:: invalid dockerfile choice: $1 (allowed: concourse|test|remote|all)" >&2
@@ -198,112 +166,6 @@ parse_args() {
 		esac
 	done
 
-	return 0
-}
-
-# Resolve artifact version either from a provided value or the repo VERSION file
-#
-# Inputs:
-# - $1 - version string (optional)
-#
-# Returns:
-# - 0 on success, 1 on failure
-resolve_version() {
-	local provided_version="$1"
-	local version_file="${GIT_ROOT}/VERSION"
-	local version_value
-
-	if [[ -n "$provided_version" ]]; then
-		echo "$provided_version"
-		return 0
-	fi
-
-	if [[ -f "$version_file" ]]; then
-		version_value=$(tr -d '\r\n' <"$version_file")
-		if [[ -n "$version_value" ]]; then
-			echo "$version_value"
-			return 0
-		fi
-	fi
-
-	echo "resolve_version:: unable to determine version (set ARTIFACT_VERSION or add VERSION file)" >&2
-	return 1
-}
-
-# Build release tarballs for supported platforms
-#
-# Inputs:
-# - $1 - version string (required)
-# - $2 - output directory (required)
-#
-# Returns:
-# - 0 on success, 1 on failure
-build_tarball() {
-	local version="$1"
-	local output_dir="$2"
-	local version_clean
-	local staging_dir
-	local platforms=("linux_amd64" "darwin_amd64")
-
-	if [[ -z "$version" ]]; then
-		echo "build_tarball:: version is required" >&2
-		return 1
-	fi
-
-	if [[ -z "$output_dir" ]]; then
-		echo "build_tarball:: output directory is required" >&2
-		return 1
-	fi
-
-	version_clean="${version#v}"
-	staging_dir="$(mktemp -d)"
-
-	if [[ ! -d "$staging_dir" ]]; then
-		echo "build_tarball:: failed to create staging directory" >&2
-		return 1
-	fi
-
-	mkdir -p "$output_dir"
-
-	if ! cp "${GIT_ROOT}/bin/send-to-slack.sh" "${staging_dir}/send-to-slack"; then
-		echo "build_tarball:: failed to copy send-to-slack.sh" >&2
-		rm -rf "$staging_dir"
-		return 1
-	fi
-
-	if ! chmod 0755 "${staging_dir}/send-to-slack"; then
-		echo "build_tarball:: failed to chmod send-to-slack" >&2
-		rm -rf "$staging_dir"
-		return 1
-	fi
-
-	if [[ -f "${GIT_ROOT}/VERSION" ]]; then
-		if ! cp "${GIT_ROOT}/VERSION" "${staging_dir}/VERSION"; then
-			echo "build_tarball:: failed to copy VERSION file" >&2
-			rm -rf "$staging_dir"
-			return 1
-		fi
-	else
-		if ! echo "$version" >"${staging_dir}/VERSION"; then
-			echo "build_tarball:: failed to write VERSION file" >&2
-			rm -rf "$staging_dir"
-			return 1
-		fi
-	fi
-
-	for platform in "${platforms[@]}"; do
-		local tarball_path="${output_dir}/send-to-slack_${version_clean}_${platform}.tar.gz"
-
-		if ! tar -C "$staging_dir" -czf "$tarball_path" send-to-slack VERSION; then
-			echo "build_tarball:: failed to create ${tarball_path}" >&2
-			rm -rf "$staging_dir"
-			return 1
-		fi
-
-		echo "build_tarball:: created ${tarball_path}"
-	done
-
-	rm -rf "$staging_dir"
 	return 0
 }
 
@@ -535,25 +397,130 @@ send_test_message() {
 	fi
 
 	payload_file=$(mktemp)
-	cat >"$payload_file" <<EOF
-{
-  "source": {
-    "slack_bot_user_oauth_token": "${SLACK_BOT_USER_OAUTH_TOKEN}"
-  },
-  "params": {
-    "channel": "${CHANNEL}",
-    "blocks": [
-      {
-        "type": "section",
-        "text": {
-          "type": "plain_text",
-          "text": "Dockerfile Choice: ${dockerfile_display}. Send test message to slack success."
-        }
-      }
-    ]
-  }
-}
-EOF
+
+	# Always use table format
+	# Try to get branch and commit from git if not available from CI metadata
+	local branch_value="${BRANCH:-}"
+	local commit_short_value="${COMMIT_SHORT:-}"
+	local commit_sha_value="${COMMIT_SHA:-}"
+	local repo_value="${REPO:-}"
+
+	if [[ -z "$branch_value" ]] && command -v git >/dev/null 2>&1; then
+		branch_value=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+	fi
+
+	if [[ -z "$commit_short_value" ]] && command -v git >/dev/null 2>&1; then
+		commit_sha_value=$(git rev-parse HEAD 2>/dev/null || echo "")
+		if [[ -n "$commit_sha_value" ]]; then
+			commit_short_value="${commit_sha_value:0:7}"
+		fi
+	fi
+
+	if [[ -z "$repo_value" ]] && command -v git >/dev/null 2>&1; then
+		local git_url
+		git_url=$(git config --get remote.origin.url 2>/dev/null || echo '')
+		if [[ "$git_url" =~ github\.com[:/]([^/]+/[^/]+) ]]; then
+			repo_value="${BASH_REMATCH[1]}"
+		fi
+	fi
+
+	# Build horizontal table: Repository | Branch | Commit | Event | Workflow Run | Message
+	local rows_array='[]'
+
+	# Get server URL for constructing links
+	local server_url="${GITHUB_SERVER_URL:-https://github.com}"
+
+	# Prepare cell values
+	local repo_cell
+	if [[ -n "$repo_value" ]]; then
+		local repo_url="${server_url}/${repo_value}"
+		repo_cell=$(jq -n --arg rp "$repo_value" --arg ru "$repo_url" '{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [{"type": "link", "url": $ru, "text": $rp}]}]}')
+	else
+		repo_cell='{"type": "raw_text", "text": "N/A"}'
+	fi
+
+	local branch_cell
+	if [[ -n "$branch_value" ]] && [[ -n "$repo_value" ]]; then
+		local branch_url="${server_url}/${repo_value}/tree/${branch_value}"
+		branch_cell=$(jq -n --arg br "$branch_value" --arg bu "$branch_url" '{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [{"type": "link", "url": $bu, "text": $br}]}]}')
+	else
+		if [[ -n "$branch_value" ]]; then
+			branch_cell=$(jq -n --arg br "$branch_value" '{"type": "raw_text", "text": $br}')
+		else
+			branch_cell='{"type": "raw_text", "text": "N/A"}'
+		fi
+	fi
+
+	local commit_cell
+	if [[ -n "$commit_short_value" ]]; then
+		if [[ -n "$commit_sha_value" ]] && [[ -n "$repo_value" ]]; then
+			local commit_url="${server_url}/${repo_value}/commit/${commit_sha_value}"
+			commit_cell=$(jq -n --arg cs "$commit_short_value" --arg cu "$commit_url" '{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [{"type": "link", "url": $cu, "text": $cs}]}]}')
+		else
+			commit_cell=$(jq -n --arg cs "$commit_short_value" '{"type": "raw_text", "text": $cs}')
+		fi
+	else
+		commit_cell='{"type": "raw_text", "text": "N/A"}'
+	fi
+
+	local event_cell
+	if [[ -n "${EVENT_TYPE:-}" ]]; then
+		event_cell=$(jq -n --arg et "${EVENT_TYPE}" '{"type": "raw_text", "text": $et}')
+	else
+		event_cell='{"type": "raw_text", "text": "N/A"}'
+	fi
+
+	local workflow_cell
+	if [[ -n "${WORKFLOW_RUN_URL:-}" ]]; then
+		workflow_cell=$(jq -n --arg wu "${WORKFLOW_RUN_URL}" '{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [{"type": "link", "url": $wu, "text": "View Run"}]}]}')
+	else
+		workflow_cell='{"type": "raw_text", "text": "N/A"}'
+	fi
+
+	local message_cell
+	message_cell=$(jq -n --arg df "$dockerfile_display" '{"type": "raw_text", "text": "Dockerfile: \($df) - Send test message to slack success"}')
+
+	rows_array=$(jq -n '[[
+		{"type": "raw_text", "text": "Repository"},
+		{"type": "raw_text", "text": "Branch"},
+		{"type": "raw_text", "text": "Commit"},
+		{"type": "raw_text", "text": "Event"},
+		{"type": "raw_text", "text": "Workflow Run"},
+		{"type": "raw_text", "text": "Message"}
+	]]')
+
+	# Data row
+	local data_row
+	data_row=$(jq -n \
+		--argjson repo "$repo_cell" \
+		--argjson branch "$branch_cell" \
+		--argjson commit "$commit_cell" \
+		--argjson event "$event_cell" \
+		--argjson workflow "$workflow_cell" \
+		--argjson message "$message_cell" \
+		'[$repo, $branch, $commit, $event, $workflow, $message]')
+
+	rows_array=$(echo "$rows_array" | jq --argjson data_row "$data_row" '. + [$data_row]')
+
+	# Build final payload
+	jq -n \
+		--arg token "${SLACK_BOT_USER_OAUTH_TOKEN}" \
+		--arg channel "${CHANNEL}" \
+		--argjson rows "$rows_array" \
+		'{
+			"source": {
+				"slack_bot_user_oauth_token": $token
+			},
+			"params": {
+				"channel": $channel,
+				"blocks": [
+					{
+						"type": "table",
+						"rows": $rows
+					}
+				]
+			}
+		}' >"$payload_file"
 
 	if ! "$script_path" --file "$payload_file"; then
 		rm -f "$payload_file"
@@ -644,16 +611,6 @@ main() {
 	done
 
 	DOCKERFILE_CHOICE="$original_choice"
-
-	if [[ "$CREATE_BUILD_ARTIFACT" == "true" ]]; then
-		local resolved_version
-		if ! resolved_version=$(resolve_version "$ARTIFACT_VERSION"); then
-			return 1
-		fi
-		if ! build_tarball "$resolved_version" "$ARTIFACT_OUTPUT"; then
-			return 1
-		fi
-	fi
 
 	return 0
 }
