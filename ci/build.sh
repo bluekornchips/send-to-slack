@@ -58,7 +58,8 @@ OPTIONS:
   --build-artifact          Build a release tarball into the artifacts directory (default: ./artifacts)
   --artifact-version <tag>  Version tag for artifact (default: read from VERSION)
   --artifact-output <dir>   Output directory for artifact (default: ./artifacts)
-  --dockerfile <name>       Which Dockerfile to build: concourse | test | remote (default: Docker/Dockerfile)
+  --dockerfile <name>       Which Dockerfile to build: concourse | test | remote | all (default: Docker/Dockerfile)
+                            Use "all" to build all Dockerfiles one by one
   -h, --help                Show this help message
 
 ENVIRONMENT VARIABLES:
@@ -176,11 +177,11 @@ parse_args() {
 				return 1
 			fi
 			case "$1" in
-			concourse | test | remote | "")
+			concourse | test | remote | all | "")
 				DOCKERFILE_CHOICE="$1"
 				;;
 			*)
-				echo "parse_args:: invalid dockerfile choice: $1 (allowed: concourse|test|remote)" >&2
+				echo "parse_args:: invalid dockerfile choice: $1 (allowed: concourse|test|remote|all)" >&2
 				return 1
 				;;
 			esac
@@ -197,6 +198,112 @@ parse_args() {
 		esac
 	done
 
+	return 0
+}
+
+# Resolve artifact version either from a provided value or the repo VERSION file
+#
+# Inputs:
+# - $1 - version string (optional)
+#
+# Returns:
+# - 0 on success, 1 on failure
+resolve_version() {
+	local provided_version="$1"
+	local version_file="${GIT_ROOT}/VERSION"
+	local version_value
+
+	if [[ -n "$provided_version" ]]; then
+		echo "$provided_version"
+		return 0
+	fi
+
+	if [[ -f "$version_file" ]]; then
+		version_value=$(tr -d '\r\n' <"$version_file")
+		if [[ -n "$version_value" ]]; then
+			echo "$version_value"
+			return 0
+		fi
+	fi
+
+	echo "resolve_version:: unable to determine version (set ARTIFACT_VERSION or add VERSION file)" >&2
+	return 1
+}
+
+# Build release tarballs for supported platforms
+#
+# Inputs:
+# - $1 - version string (required)
+# - $2 - output directory (required)
+#
+# Returns:
+# - 0 on success, 1 on failure
+build_tarball() {
+	local version="$1"
+	local output_dir="$2"
+	local version_clean
+	local staging_dir
+	local platforms=("linux_amd64" "darwin_amd64")
+
+	if [[ -z "$version" ]]; then
+		echo "build_tarball:: version is required" >&2
+		return 1
+	fi
+
+	if [[ -z "$output_dir" ]]; then
+		echo "build_tarball:: output directory is required" >&2
+		return 1
+	fi
+
+	version_clean="${version#v}"
+	staging_dir="$(mktemp -d)"
+
+	if [[ ! -d "$staging_dir" ]]; then
+		echo "build_tarball:: failed to create staging directory" >&2
+		return 1
+	fi
+
+	mkdir -p "$output_dir"
+
+	if ! cp "${GIT_ROOT}/bin/send-to-slack.sh" "${staging_dir}/send-to-slack"; then
+		echo "build_tarball:: failed to copy send-to-slack.sh" >&2
+		rm -rf "$staging_dir"
+		return 1
+	fi
+
+	if ! chmod 0755 "${staging_dir}/send-to-slack"; then
+		echo "build_tarball:: failed to chmod send-to-slack" >&2
+		rm -rf "$staging_dir"
+		return 1
+	fi
+
+	if [[ -f "${GIT_ROOT}/VERSION" ]]; then
+		if ! cp "${GIT_ROOT}/VERSION" "${staging_dir}/VERSION"; then
+			echo "build_tarball:: failed to copy VERSION file" >&2
+			rm -rf "$staging_dir"
+			return 1
+		fi
+	else
+		if ! echo "$version" >"${staging_dir}/VERSION"; then
+			echo "build_tarball:: failed to write VERSION file" >&2
+			rm -rf "$staging_dir"
+			return 1
+		fi
+	fi
+
+	for platform in "${platforms[@]}"; do
+		local tarball_path="${output_dir}/send-to-slack_${version_clean}_${platform}.tar.gz"
+
+		if ! tar -C "$staging_dir" -czf "$tarball_path" send-to-slack VERSION; then
+			echo "build_tarball:: failed to create ${tarball_path}" >&2
+			rm -rf "$staging_dir"
+			return 1
+		fi
+
+		echo "build_tarball:: created ${tarball_path}"
+	done
+
+	rm -rf "$staging_dir"
 	return 0
 }
 
@@ -340,6 +447,46 @@ build_image() {
 	return 0
 }
 
+# Build all Dockerfiles sequentially
+#
+# Returns:
+# - 0 on success
+# - 1 on failure
+build_all_images() {
+	local dockerfiles=("" "concourse" "test" "remote")
+	local dockerfile_names=("Dockerfile" "Dockerfile.concourse" "Dockerfile.test" "Dockerfile.remote")
+	local original_choice="$DOCKERFILE_CHOICE"
+	local build_count=0
+	local failed_count=0
+
+	echo "build_all_images:: building all Dockerfiles"
+	for i in "${!dockerfiles[@]}"; do
+		local choice="${dockerfiles[$i]}"
+		local name="${dockerfile_names[$i]}"
+		local current_num
+		DOCKERFILE_CHOICE="$choice"
+		current_num=$((i + 1))
+
+		echo "build_all_images:: building ${name} (${current_num}/${#dockerfiles[@]})"
+		if ! build_image; then
+			echo "build_all_images:: failed to build ${name}" >&2
+			((failed_count++))
+		else
+			((build_count++))
+		fi
+	done
+
+	DOCKERFILE_CHOICE="$original_choice"
+
+	if [[ $failed_count -gt 0 ]]; then
+		echo "build_all_images:: completed with ${failed_count} failure(s), ${build_count} success(es)" >&2
+		return 1
+	fi
+
+	echo "build_all_images:: successfully built all ${build_count} Dockerfile(s)"
+	return 0
+}
+
 # Run healthcheck using local script
 run_healthcheck() {
 	local script_path="${GIT_ROOT}/bin/send-to-slack.sh"
@@ -378,6 +525,15 @@ send_test_message() {
 		return 1
 	fi
 
+	local dockerfile_display
+	if [[ -z "$DOCKERFILE_CHOICE" ]]; then
+		dockerfile_display="Dockerfile"
+	elif [[ "$DOCKERFILE_CHOICE" == "all" ]]; then
+		dockerfile_display="all"
+	else
+		dockerfile_display="Dockerfile.${DOCKERFILE_CHOICE}"
+	fi
+
 	payload_file=$(mktemp)
 	cat >"$payload_file" <<EOF
 {
@@ -391,7 +547,7 @@ send_test_message() {
         "type": "section",
         "text": {
           "type": "plain_text",
-          "text": "send-to-slack build test message"
+          "text": "Dockerfile Choice: ${dockerfile_display}. Send test message to slack success."
         }
       }
     ]
@@ -439,25 +595,59 @@ main() {
 		fi
 	fi
 
-	if ! build_image; then
-		return 1
-	fi
+	local dockerfiles
+	local dockerfile_names
+	local original_choice="$DOCKERFILE_CHOICE"
 
-	if [[ "$SEND_HEALTHCHECK_QUERY" == "true" ]]; then
-		if ! run_healthcheck; then
+	if [[ "$DOCKERFILE_CHOICE" == "all" ]]; then
+		if ! build_all_images; then
 			return 1
+		fi
+		dockerfiles=("" "concourse" "test" "remote")
+		dockerfile_names=("Dockerfile" "Dockerfile.concourse" "Dockerfile.test" "Dockerfile.remote")
+	else
+		if ! build_image; then
+			return 1
+		fi
+		dockerfiles=("$DOCKERFILE_CHOICE")
+		if [[ -z "$DOCKERFILE_CHOICE" ]]; then
+			dockerfile_names=("Dockerfile")
+		else
+			dockerfile_names=("Dockerfile.${DOCKERFILE_CHOICE}")
 		fi
 	fi
 
-	if [[ "$SEND_TEST_MESSAGE" == "true" ]]; then
-		if ! send_test_message; then
-			return 1
+	for i in "${!dockerfiles[@]}"; do
+		local choice="${dockerfiles[$i]}"
+		local name="${dockerfile_names[$i]}"
+		DOCKERFILE_CHOICE="$choice"
+
+		if [[ "$SEND_HEALTHCHECK_QUERY" == "true" ]]; then
+			if [[ "$original_choice" == "all" ]]; then
+				echo "Running healthcheck for ${name}"
+			fi
+			if ! run_healthcheck; then
+				DOCKERFILE_CHOICE="$original_choice"
+				return 1
+			fi
 		fi
-	fi
+
+		if [[ "$SEND_TEST_MESSAGE" == "true" ]]; then
+			if [[ "$original_choice" == "all" ]]; then
+				echo "Sending test message for ${name}"
+			fi
+			if ! send_test_message; then
+				DOCKERFILE_CHOICE="$original_choice"
+				return 1
+			fi
+		fi
+	done
+
+	DOCKERFILE_CHOICE="$original_choice"
 
 	if [[ "$CREATE_BUILD_ARTIFACT" == "true" ]]; then
 		local resolved_version
-		if ! resolved_version=$(get_version "$ARTIFACT_VERSION"); then
+		if ! resolved_version=$(resolve_version "$ARTIFACT_VERSION"); then
 			return 1
 		fi
 		if ! build_tarball "$resolved_version" "$ARTIFACT_OUTPUT"; then

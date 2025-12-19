@@ -13,18 +13,11 @@ on:
 jobs:
   build-artifacts:
     name: Build and Sign Artifacts
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     permissions:
       contents: write
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            os_name: linux
-            arch: amd64
-          - os: macos-latest
-            os_name: darwin
-            arch: amd64
+    outputs:
+      version: ${{ steps.version.outputs.version }}
 
     steps:
       - name: Checkout code
@@ -49,7 +42,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: artifacts-${{ matrix.os_name }}-${{ matrix.arch }}
+          name: artifacts
           path: ./artifacts/*
           retention-days: 30
 
@@ -62,20 +55,6 @@ jobs:
     if: github.event_name != 'workflow_dispatch' || github.event.inputs.create_release == 'true'
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Determine version
-        id: version
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            VERSION="${{ github.event.inputs.version }}"
-          else
-            VERSION="${GITHUB_REF#refs/tags/}"
-          fi
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "Version: ${VERSION}"
-
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -84,8 +63,8 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ steps.version.outputs.version }}
-          name: Release ${{ steps.version.outputs.version }}
+          tag_name: ${{ needs.build-artifacts.outputs.version }}
+          name: Release ${{ needs.build-artifacts.outputs.version }}
           files: ./release-artifacts/**/*
           draft: false
-          prerelease: ${{ contains(steps.version.outputs.version, '-rc') || contains(steps.version.outputs.version, '-alpha') || contains(steps.version.outputs.version, '-beta') }}
+          prerelease: ${{ contains(needs.build-artifacts.outputs.version, '-rc') || contains(needs.build-artifacts.outputs.version, '-alpha') || contains(needs.build-artifacts.outputs.version, '-beta') }}
