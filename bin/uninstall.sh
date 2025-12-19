@@ -122,7 +122,7 @@ validate_prefix() {
 # Uninstall binary guarded by signature unless forced
 # Inputs:
 # - $1 - prefix
-# - $2 - force flag (1 allows unsigned removal)
+# - $2 - force flag, 1 allows unsigned removal
 # Returns:
 # - 0 on success, 1 on failure
 uninstall_binary() {

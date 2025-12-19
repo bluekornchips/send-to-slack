@@ -188,7 +188,7 @@ check_dependencies() {
 # Create Concourse metadata output structure
 #
 # Arguments:
-#   $1 - payload: JSON payload to include in metadata (optional, only if SHOW_PAYLOAD is true)
+#   $1 - payload: JSON payload to include in metadata, optional, only if SHOW_PAYLOAD is true
 #
 # Side Effects:
 # - Sets global METADATA variable with Concourse metadata format
@@ -501,8 +501,8 @@ handle_slack_api_error() {
 # Retry a command with exponential backoff
 #
 # Arguments:
-#   $1 - max_attempts: Maximum number of retry attempts (default: RETRY_MAX_ATTEMPTS)
-#   $@ - command and arguments to execute (no eval)
+#   $1 - max_attempts: Maximum number of retry attempts, default: RETRY_MAX_ATTEMPTS
+#   $@ - command and arguments to execute, no eval
 #
 # Returns:
 #   0 on success
@@ -776,7 +776,7 @@ send_notification() {
 # Process input from stdin or file specified via -f|--file option
 #
 # Inputs:
-# - $@: Command line arguments (may include -f|--file <path>)
+# - $@: Command line arguments, may include -f|--file <path>
 #
 # Outputs:
 # - Writes path to temporary input payload file to stdout on success
@@ -1008,13 +1008,13 @@ parse_main_args() {
 #
 # Inputs:
 # - Reads JSON payload from stdin or from file specified with -f|--file
-# - Command line arguments: -f|--file <path> (optional)
+# - Command line arguments: -f|--file <path>, optional
 #
 # Side Effects:
 # - Sends message to Slack API
 # - Outputs informational messages to stdout for logging
 # - Outputs only JSON to stdout at the end
-# - Sets global environment variables (PAYLOAD, etc.)
+# - Sets global environment variables, PAYLOAD, etc.
 #
 # Returns:
 # - 0 on successful message delivery and output generation

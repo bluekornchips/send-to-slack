@@ -118,7 +118,7 @@ docker build -f Docker/Dockerfile.concourse -t send-to-slack-concourse .
 # Build only
 ci/build.sh
 
-# Build + healthcheck + test message (requires CHANNEL and SLACK_BOT_USER_OAUTH_TOKEN)
+# Build + healthcheck + test message, requires CHANNEL and SLACK_BOT_USER_OAUTH_TOKEN
 CHANNEL=test SLACK_BOT_USER_OAUTH_TOKEN=token ci/build.sh --healthcheck --send-test-message
 ```
 

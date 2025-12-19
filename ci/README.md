@@ -93,7 +93,7 @@ GitHub Actions mode:
 - `NO_CACHE` (default: true)
 - `CHANNEL`, `SLACK_BOT_USER_OAUTH_TOKEN` (required for `--send-test-message`)
 
-### GitHub Actions variables (used with `--gha`)
+### GitHub Actions variables, used with `--gha`
 
 - `GITHUB_EVENT_NAME`, `GITHUB_HEAD_REF`, `GITHUB_REF_NAME`, `GITHUB_SHA`, `GITHUB_REPOSITORY`, `GITHUB_SERVER_URL`, `GITHUB_RUN_ID`, `GITHUB_EVENT_PULL_REQUEST_NUMBER`, `GITHUB_EVENT_PULL_REQUEST_HTML_URL`
 

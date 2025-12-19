@@ -97,7 +97,7 @@ create_text_section() {
 # - 0 on successful fields section creation with valid array of text objects
 # - 1 if fields_json is empty, invalid, exceeds limits, or contains invalid text objects
 #
-# Fields is an array of text objects (up to 10 items, each up to 2000 characters)
+# Fields is an array of text objects, up to 10 items, each up to 2000 characters
 # See: https://docs.slack.dev/reference/block-kit/blocks/section#fields
 create_fields_section() {
 	local fields_json="$1"

@@ -41,27 +41,18 @@ EOF
 	return 0
 }
 
-# Validate required external commands
+# Validate that at least one archive tool is available
 #
 # Returns:
-# - 0 on success, 1 on missing commands
+# - 0 on success, 1 if no tools available
 check_dependencies() {
-	local missing=()
-	local commands=("unzip")
-	local cmd
-
-	for cmd in "${commands[@]}"; do
-		if ! command -v "$cmd" >/dev/null 2>&1; then
-			missing+=("$cmd")
-		fi
-	done
-
-	if [[ ${#missing[@]} -gt 0 ]]; then
-		echo "check_dependencies:: missing commands: ${missing[*]}" >&2
-		return 1
+	# Need at least one of: tar (for tar.gz), unzip (for zip)
+	if command -v "tar" >/dev/null 2>&1 || command -v "unzip" >/dev/null 2>&1; then
+		return 0
 	fi
 
-	return 0
+	echo "check_dependencies:: missing required commands: need at least 'tar' or 'unzip'" >&2
+	return 1
 }
 
 # Normalize prefix and preserve root
@@ -167,7 +158,7 @@ file_has_signature() {
 #
 # Inputs:
 # - $1 - prefix
-# - $2 - force flag (1 enables overwrite without signature)
+# - $2 - force flag, 1 enables overwrite without signature
 # Returns:
 # - 0 on success, 1 on failure
 install_binary() {
@@ -222,7 +213,7 @@ install_binary() {
 # Inputs:
 # - $1 - source directory path
 # - $2 - prefix
-# - $3 - force flag (1 enables overwrite without signature)
+# - $3 - force flag, 1 enables overwrite without signature
 install_from_source() {
 	local source_dir="$1"
 	local prefix="$2"
@@ -347,15 +338,46 @@ print_next_steps() {
 }
 
 # Build source archive URL for a branch/tag
+# GitHub only provides tar.gz and zip formats
+#
+# Inputs:
+# - $1 - git reference, branch/tag
+# - $2 - format preference: "gzip" or "zip", default: "gzip"
+# Outputs:
+# - Sets ARTIFACT_URL and ARTIFACT_EXT global variables
+# Returns:
+# - 0 on success, 1 on failure
 build_source_archive_url() {
 	local ref="$1"
+	local format="${2:-gzip}"
 	local base_url
+	local ref_type="heads"
 
-	base_url="https://github.com/${GITHUB_REPO}/archive/refs/heads/${ref}.zip"
+	if [[ -z "$ref" ]]; then
+		echo "build_source_archive_url:: ref is empty" >&2
+		return 1
+	fi
+
 	# If ref looks like a tag (starts with v), use tags instead of heads
 	if [[ "$ref" =~ ^v[0-9] ]]; then
-		base_url="https://github.com/${GITHUB_REPO}/archive/refs/tags/${ref}.zip"
+		ref_type="tags"
 	fi
+
+	# Build URL based on format preference (GitHub only supports tar.gz and zip)
+	case "$format" in
+	gzip)
+		base_url="https://github.com/${GITHUB_REPO}/archive/refs/${ref_type}/${ref}.tar.gz"
+		ARTIFACT_EXT=".tar.gz"
+		;;
+	zip)
+		base_url="https://github.com/${GITHUB_REPO}/archive/refs/${ref_type}/${ref}.zip"
+		ARTIFACT_EXT=".zip"
+		;;
+	*)
+		echo "build_source_archive_url:: unknown format: $format (supported: gzip, zip)" >&2
+		return 1
+		;;
+	esac
 
 	ARTIFACT_URL="$base_url"
 	return 0
@@ -374,13 +396,62 @@ download_file() {
 	return 0
 }
 
+# Extract archive based on file extension
+# Supports only GitHub formats: tar.gz and zip
+#
+# Inputs:
+# - $1 - archive file path
+# - $2 - output directory
+# Returns:
+# - 0 on success, 1 on failure
+extract_archive() {
+	local archive_path="$1"
+	local output_dir="$2"
+
+	if [[ -z "$archive_path" ]] || [[ ! -f "$archive_path" ]]; then
+		echo "extract_archive:: archive file not found: $archive_path" >&2
+		return 1
+	fi
+
+	if [[ -z "$output_dir" ]] || [[ ! -d "$output_dir" ]]; then
+		echo "extract_archive:: output directory not found: $output_dir" >&2
+		return 1
+	fi
+
+	if [[ "$archive_path" == *.tar.gz ]]; then
+		if ! command -v "tar" >/dev/null 2>&1; then
+			echo "extract_archive:: tar command not available" >&2
+			return 1
+		fi
+		if ! tar -xzf "$archive_path" -C "$output_dir"; then
+			echo "extract_archive:: failed to extract tar.gz archive" >&2
+			return 1
+		fi
+	elif [[ "$archive_path" == *.zip ]]; then
+		if ! command -v "unzip" >/dev/null 2>&1; then
+			echo "extract_archive:: unzip command not available" >&2
+			return 1
+		fi
+		if ! unzip -q "$archive_path" -d "$output_dir"; then
+			echo "extract_archive:: failed to extract zip archive" >&2
+			return 1
+		fi
+	else
+		echo "extract_archive:: unsupported archive format: $archive_path" >&2
+		return 1
+	fi
+
+	return 0
+}
+
 main() {
 	local prefix
 	local force
 	local version
 	local artifact_url
+	local artifact_ext
 	local temp_dir
-	local zip_path
+	local archive_path
 	local extract_dir
 	local source_dir
 
@@ -388,6 +459,7 @@ main() {
 	force=0
 	version=""
 	artifact_url=""
+	artifact_ext=""
 
 	while [[ $# -gt 0 ]]; do
 		case "$1" in
@@ -445,21 +517,32 @@ main() {
 
 	local git_ref="${version:-main}"
 
-	build_source_archive_url "$git_ref"
-	artifact_url="$ARTIFACT_URL"
-
 	if ! ensure_prefix "$prefix"; then
 		return 1
 	fi
 
 	temp_dir=$(mktemp -d)
 	umask 077
-	zip_path="${temp_dir}/source.zip"
 
-	if ! download_file "$artifact_url" "$zip_path"; then
-		echo "main:: failed to download source archive from ${artifact_url}" >&2
-		rm -rf "$temp_dir"
-		return 1
+	# Try tar.gz first (gzip), then zip as fallback
+	# GitHub only provides these two formats
+	build_source_archive_url "$git_ref" "gzip"
+	artifact_url="$ARTIFACT_URL"
+	artifact_ext="$ARTIFACT_EXT"
+	archive_path="${temp_dir}/source${artifact_ext}"
+
+	if ! download_file "$artifact_url" "$archive_path"; then
+		# Try zip as fallback
+		build_source_archive_url "$git_ref" "zip"
+		artifact_url="$ARTIFACT_URL"
+		artifact_ext="$ARTIFACT_EXT"
+		archive_path="${temp_dir}/source${artifact_ext}"
+
+		if ! download_file "$artifact_url" "$archive_path"; then
+			echo "main:: failed to download source archive" >&2
+			rm -rf "$temp_dir"
+			return 1
+		fi
 	fi
 
 	extract_dir="${temp_dir}/extract"
@@ -469,7 +552,7 @@ main() {
 		return 1
 	fi
 
-	if ! unzip -q "$zip_path" -d "$extract_dir"; then
+	if ! extract_archive "$archive_path" "$extract_dir"; then
 		echo "main:: failed to extract source archive" >&2
 		rm -rf "$temp_dir"
 		return 1

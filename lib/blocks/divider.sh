@@ -13,7 +13,7 @@ BLOCK_TYPE="divider"
 # Process divider block and create Slack Block Kit divider block format
 #
 # Inputs:
-# - Reads JSON from stdin with divider configuration (optional block_id)
+# - Reads JSON from stdin with divider configuration, optional block_id
 #
 # Side Effects:
 # - Outputs Slack Block Kit divider block JSON to stdout
