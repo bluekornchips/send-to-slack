@@ -212,3 +212,38 @@ teardown() {
 	[[ "$ARTIFACT_URL" == *".zip" ]]
 	[[ "$ARTIFACT_EXT" == ".zip" ]]
 }
+
+@test "install.sh:: extract_archive extracts gz archive" {
+	if ! command -v "gunzip" >/dev/null 2>&1; then
+		skip "gunzip not available"
+	fi
+
+	if ! command -v "gzip" >/dev/null 2>&1; then
+		skip "gzip not available"
+	fi
+
+	local temp_dir
+	local archive_path
+	local extract_dir
+	local source_file
+	local extracted_file
+
+	temp_dir=$(mktemp -d "${BATS_TEST_TMPDIR:-/tmp}/extract-test.XXXXXX")
+	archive_path="${temp_dir}/test.gz"
+	extract_dir="${temp_dir}/extract"
+	source_file="${temp_dir}/test.txt"
+
+	echo "test content" >"$source_file"
+	gzip -c "$source_file" >"$archive_path"
+	mkdir -p "$extract_dir"
+
+	run extract_archive "$archive_path" "$extract_dir"
+	[[ "$status" -eq 0 ]]
+
+	# gunzip extracts to basename without .gz extension
+	extracted_file="${extract_dir}/test"
+	[[ -f "$extracted_file" ]]
+	[[ "$(cat "$extracted_file")" == "test content" ]]
+
+	rm -rf "$temp_dir"
+}

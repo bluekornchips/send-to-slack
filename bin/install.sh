@@ -46,12 +46,15 @@ EOF
 # Returns:
 # - 0 on success, 1 if no tools available
 check_dependencies() {
-	# Need at least one of: tar (for tar.gz), unzip (for zip)
-	if command -v "tar" >/dev/null 2>&1 || command -v "unzip" >/dev/null 2>&1; then
+	# Need at least one of:
+	# - tar (for tar.gz)
+	# - unzip (for zip)
+	# - gzip/gunzip (for gz)
+	if command -v "tar" >/dev/null 2>&1 || command -v "unzip" >/dev/null 2>&1 || command -v "gzip" >/dev/null 2>&1 || command -v "gunzip" >/dev/null 2>&1; then
 		return 0
 	fi
 
-	echo "check_dependencies:: missing required commands: need at least 'tar' or 'unzip'" >&2
+	echo "check_dependencies:: missing required commands: need at least 'tar', 'unzip', 'gzip', or 'gunzip'" >&2
 	return 1
 }
 
@@ -397,7 +400,8 @@ download_file() {
 }
 
 # Extract archive based on file extension
-# Supports only GitHub formats: tar.gz and zip
+# Supports: tar.gz, zip, gz
+# Uses: tar, unzip, gunzip
 #
 # Inputs:
 # - $1 - archive file path
@@ -434,6 +438,15 @@ extract_archive() {
 		fi
 		if ! unzip -q "$archive_path" -d "$output_dir"; then
 			echo "extract_archive:: failed to extract zip archive" >&2
+			return 1
+		fi
+	elif [[ "$archive_path" == *.gz ]]; then
+		if ! command -v "gunzip" >/dev/null 2>&1; then
+			echo "extract_archive:: gunzip command not available" >&2
+			return 1
+		fi
+		if ! gunzip -c "$archive_path" >"${output_dir}/$(basename "${archive_path%.gz}")"; then
+			echo "extract_archive:: failed to extract gz archive" >&2
 			return 1
 		fi
 	else
