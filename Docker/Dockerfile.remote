@@ -11,5 +11,6 @@ RUN apk update && \
 
 # Install send-to-slack using the simplified curl installer
 RUN curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/bin/install.sh | bash
+RUN command -v send-to-slack
 
 CMD ["/bin/bash"]

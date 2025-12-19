@@ -5,6 +5,10 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_PREFIX="${HOME}/.local/bin"
+# Default to /usr/local/bin for root to match install.sh behavior
+if [[ "$(id -u)" -eq 0 ]]; then
+	DEFAULT_PREFIX="/usr/local/bin"
+fi
 INSTALL_BASENAME="send-to-slack"
 INSTALL_SIGNATURE="# send-to-slack install signature: v1"
 
@@ -97,6 +101,7 @@ file_has_signature() {
 }
 
 # Validate prefix is acceptable for uninstall actions
+# Allows /usr/local/* for root, matches install.sh behavior
 # Inputs:
 # - $1 - prefix
 # Returns:
@@ -110,6 +115,7 @@ validate_prefix() {
 	fi
 
 	case "$prefix" in
+	/usr/local/*) ;;
 	/usr/* | /etc/*)
 		echo "validate_prefix:: refusing system prefix: $prefix" >&2
 		return 1
@@ -120,6 +126,7 @@ validate_prefix() {
 }
 
 # Uninstall binary guarded by signature unless forced
+# Also handles symlinks created by install_from_source
 # Inputs:
 # - $1 - prefix
 # - $2 - force flag, 1 allows unsigned removal
@@ -130,6 +137,8 @@ uninstall_binary() {
 	local force="$2"
 	local normalized_prefix
 	local target
+	local install_root
+	local actual_file
 
 	if ! normalized_prefix=$(normalize_prefix "$prefix"); then
 		return 1
@@ -147,6 +156,51 @@ uninstall_binary() {
 		return 1
 	fi
 
+	# If it's a symlink, check the actual file it points to
+	if [[ -L "$target" ]]; then
+		# Resolve symlink to absolute path
+		if command -v readlink >/dev/null 2>&1; then
+			actual_file=$(readlink -f "$target" 2>/dev/null || readlink "$target")
+			# Resolve relative symlinks if readlink -f failed
+			if [[ "$actual_file" != /* ]] && [[ -n "$actual_file" ]]; then
+				actual_file=$(cd "$(dirname "$target")" && cd "$(dirname "$actual_file")" 2>/dev/null && pwd)/$(basename "$actual_file")
+			fi
+		else
+			actual_file=$(readlink "$target")
+		fi
+
+		# Determine install_root based on actual file location
+		if [[ "$actual_file" == /usr/local/send-to-slack/* ]] || [[ "$actual_file" == /usr/local/send-to-slack ]]; then
+			install_root="/usr/local/send-to-slack"
+		elif [[ "$actual_file" == "${HOME}/.local/share/send-to-slack"/* ]] || [[ "$actual_file" == "${HOME}/.local/share/send-to-slack" ]]; then
+			install_root="${HOME}/.local/share/send-to-slack"
+		fi
+
+		# Check signature on actual file, not symlink
+		# Only check if we successfully resolved the actual file path and it exists
+		if ((force != 1)) && [[ -n "$actual_file" ]] && [[ -f "$actual_file" ]]; then
+			if ! file_has_signature "$actual_file"; then
+				echo "uninstall_binary:: missing signature, refusing removal (use --force to override): $target" >&2
+				return 1
+			fi
+		fi
+
+		# Remove symlink
+		if ! rm -f "$target"; then
+			echo "uninstall_binary:: failed to remove symlink $target" >&2
+			return 1
+		fi
+
+		# Remove install_root directory if it exists
+		if [[ -n "$install_root" ]] && [[ -d "$install_root" ]]; then
+			rm -rf "$install_root"
+		fi
+
+		echo "uninstall_binary:: removed $target"
+		return 0
+	fi
+
+	# Regular file (not symlink)
 	if ((force != 1)) && ! file_has_signature "$target"; then
 		echo "uninstall_binary:: missing signature, refusing removal (use --force to override): $target" >&2
 		return 1
@@ -164,6 +218,7 @@ uninstall_binary() {
 main() {
 	local prefix
 	local force
+	local detected_path
 
 	prefix="$DEFAULT_PREFIX"
 	force=0
@@ -196,6 +251,15 @@ main() {
 		shift
 	done
 
+	# Auto-detect installation location if using default prefix and binary not found there
+	if [[ "$prefix" == "$DEFAULT_PREFIX" ]]; then
+		detected_path=$(command -v "$INSTALL_BASENAME" 2>/dev/null)
+		if [[ -n "$detected_path" ]] && [[ "$detected_path" != "${DEFAULT_PREFIX}/${INSTALL_BASENAME}" ]]; then
+			# Binary is installed elsewhere, use that location
+			prefix=$(dirname "$detected_path")
+		fi
+	fi
+
 	if ! check_dependencies; then
 		return 1
 	fi
@@ -210,8 +274,12 @@ main() {
 
 	return 0
 }
-
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
-	main "$@"
-	exit $?
+# When piped: BASH_SOURCE[0] may be empty, /dev/stdin, -, or not a file
+if [[ "${BASH_SOURCE[0]}" != "$0" ]] && [[ -f "${BASH_SOURCE[0]}" ]]; then
+	# Script is being sourced, do not run main
+	:
+	return 0
 fi
+
+main "$@"
+exit $?

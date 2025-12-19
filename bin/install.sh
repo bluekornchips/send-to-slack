@@ -3,9 +3,17 @@
 # Install helper for send-to-slack
 #
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Detect if script is being piped (BASH_SOURCE[0] will be /dev/stdin or similar)
+if [[ "${BASH_SOURCE[0]}" == "/dev/stdin" ]] || [[ "${BASH_SOURCE[0]}" == "-" ]] || [[ ! -f "${BASH_SOURCE[0]}" ]]; then
+	SCRIPT_DIR=""
+	SOURCE_SCRIPT=""
+	IS_PIPED=1
+else
+	SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+	SOURCE_SCRIPT="${SCRIPT_DIR}/send-to-slack.sh"
+	IS_PIPED=0
+fi
 UPSTREAM_REPO="bluekornchips/send-to-slack"
-SOURCE_SCRIPT="${SCRIPT_DIR}/send-to-slack.sh"
 DEFAULT_PREFIX="${HOME}/.local/bin"
 # Default to /usr/local/bin for root so the binary lands on PATH in containers.
 if [[ "$(id -u)" -eq 0 ]]; then
@@ -41,20 +49,21 @@ EOF
 	return 0
 }
 
-# Validate that at least one archive tool is available
+# Validate that at least one tool is available
 #
 # Returns:
 # - 0 on success, 1 if no tools available
 check_dependencies() {
-	# Need at least one of:
-	# - tar (for tar.gz)
-	# - unzip (for zip)
-	# - gzip/gunzip (for gz)
-	if command -v "tar" >/dev/null 2>&1 || command -v "unzip" >/dev/null 2>&1 || command -v "gzip" >/dev/null 2>&1 || command -v "gunzip" >/dev/null 2>&1; then
+	# Git takes priority, then need tar for tar.gz archive
+	if command -v "git" >/dev/null 2>&1; then
 		return 0
 	fi
 
-	echo "check_dependencies:: missing required commands: need at least 'tar', 'unzip', 'gzip', or 'gunzip'" >&2
+	if command -v "tar" >/dev/null 2>&1; then
+		return 0
+	fi
+
+	echo "check_dependencies:: missing required commands: need 'git' or 'tar'" >&2
 	return 1
 }
 
@@ -319,6 +328,31 @@ install_from_source() {
 	return 0
 }
 
+# Verify installation by checking if command is available
+#
+# Inputs:
+# - $1 - prefix
+# Returns:
+# - 0 if command is found, 1 if not found
+verify_installation() {
+	local prefix="$1"
+	local normalized_prefix
+	local target_path
+
+	if ! normalized_prefix=$(normalize_prefix "$prefix"); then
+		return 1
+	fi
+
+	target_path="${normalized_prefix}/${INSTALL_BASENAME}"
+
+	# Check if the installed binary exists and is executable, or if command is available in a subshell
+	if [[ -x "$target_path" ]] || (command -v "$INSTALL_BASENAME" >/dev/null 2>&1); then
+		return 0
+	fi
+
+	return 1
+}
+
 # Provide post-install guidance
 # Inputs:
 # - $1 - prefix
@@ -340,19 +374,80 @@ print_next_steps() {
 	return 0
 }
 
-# Build source archive URL for a branch/tag
-# GitHub only provides tar.gz and zip formats
+# Clone repository using git
 #
 # Inputs:
 # - $1 - git reference, branch/tag
-# - $2 - format preference: "gzip" or "zip", default: "gzip"
+# - $2 - output directory
+# Outputs:
+# - Sets CLONE_DIR global variable to the cloned directory
+# Returns:
+# - 0 on success, 1 on failure
+clone_repository() {
+	local ref="$1"
+	local output_dir="$2"
+	local repo_url
+	local clone_dir
+
+	if [[ -z "$ref" ]]; then
+		echo "clone_repository:: ref is empty" >&2
+		return 1
+	fi
+
+	if [[ -z "$output_dir" ]] || [[ ! -d "$output_dir" ]]; then
+		echo "clone_repository:: output directory not found: $output_dir" >&2
+		return 1
+	fi
+
+	if ! command -v "git" >/dev/null 2>&1; then
+		echo "clone_repository:: git command not available" >&2
+		return 1
+	fi
+
+	local repo
+	local clone_output
+	local temp_clone_dir
+
+	repo="${GITHUB_REPO:-bluekornchips/send-to-slack}"
+	repo_url="https://github.com/${repo}.git"
+	temp_clone_dir=$(mktemp -d "${output_dir}/send-to-slack-${ref}.XXXXXX")
+
+	# Try cloning with the ref as branch/tag
+	clone_output=$(git clone --depth 1 --branch "$ref" "$repo_url" "$temp_clone_dir" 2>&1)
+	if [[ $? -ne 0 ]]; then
+		# If that fails, clone main and checkout the ref
+		clone_output=$(git clone --depth 1 "$repo_url" "$temp_clone_dir" 2>&1)
+		if [[ $? -ne 0 ]]; then
+			echo "clone_repository:: failed to clone repository: $clone_output" >&2
+			rm -rf "$temp_clone_dir"
+			return 1
+		fi
+		cd "$temp_clone_dir" || return 1
+		clone_output=$(git checkout "$ref" 2>&1)
+		if [[ $? -ne 0 ]]; then
+			echo "clone_repository:: failed to checkout ref $ref: $clone_output" >&2
+			cd - >/dev/null || true
+			rm -rf "$temp_clone_dir"
+			return 1
+		fi
+		cd - >/dev/null || true
+	fi
+
+	CLONE_DIR="$temp_clone_dir"
+	return 0
+}
+
+# Build source archive URL for a branch/tag
+# GitHub provides tar.gz format
+#
+# Inputs:
+# - $1 - git reference, branch/tag
 # Outputs:
 # - Sets ARTIFACT_URL and ARTIFACT_EXT global variables
 # Returns:
 # - 0 on success, 1 on failure
 build_source_archive_url() {
 	local ref="$1"
-	local format="${2:-gzip}"
 	local base_url
 	local ref_type="heads"
 
@@ -366,21 +461,9 @@ build_source_archive_url() {
 		ref_type="tags"
 	fi
 
-	# Build URL based on format preference (GitHub only supports tar.gz and zip)
-	case "$format" in
-	gzip)
-		base_url="https://github.com/${GITHUB_REPO}/archive/refs/${ref_type}/${ref}.tar.gz"
-		ARTIFACT_EXT=".tar.gz"
-		;;
-	zip)
-		base_url="https://github.com/${GITHUB_REPO}/archive/refs/${ref_type}/${ref}.zip"
-		ARTIFACT_EXT=".zip"
-		;;
-	*)
-		echo "build_source_archive_url:: unknown format: $format (supported: gzip, zip)" >&2
-		return 1
-		;;
-	esac
+	# Build URL for tar.gz format
+	base_url="https://github.com/${GITHUB_REPO}/archive/refs/${ref_type}/${ref}.tar.gz"
+	ARTIFACT_EXT=".tar.gz"
 
 	ARTIFACT_URL="$base_url"
 	return 0
@@ -400,8 +483,8 @@ download_file() {
 }
 
 # Extract archive based on file extension
-# Supports: tar.gz, zip, gz
-# Uses: tar, unzip, gunzip
+# Supports: tar.gz
+# Uses: tar
 #
 # Inputs:
 # - $1 - archive file path
@@ -429,24 +512,6 @@ extract_archive() {
 		fi
 		if ! tar -xzf "$archive_path" -C "$output_dir"; then
 			echo "extract_archive:: failed to extract tar.gz archive" >&2
-			return 1
-		fi
-	elif [[ "$archive_path" == *.zip ]]; then
-		if ! command -v "unzip" >/dev/null 2>&1; then
-			echo "extract_archive:: unzip command not available" >&2
-			return 1
-		fi
-		if ! unzip -q "$archive_path" -d "$output_dir"; then
-			echo "extract_archive:: failed to extract zip archive" >&2
-			return 1
-		fi
-	elif [[ "$archive_path" == *.gz ]]; then
-		if ! command -v "gunzip" >/dev/null 2>&1; then
-			echo "extract_archive:: gunzip command not available" >&2
-			return 1
-		fi
-		if ! gunzip -c "$archive_path" >"${output_dir}/$(basename "${archive_path%.gz}")"; then
-			echo "extract_archive:: failed to extract gz archive" >&2
 			return 1
 		fi
 	else
@@ -508,20 +573,29 @@ main() {
 	done
 
 	if [[ "$version" == "local" ]]; then
-		if ! check_dependencies; then
-			return 1
+		if [[ "$IS_PIPED" -eq 1 ]]; then
+			echo "main:: --version local not supported when script is piped, downloading from GitHub instead" >&2
+			version=""
+		else
+			if ! check_dependencies; then
+				return 1
+			fi
+			if ! ensure_source; then
+				return 1
+			fi
+			if ! ensure_prefix "$prefix"; then
+				return 1
+			fi
+			if ! install_binary "$prefix" "$force"; then
+				return 1
+			fi
+			print_next_steps "$prefix"
+			if ! verify_installation "$prefix"; then
+				echo "main:: installation verification failed: command not found" >&2
+				return 1
+			fi
+			return 0
 		fi
-		if ! ensure_source; then
-			return 1
-		fi
-		if ! ensure_prefix "$prefix"; then
-			return 1
-		fi
-		if ! install_binary "$prefix" "$force"; then
-			return 1
-		fi
-		print_next_steps "$prefix"
-		return 0
 	fi
 
 	if ! check_dependencies; then
@@ -537,25 +611,44 @@ main() {
 	temp_dir=$(mktemp -d)
 	umask 077
 
-	# Try tar.gz first (gzip), then zip as fallback
-	# GitHub only provides these two formats
-	build_source_archive_url "$git_ref" "gzip"
+	# Try git clone first if git is available, otherwise use archive downloads
+	if command -v "git" >/dev/null 2>&1; then
+		if ! clone_repository "$git_ref" "$temp_dir"; then
+			echo "main:: failed to clone repository, falling back to archive download" >&2
+			# Fall through to archive download
+		else
+			source_dir="$CLONE_DIR"
+			if [[ -z "$source_dir" ]] || [[ ! -d "$source_dir" ]]; then
+				echo "main:: failed to find cloned source directory" >&2
+				rm -rf "$temp_dir"
+				return 1
+			fi
+
+			if ! install_from_source "$source_dir" "$prefix" "$force"; then
+				rm -rf "$temp_dir"
+				return 1
+			fi
+
+			rm -rf "$temp_dir"
+			print_next_steps "$prefix"
+			if ! verify_installation "$prefix"; then
+				echo "main:: installation verification failed: command not found" >&2
+				return 1
+			fi
+			return 0
+		fi
+	fi
+
+	# Fallback to archive download
+	build_source_archive_url "$git_ref"
 	artifact_url="$ARTIFACT_URL"
 	artifact_ext="$ARTIFACT_EXT"
 	archive_path="${temp_dir}/source${artifact_ext}"
 
 	if ! download_file "$artifact_url" "$archive_path"; then
-		# Try zip as fallback
-		build_source_archive_url "$git_ref" "zip"
-		artifact_url="$ARTIFACT_URL"
-		artifact_ext="$ARTIFACT_EXT"
-		archive_path="${temp_dir}/source${artifact_ext}"
-
-		if ! download_file "$artifact_url" "$archive_path"; then
-			echo "main:: failed to download source archive" >&2
-			rm -rf "$temp_dir"
-			return 1
-		fi
+		echo "main:: failed to download source archive" >&2
+		rm -rf "$temp_dir"
+		return 1
 	fi
 
 	extract_dir="${temp_dir}/extract"
@@ -585,10 +678,19 @@ main() {
 
 	rm -rf "$temp_dir"
 	print_next_steps "$prefix"
+	if ! verify_installation "$prefix"; then
+		echo "main:: installation verification failed: command not found" >&2
+		return 1
+	fi
 	return 0
 }
 
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
-	main "$@"
-	exit $?
+# When piped: BASH_SOURCE[0] may be empty, /dev/stdin, -, or not a file
+if [[ "${BASH_SOURCE[0]}" != "$0" ]] && [[ -f "${BASH_SOURCE[0]}" ]]; then
+	# Script is being sourced, do not run main
+	:
+	return 0
 fi
+
+main "$@"
+exit $?
