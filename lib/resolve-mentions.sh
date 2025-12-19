@@ -3,7 +3,7 @@
 # Resolve Slack mentions and references to IDs
 #
 # Converts @user, #channel, or plain names/IDs to their Slack IDs.
-# Supports: public channels, private channels (groups), direct messages, user IDs.
+# Supports: public channels, private channels, groups, direct messages, user IDs.
 #
 # API References:
 #   https://docs.slack.dev/methods/users/users.list

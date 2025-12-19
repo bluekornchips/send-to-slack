@@ -263,7 +263,7 @@ create_block() {
 # Convert Slack permalink to thread_ts format if needed
 #
 # Arguments:
-#   $1 - input: thread_ts value (may be permalink URL or timestamp)
+#   $1 - input: thread_ts value, may be permalink URL or timestamp
 #
 # Returns:
 #   Outputs converted thread_ts to stdout
@@ -297,13 +297,13 @@ convert_thread_ts() {
 	return 0
 }
 
-# Sanitize payload by redacting sensitive information (auth tokens, PII)
+# Sanitize payload by redacting sensitive information, auth tokens, PII
 #
 # Arguments:
 #   $1 - payload_json: JSON payload string to sanitize
 #
 # Outputs:
-#   Writes sanitized JSON payload to stdout (token set to "[REDACTED]")
+#   Writes sanitized JSON payload to stdout, token set to "[REDACTED]"
 #
 # Returns:
 #   0 on success
@@ -398,9 +398,9 @@ EOF
 	return 0
 }
 
-# Load input payload params conditionally (raw params or from_file)
+# Load input payload params conditionally, raw params or from_file
 #
-# Uses global variable: INPUT_PAYLOAD (modified in place)
+# Uses global variable: INPUT_PAYLOAD, modified in place
 #
 # Side Effects:
 #   Modifies INPUT_PAYLOAD if raw params or from_file are specified

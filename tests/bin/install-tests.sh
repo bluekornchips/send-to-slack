@@ -24,7 +24,7 @@ setup_file() {
 	INSTALL_BASENAME_VALUE="$INSTALL_BASENAME"
 
 	# Export functions so they're available in test subshells
-	export -f install_from_source normalize_prefix file_has_signature
+	export -f install_from_source normalize_prefix file_has_signature extract_archive build_source_archive_url
 
 	export GIT_ROOT
 	export INSTALL_SCRIPT
@@ -100,7 +100,7 @@ teardown() {
 @test "install.sh:: installs from source directory" {
 	local temp_dir
 	local source_dir
-	local install_root="/usr/local/send-to-slack"
+	local install_root
 
 	temp_dir=$(mktemp -d "${BATS_TEST_TMPDIR:-/tmp}/send-to-slack-source.XXXXXX")
 	source_dir="${temp_dir}/send-to-slack-main"
@@ -111,16 +111,11 @@ teardown() {
 	cp "${GIT_ROOT}/lib"/*.sh "${source_dir}/lib/"
 	cp "${GIT_ROOT}/lib/blocks"/*.sh "${source_dir}/lib/blocks/"
 
-	# Create install root if we don't have permission (for testing)
-	if [[ ! -w "/usr/local" ]] && [[ "$(id -u)" -ne 0 ]]; then
-		install_root="${temp_dir}/usr/local/send-to-slack"
-		mkdir -p "$(dirname "$install_root")"
-		# Mock the install function to use test directory
-		run install_from_source "${source_dir}" "${PREFIX_DIR}" 0 || true
-		# Test will fail permission check, which is expected
-		[[ "$status" -ne 0 ]]
-		rm -rf "${temp_dir}"
-		return 0
+	# Determine install root based on user. Root uses /usr/local, non-root uses ~/.local/share.
+	if [[ "$(id -u)" -eq 0 ]]; then
+		install_root="/usr/local/send-to-slack"
+	else
+		install_root="${HOME}/.local/share/send-to-slack"
 	fi
 
 	run install_from_source "${source_dir}" "${PREFIX_DIR}" 0
@@ -128,10 +123,92 @@ teardown() {
 	[[ -f "$TARGET_PATH" ]]
 	[[ -L "$TARGET_PATH" ]]
 	[[ -x "$TARGET_PATH" ]]
-	grep -Fq "$INSTALL_SIGNATURE_VALUE" "${install_root}/send-to-slack"
-	[[ -d "${install_root}/lib" ]]
-	[[ -f "${install_root}/lib/parse-payload.sh" ]]
+
+	# Get actual install root from symlink target
+	local symlink_target
+	local actual_install_root
+	symlink_target=$(readlink "$TARGET_PATH")
+	actual_install_root=$(dirname "$symlink_target")
+
+	[[ -f "${actual_install_root}/send-to-slack" ]]
+	# Function already verifies signature, so if it succeeded, signature is there
+	file_has_signature "${actual_install_root}/send-to-slack"
+	[[ -d "${actual_install_root}/lib" ]]
+	[[ -f "${actual_install_root}/lib/parse-payload.sh" ]]
 
 	rm -rf "${temp_dir}"
-	[[ "$(id -u)" -eq 0 ]] && rm -rf "${install_root}"
+	rm -rf "${actual_install_root}"
+}
+
+@test "install.sh:: extract_archive extracts tar.gz" {
+	if ! command -v "tar" >/dev/null 2>&1; then
+		skip "tar not available"
+	fi
+
+	local temp_dir
+	local archive_path
+	local extract_dir
+	local source_dir
+
+	temp_dir=$(mktemp -d "${BATS_TEST_TMPDIR:-/tmp}/extract-test.XXXXXX")
+	archive_path="${temp_dir}/test.tar.gz"
+	extract_dir="${temp_dir}/extract"
+	source_dir="${temp_dir}/source"
+
+	mkdir -p "$source_dir/bin"
+	echo "test" >"${source_dir}/bin/test.sh"
+
+	tar -czf "$archive_path" -C "$source_dir" .
+	mkdir -p "$extract_dir"
+
+	run extract_archive "$archive_path" "$extract_dir"
+	[[ "$status" -eq 0 ]]
+	[[ -f "${extract_dir}/bin/test.sh" ]]
+
+	rm -rf "$temp_dir"
+}
+
+@test "install.sh:: extract_archive extracts zip" {
+	if ! command -v "unzip" >/dev/null 2>&1; then
+		skip "unzip not available"
+	fi
+
+	if ! command -v "zip" >/dev/null 2>&1; then
+		skip "zip command not available"
+	fi
+
+	local temp_dir
+	local archive_path
+	local extract_dir
+	local source_dir
+
+	temp_dir=$(mktemp -d "${BATS_TEST_TMPDIR:-/tmp}/extract-test.XXXXXX")
+	archive_path="${temp_dir}/test.zip"
+	extract_dir="${temp_dir}/extract"
+	source_dir="${temp_dir}/source"
+
+	mkdir -p "$source_dir/bin"
+	echo "test" >"${source_dir}/bin/test.sh"
+
+	cd "$source_dir" || return 1
+	zip -q -r "$archive_path" .
+	mkdir -p "$extract_dir"
+
+	run extract_archive "$archive_path" "$extract_dir"
+	[[ "$status" -eq 0 ]]
+	[[ -f "${extract_dir}/bin/test.sh" ]]
+
+	rm -rf "$temp_dir"
+}
+
+@test "install.sh:: build_source_archive_url creates gzip URL" {
+	build_source_archive_url "main" "gzip"
+	[[ "$ARTIFACT_URL" == *".tar.gz" ]]
+	[[ "$ARTIFACT_EXT" == ".tar.gz" ]]
+}
+
+@test "install.sh:: build_source_archive_url creates zip URL" {
+	build_source_archive_url "main" "zip"
+	[[ "$ARTIFACT_URL" == *".zip" ]]
+	[[ "$ARTIFACT_EXT" == ".zip" ]]
 }

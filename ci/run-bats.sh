@@ -14,9 +14,9 @@ FILE_EXTENSIONS="sh|bats"
 # Filter changed files and find corresponding test files
 #
 # Inputs:
-# - $1 changed files (newline-separated)
+# - $1 changed files, newline-separated
 #
-# Returns test files via echo (newline-separated)
+# Returns test files via echo, newline-separated
 filter_files() {
 	local changed_files
 	local file
