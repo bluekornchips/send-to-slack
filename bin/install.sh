@@ -260,7 +260,14 @@ install_from_source() {
 		return 1
 	fi
 
-	install_root="/usr/local/send-to-slack"
+	# Determine install root based on prefix location
+	# Use system location only if prefix is system-wide or running as root
+	if [[ "$(id -u)" -eq 0 ]] || [[ "$normalized_prefix" == /usr/local/* ]] || [[ "$normalized_prefix" == /usr/* ]]; then
+		install_root="/usr/local/send-to-slack"
+	else
+		# For user installs, use ~/.local/share
+		install_root="${HOME}/.local/share/send-to-slack"
+	fi
 	target_binary="${normalized_prefix}/${INSTALL_BASENAME}"
 
 	if [[ -f "$target_binary" ]] && ((force != 1)); then
