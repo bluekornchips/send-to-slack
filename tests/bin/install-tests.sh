@@ -93,3 +93,32 @@ teardown() {
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "Usage:"
 }
+
+@test "install.sh:: installs from tarball" {
+	local temp_dir
+	local tarball_path
+	local version_value="v9.9.9"
+
+	temp_dir=$(mktemp -d "${BATS_TEST_TMPDIR:-/tmp}/send-to-slack-tarball.XXXXXX")
+	tarball_path="${temp_dir}/send-to-slack.tar.gz"
+
+	cat >"${temp_dir}/send-to-slack" <<'EOF'
+#!/usr/bin/env bash
+echo "hello from tarball"
+EOF
+	chmod 0755 "${temp_dir}/send-to-slack"
+	echo "${version_value}" >"${temp_dir}/VERSION"
+
+	if ! tar -C "${temp_dir}" -czf "${tarball_path}" send-to-slack VERSION; then
+		rm -rf "${temp_dir}"
+		fail "failed to create tarball fixture"
+	fi
+
+	run install_from_tarball "${tarball_path}" "${PREFIX_DIR}" 0
+	[[ "$status" -eq 0 ]]
+	[[ -f "$TARGET_PATH" ]]
+	[[ -x "$TARGET_PATH" ]]
+	grep -Fq "$INSTALL_SIGNATURE_VALUE" "$TARGET_PATH"
+
+	rm -rf "${temp_dir}"
+}

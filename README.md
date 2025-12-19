@@ -41,14 +41,14 @@ curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/in
 The installer:
 
 - Downloads artifacts from GitHub Releases
-- Installs to `${HOME}/.local/bin` by default (override with `--prefix`)
-- Refuses system paths like `/usr` or `/etc` (no sudo required)
+- Installs to `${HOME}/.local/bin` by default; when run as root installs to `/usr/local/bin` (override with `--prefix`)
+- Refuses system paths under `/usr` or `/etc` except `/usr/local` (no sudo required)
 - Only supports amd64 on Linux and macOS
 
 Options:
 
 - `--version <tag>` - Version to install (default: latest stable)
-- `--prefix <dir>` - Target directory (default: `${HOME}/.local/bin`)
+- `--prefix <dir>` - Target directory (default: `${HOME}/.local/bin`, or `/usr/local/bin` when run as root)
 - `--local` - Install from local repo (use only when running the script from a clone)
 
 Example with custom prefix (useful in containers):
@@ -59,7 +59,7 @@ curl --proto "=https" --tlsv1.2 --fail --show-error --location \
   bash -s -- --prefix /tmp/send-to-slack/bin
 ```
 
-After installation, add the prefix to your PATH if needed:
+After installation, add the prefix to your PATH if needed (when run as root the default `/usr/local/bin` is already on PATH):
 
 ```bash
 export PATH="${HOME}/.local/bin:${PATH}"
@@ -73,8 +73,8 @@ Run from the cloned repository:
 ./install.sh
 ```
 
-- Default prefix is ${HOME}/.local/bin; override with --prefix when the default is not writable (for example --prefix /tmp/send-to-slack/bin inside containers).
-- If the prefix is not on PATH, add it: `export PATH="${HOME}/.local/bin:${PATH}"` (or the prefix you chose).
+- Default prefix is ${HOME}/.local/bin (or /usr/local/bin when run as root); override with --prefix when the default is not writable (for example --prefix /tmp/send-to-slack/bin inside containers).
+- If the prefix is not on PATH, add it: `export PATH="${HOME}/.local/bin:${PATH}"` (or the prefix you chose; root installs to /usr/local/bin which is on PATH).
 - Install copies bin/send-to-slack.sh to the prefix as send-to-slack, marks it executable, and adds a small signature comment used by uninstall.
 
 ## Uninstall

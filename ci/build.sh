@@ -200,6 +200,112 @@ parse_args() {
 	return 0
 }
 
+# Resolve artifact version either from a provided value or the repo VERSION file
+#
+# Inputs:
+# - $1 - version string (optional)
+#
+# Returns:
+# - 0 on success, 1 on failure
+resolve_version() {
+	local provided_version="$1"
+	local version_file="${GIT_ROOT}/VERSION"
+	local version_value
+
+	if [[ -n "$provided_version" ]]; then
+		echo "$provided_version"
+		return 0
+	fi
+
+	if [[ -f "$version_file" ]]; then
+		version_value=$(tr -d '\r\n' <"$version_file")
+		if [[ -n "$version_value" ]]; then
+			echo "$version_value"
+			return 0
+		fi
+	fi
+
+	echo "resolve_version:: unable to determine version (set ARTIFACT_VERSION or add VERSION file)" >&2
+	return 1
+}
+
+# Build release tarballs for supported platforms
+#
+# Inputs:
+# - $1 - version string (required)
+# - $2 - output directory (required)
+#
+# Returns:
+# - 0 on success, 1 on failure
+build_tarball() {
+	local version="$1"
+	local output_dir="$2"
+	local version_clean
+	local staging_dir
+	local platforms=("linux_amd64" "darwin_amd64")
+
+	if [[ -z "$version" ]]; then
+		echo "build_tarball:: version is required" >&2
+		return 1
+	fi
+
+	if [[ -z "$output_dir" ]]; then
+		echo "build_tarball:: output directory is required" >&2
+		return 1
+	fi
+
+	version_clean="${version#v}"
+	staging_dir="$(mktemp -d)"
+
+	if [[ ! -d "$staging_dir" ]]; then
+		echo "build_tarball:: failed to create staging directory" >&2
+		return 1
+	fi
+
+	mkdir -p "$output_dir"
+
+	if ! cp "${GIT_ROOT}/bin/send-to-slack.sh" "${staging_dir}/send-to-slack"; then
+		echo "build_tarball:: failed to copy send-to-slack.sh" >&2
+		rm -rf "$staging_dir"
+		return 1
+	fi
+
+	if ! chmod 0755 "${staging_dir}/send-to-slack"; then
+		echo "build_tarball:: failed to chmod send-to-slack" >&2
+		rm -rf "$staging_dir"
+		return 1
+	fi
+
+	if [[ -f "${GIT_ROOT}/VERSION" ]]; then
+		if ! cp "${GIT_ROOT}/VERSION" "${staging_dir}/VERSION"; then
+			echo "build_tarball:: failed to copy VERSION file" >&2
+			rm -rf "$staging_dir"
+			return 1
+		fi
+	else
+		if ! echo "$version" >"${staging_dir}/VERSION"; then
+			echo "build_tarball:: failed to write VERSION file" >&2
+			rm -rf "$staging_dir"
+			return 1
+		fi
+	fi
+
+	for platform in "${platforms[@]}"; do
+		local tarball_path="${output_dir}/send-to-slack_${version_clean}_${platform}.tar.gz"
+
+		if ! tar -C "$staging_dir" -czf "$tarball_path" send-to-slack VERSION; then
+			echo "build_tarball:: failed to create ${tarball_path}" >&2
+			rm -rf "$staging_dir"
+			return 1
+		fi
+
+		echo "build_tarball:: created ${tarball_path}"
+	done
+
+	rm -rf "$staging_dir"
+	return 0
+}
+
 # Extract GitHub Actions metadata
 #
 # Sets environment variables for use in notification blocks
@@ -457,7 +563,7 @@ main() {
 
 	if [[ "$CREATE_BUILD_ARTIFACT" == "true" ]]; then
 		local resolved_version
-		if ! resolved_version=$(get_version "$ARTIFACT_VERSION"); then
+		if ! resolved_version=$(resolve_version "$ARTIFACT_VERSION"); then
 			return 1
 		fi
 		if ! build_tarball "$resolved_version" "$ARTIFACT_OUTPUT"; then

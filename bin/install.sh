@@ -7,6 +7,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UPSTREAM_REPO="bluekornchips/send-to-slack"
 SOURCE_SCRIPT="${SCRIPT_DIR}/send-to-slack.sh"
 DEFAULT_PREFIX="${HOME}/.local/bin"
+# Default to /usr/local/bin for root so the binary lands on PATH in containers.
+if [[ "$(id -u)" -eq 0 ]]; then
+	DEFAULT_PREFIX="/usr/local/bin"
+fi
 INSTALL_BASENAME="send-to-slack"
 INSTALL_SIGNATURE="# send-to-slack install signature: v1"
 GITHUB_REPO="${GITHUB_REPO:-${UPSTREAM_REPO}}"
@@ -117,6 +121,7 @@ ensure_prefix() {
 	fi
 
 	case "$prefix" in
+	/usr/local/*) ;;
 	/usr/* | /etc/*)
 		echo "ensure_prefix:: refusing system prefix: $prefix" >&2
 		return 1
@@ -210,6 +215,68 @@ install_binary() {
 	fi
 
 	echo "install_binary:: installed $target"
+	return 0
+}
+
+# Install from a release tarball
+# Inputs:
+# - $1 - tarball path
+# - $2 - prefix
+# - $3 - force flag (1 enables overwrite without signature)
+install_from_tarball() {
+	local tarball="$1"
+	local prefix="$2"
+	local force="${3:-0}"
+	local extract_dir
+	local temp_source
+	local original_source
+	local status
+
+	if [[ -z "$tarball" ]] || [[ ! -f "$tarball" ]]; then
+		echo "install_from_tarball:: tarball not found: $tarball" >&2
+		return 1
+	fi
+
+	extract_dir=$(mktemp -d)
+	if [[ ! -d "$extract_dir" ]]; then
+		echo "install_from_tarball:: failed to create temp dir" >&2
+		return 1
+	fi
+
+	if ! tar -xzf "$tarball" -C "$extract_dir"; then
+		echo "install_from_tarball:: failed to extract $tarball" >&2
+		rm -rf "$extract_dir"
+		return 1
+	fi
+
+	temp_source="${extract_dir}/${INSTALL_BASENAME}"
+
+	if [[ ! -f "$temp_source" ]]; then
+		echo "install_from_tarball:: missing ${INSTALL_BASENAME} in tarball" >&2
+		rm -rf "$extract_dir"
+		return 1
+	fi
+
+	if [[ ! -x "$temp_source" ]]; then
+		if ! chmod 0755 "$temp_source"; then
+			echo "install_from_tarball:: failed to chmod ${temp_source}" >&2
+			rm -rf "$extract_dir"
+			return 1
+		fi
+	fi
+
+	original_source="$SOURCE_SCRIPT"
+	SOURCE_SCRIPT="$temp_source"
+
+	if ! install_binary "$prefix" "$force"; then
+		status=$?
+		SOURCE_SCRIPT="$original_source"
+		rm -rf "$extract_dir"
+		return $status
+	fi
+
+	SOURCE_SCRIPT="$original_source"
+	rm -rf "$extract_dir"
 	return 0
 }
 
@@ -404,7 +471,7 @@ main() {
 		return 1
 	fi
 
-	if ! install_from_tarball "$tarball_path" "$prefix"; then
+	if ! install_from_tarball "$tarball_path" "$prefix" "$force"; then
 		rm -rf "$temp_dir"
 		return 1
 	fi

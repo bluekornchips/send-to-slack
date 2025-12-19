@@ -24,3 +24,6 @@ test-payload.*
 
 # Resource output
 resource-out.json
+
+# Other
+.DS_Store
