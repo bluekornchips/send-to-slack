@@ -23,6 +23,9 @@ setup_file() {
 	INSTALL_SIGNATURE_VALUE="$INSTALL_SIGNATURE"
 	INSTALL_BASENAME_VALUE="$INSTALL_BASENAME"
 
+	# Export functions so they're available in test subshells
+	export -f install_from_tarball
+
 	export GIT_ROOT
 	export INSTALL_SCRIPT
 	export INSTALL_SIGNATURE_VALUE
