@@ -139,20 +139,26 @@ parse_args() {
 			;;
 		--dockerfile)
 			shift
-			if [[ -z "${1:-}" ]]; then
+			if [[ $# -eq 0 ]]; then
 				echo "parse_args:: option --dockerfile requires an argument" >&2
 				return 1
 			fi
-			case "$1" in
-			concourse | test | remote | all | "")
-				DOCKERFILE_CHOICE="$1"
+			if [[ -n "$1" ]]; then
+				# Non-empty value must match valid choices
+				case "$1" in
+				concourse | test | remote | all)
+					DOCKERFILE_CHOICE="$1"
+					export DOCKERFILE_CHOICE
+					;;
+				*)
+					echo "parse_args:: invalid dockerfile choice: $1 (allowed: concourse|test|remote|all)" >&2
+					return 1
+					;;
+				esac
+			else
+				DOCKERFILE_CHOICE=""
 				export DOCKERFILE_CHOICE
-				;;
-			*)
-				echo "parse_args:: invalid dockerfile choice: $1 (allowed: concourse|test|remote|all)" >&2
-				return 1
-				;;
-			esac
+			fi
 			shift
 			;;
 		-h | --help)
