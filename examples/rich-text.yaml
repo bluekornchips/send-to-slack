@@ -3,7 +3,7 @@ resource_types:
     type: registry-image
     source:
       repository: sunflowersoftware/send-to-slack
-      tag: v0.1.3
+      tag: ((TAG))
 
 resources:
   - name: slack-notification
@@ -15,7 +15,7 @@ jobs:
   - name: rich-text-section-with-all-elements
     plan:
       - put: slack-notification
-        no_get: true
+
         params:
           channel: ((channel))
           blocks:
@@ -113,7 +113,7 @@ jobs:
   - name: rich-text-lists-with-all-options
     plan:
       - put: slack-notification
-        no_get: true
+
         params:
           channel: ((channel))
           blocks:
@@ -178,7 +178,7 @@ jobs:
   - name: rich-text-preformatted-and-quote
     plan:
       - put: slack-notification
-        no_get: true
+
         params:
           channel: ((channel))
           blocks:
@@ -224,7 +224,7 @@ jobs:
   - name: rich-text-attachment-with-color
     plan:
       - put: slack-notification
-        no_get: true
+
         params:
           channel: ((channel))
           blocks:
@@ -263,7 +263,7 @@ jobs:
   - name: multiple-rich-text-blocks
     plan:
       - put: slack-notification
-        no_get: true
+
         params:
           channel: ((channel))
           blocks:
@@ -302,7 +302,7 @@ jobs:
   - name: rich-text-with-concourse-metadata-variables
     plan:
       - put: slack-notification
-        no_get: true
+
         params:
           channel: ((channel))
           blocks:
@@ -374,7 +374,7 @@ jobs:
   - name: rich-text-metadata-test
     plan:
       - put: slack-notification
-        no_get: true
+
         params:
           channel: ((channel))
           blocks:

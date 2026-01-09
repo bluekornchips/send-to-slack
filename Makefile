@@ -1,6 +1,7 @@
 VERSION := $(shell cat VERSION 2>/dev/null || echo "Unavailable")
 TARGET_VERSION ?= $(VERSION)
 SYSTEM_PREFIX := /usr/local
+TAG ?= $(TARGET_VERSION)
 
 lint:
 	find . -name "*.sh" -type f -print0 | xargs -0 shellcheck --shell=bash
@@ -51,5 +52,7 @@ concourse-load-examples:
 		fly -t local set-pipeline -p "$$pipeline" -c "$$file" --non-interactive \
 			-v SLACK_BOT_USER_OAUTH_TOKEN=$$SLACK_BOT_USER_OAUTH_TOKEN \
 			-v channel=$$CHANNEL \
+			-v side_channel=$$SIDE_CHANNEL \
+			-v TAG=$(TAG) \
 			|| exit 1; \
 	done

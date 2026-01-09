@@ -438,7 +438,7 @@ mock_curl_permalink_failure() {
 	rm -f "$input_payload"
 }
 
-@test "crosspost_notification:: skips when channels not set" {
+@test "crosspost_notification:: skips when channel not set" {
 	local input_payload
 	input_payload=$(mktemp send-to-slack-tests.test-crosspost.XXXXXX)
 	jq -n '{
@@ -447,19 +447,19 @@ mock_curl_permalink_failure() {
 			channel: "#test",
 			blocks: [],
 			crosspost: {
-				channels: []
+				blocks: []
 			}
 		}
 	}' >"$input_payload"
 
 	run crosspost_notification "$input_payload"
 	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "channels not set, skipping"
+	echo "$output" | grep -q "channel not set, skipping"
 
 	rm -f "$input_payload"
 }
 
-@test "crosspost_notification:: uses default text when text not provided" {
+@test "crosspost_notification:: accepts blocks like regular message" {
 	DRY_RUN="true"
 	NOTIFICATION_PERMALINK="https://workspace.slack.com/archives/C123/p123"
 	local input_payload
@@ -468,38 +468,27 @@ mock_curl_permalink_failure() {
 		source: { slack_bot_user_oauth_token: "test-token" },
 		params: {
 			channel: "#test",
-			blocks: [],
+			blocks: [{
+				section: {
+					type: "text",
+					text: { type: "plain_text", text: "Primary message" }
+				}
+			}],
 			crosspost: {
-				channels: ["#channel1"]
+				channel: ["#channel1"],
+				blocks: [{
+					section: {
+						type: "text",
+						text: { type: "mrkdwn", text: "Crosspost with full blocks support" }
+					}
+				}]
 			}
 		}
 	}' >"$input_payload"
 
 	run crosspost_notification "$input_payload"
 	[[ "$status" -eq 0 ]]
-
-	rm -f "$input_payload"
-}
-
-@test "crosspost_notification:: uses custom text when provided" {
-	DRY_RUN="true"
-	NOTIFICATION_PERMALINK="https://workspace.slack.com/archives/C123/p123"
-	local input_payload
-	input_payload=$(mktemp send-to-slack-tests.test-crosspost.XXXXXX)
-	jq -n '{
-		source: { slack_bot_user_oauth_token: "test-token" },
-		params: {
-			channel: "#test",
-			blocks: [],
-			crosspost: {
-				channels: ["#channel1"],
-				text: "Custom crosspost message"
-			}
-		}
-	}' >"$input_payload"
-
-	run crosspost_notification "$input_payload"
-	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "sending to 1 channel"
 
 	rm -f "$input_payload"
 }
@@ -513,15 +502,27 @@ mock_curl_permalink_failure() {
 		source: { slack_bot_user_oauth_token: "test-token" },
 		params: {
 			channel: "#test",
-			blocks: [],
+			blocks: [{
+				section: {
+					type: "text",
+					text: { type: "plain_text", text: "Primary" }
+				}
+			}],
 			crosspost: {
-				channels: ["#channel1", "#channel2", "#channel3"]
+				channel: ["#channel1", "#channel2", "#channel3"],
+				blocks: [{
+					section: {
+						type: "text",
+						text: { type: "plain_text", text: "Crosspost" }
+					}
+				}]
 			}
 		}
 	}' >"$input_payload"
 
 	run crosspost_notification "$input_payload"
 	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "sending to 3 channel"
 
 	rm -f "$input_payload"
 }
@@ -535,9 +536,146 @@ mock_curl_permalink_failure() {
 		source: { slack_bot_user_oauth_token: "test-token" },
 		params: {
 			channel: "#primary",
-			blocks: [],
+			blocks: [{
+				section: {
+					type: "text",
+					text: { type: "plain_text", text: "Primary" }
+				}
+			}],
 			crosspost: {
-				channels: "#channel1"
+				channel: "#channel1",
+				blocks: [{
+					section: {
+						type: "text",
+						text: { type: "plain_text", text: "Crosspost" }
+					}
+				}]
+			}
+		}
+	}' >"$input_payload"
+
+	run crosspost_notification "$input_payload"
+	[[ "$status" -eq 0 ]]
+
+	rm -f "$input_payload"
+}
+
+@test "crosspost_notification:: supports header and context blocks" {
+	DRY_RUN="true"
+	NOTIFICATION_PERMALINK="https://workspace.slack.com/archives/C123/p123"
+	local input_payload
+	input_payload=$(mktemp send-to-slack-tests.test-crosspost.XXXXXX)
+	jq -n '{
+		source: { slack_bot_user_oauth_token: "test-token" },
+		params: {
+			channel: "#test",
+			blocks: [{
+				section: {
+					type: "text",
+					text: { type: "plain_text", text: "Primary" }
+				}
+			}],
+			crosspost: {
+				channel: ["#channel1"],
+				blocks: [
+					{
+						header: {
+							text: { type: "plain_text", text: "Crosspost Header" }
+						}
+					},
+					{
+						section: {
+							type: "text",
+							text: { type: "mrkdwn", text: "Message body" }
+						}
+					},
+					{
+						context: {
+							elements: [
+								{ type: "mrkdwn", text: "Footer info" }
+							]
+						}
+					}
+				]
+			}
+		}
+	}' >"$input_payload"
+
+	run crosspost_notification "$input_payload"
+	[[ "$status" -eq 0 ]]
+
+	rm -f "$input_payload"
+}
+
+@test "crosspost_notification:: auto-appends permalink by default" {
+	DRY_RUN="true"
+	NOTIFICATION_PERMALINK="https://workspace.slack.com/archives/C123/p123"
+	local input_payload
+	input_payload=$(mktemp send-to-slack-tests.test-crosspost.XXXXXX)
+	jq -n '{
+		source: { slack_bot_user_oauth_token: "test-token" },
+		params: {
+			channel: "#test",
+			blocks: [{
+				section: {
+					type: "text",
+					text: { type: "plain_text", text: "Primary" }
+				}
+			}],
+			crosspost: {
+				channel: "#channel1",
+				blocks: [{
+					section: {
+						type: "text",
+						text: { type: "plain_text", text: "Crosspost message" }
+					}
+				}]
+			}
+		}
+	}' >"$input_payload"
+
+	# The crosspost_params should have the permalink block appended
+	source "$GIT_ROOT/bin/send-to-slack.sh"
+	local crosspost_params
+	crosspost_params=$(jq '.params.crosspost | del(.channel, .no_link)' "$input_payload")
+	local permalink_block='{"context": {"elements": [{"type": "mrkdwn", "text": "<$NOTIFICATION_PERMALINK|View original message>"}]}}'
+	crosspost_params=$(echo "$crosspost_params" | jq --argjson link "$permalink_block" '.blocks = (.blocks // []) + [$link]')
+
+	# Verify permalink block was added
+	local block_count
+	block_count=$(echo "$crosspost_params" | jq '.blocks | length')
+	[[ "$block_count" -eq 2 ]]
+
+	# Verify last block is the permalink context block
+	echo "$crosspost_params" | jq -e '.blocks[-1].context.elements[0].text | contains("NOTIFICATION_PERMALINK")' >/dev/null
+
+	rm -f "$input_payload"
+}
+
+@test "crosspost_notification:: no_link true skips permalink" {
+	DRY_RUN="true"
+	NOTIFICATION_PERMALINK="https://workspace.slack.com/archives/C123/p123"
+	local input_payload
+	input_payload=$(mktemp send-to-slack-tests.test-crosspost.XXXXXX)
+	jq -n '{
+		source: { slack_bot_user_oauth_token: "test-token" },
+		params: {
+			channel: "#test",
+			blocks: [{
+				section: {
+					type: "text",
+					text: { type: "plain_text", text: "Primary" }
+				}
+			}],
+			crosspost: {
+				channel: "#channel1",
+				no_link: true,
+				blocks: [{
+					section: {
+						type: "text",
+						text: { type: "plain_text", text: "Crosspost without link" }
+					}
+				}]
 			}
 		}
 	}' >"$input_payload"

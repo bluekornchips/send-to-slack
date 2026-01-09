@@ -7,7 +7,7 @@ resource_types:
     type: registry-image
     source:
       repository: sunflowersoftware/send-to-slack
-      tag: v0.1.2
+      tag: ((TAG))
 
 resources:
   - name: slack-notification
@@ -43,7 +43,7 @@ jobs:
             - name: output
 
       - put: slack-notification
-        no_get: true
+        
         params:
           <<: *common_slack_params
           blocks:
@@ -135,7 +135,7 @@ jobs:
             - name: output
 
       - put: slack-notification
-        no_get: true
+        
         params:
           <<: *common_slack_params
           blocks:
@@ -193,7 +193,7 @@ jobs:
             - name: output
 
       - put: slack-notification
-        no_get: true
+        
         params:
           <<: *common_slack_params
           text: "Image upload demonstration"
@@ -242,7 +242,7 @@ jobs:
             - name: output
 
       - put: slack-notification
-        no_get: true
+        
         params:
           <<: *common_slack_params
           channel: ((channel))
@@ -301,7 +301,7 @@ jobs:
             - name: output
 
       - put: slack-notification
-        no_get: true
+        
         params:
           <<: *common_slack_params
           blocks:

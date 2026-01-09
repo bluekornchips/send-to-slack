@@ -1,12 +1,18 @@
 # Example Concourse CI pipeline for Slack crossposting
-# Crossposting allows you to send a message to multiple channels with a link back to the original message
+#
+# Crosspost sends messages to additional channels alongside the primary message.
+# It accepts the SAME params as a regular message:
+# - "channel" works exactly like params.channel (string or array)
+# - $NOTIFICATION_PERMALINK available for referencing the original message
+#
+# This means crosspost supports: blocks, text, thread_ts, and all other message params.
 
 resource_types:
   - name: slack-notification
     type: registry-image
     source:
       repository: sunflowersoftware/send-to-slack
-      tag: v0.1.3
+      tag: ((TAG))
 
 resources:
   - name: slack-notification
@@ -14,12 +20,11 @@ resources:
     source:
       slack_bot_user_oauth_token: ((SLACK_BOT_USER_OAUTH_TOKEN))
 
-# Basic crosspost example
 jobs:
+  # Basic crosspost with single channel (string)
   - name: basic-crosspost
     plan:
       - put: slack-notification
-        no_get: true
         params:
           channel: ((channel))
           blocks:
@@ -29,38 +34,53 @@ jobs:
                   type: plain_text
                   text: "New feature has been released!"
           crosspost:
-            channels:
-              - side-channel
-              - side-channel # Purposefully sending twice to test multiple crossposts
-            text: "Check out the announcement"
+            channel: ((side_channel)) # Single channel as string
+            blocks:
+              - section:
+                  type: text
+                  text:
+                    type: mrkdwn
+                    text: "New feature released!"
 
-  # Crosspost with rich formatting
-  - name: crosspost-with-rich-text
+  # Crosspost with full block kit formatting to multiple channels
+  - name: crosspost-with-rich-formatting
     plan:
       - put: slack-notification
-        no_get: true
         params:
           channel: ((channel))
           blocks:
             - header:
                 text:
                   type: plain_text
-                  text: "Important Update"
+                  text: "Production Deployment"
             - section:
                 type: text
                 text:
                   type: mrkdwn
-                  text: "*Deployment Status:* Successfully deployed to production"
+                  text: "*Status:* Successfully deployed to production"
           crosspost:
-            channels:
-              - side-channel
-            text: "See the full update"
+            channel: # Multiple channels as array
+              - ((side_channel))
+              - ((side_channel))
+            blocks:
+              - header:
+                  text:
+                    type: plain_text
+                    text: "Deployment Notification"
+              - section:
+                  type: text
+                  text:
+                    type: mrkdwn
+                    text: "Production deployment completed."
+              - context:
+                  elements:
+                    - type: mrkdwn
+                      text: "Deployed by: $BUILD_CREATED_BY"
 
-  # Crosspost to a single channel
-  - name: single-channel-crosspost
+  # Crosspost to multiple channels
+  - name: crosspost-to-multiple-channels
     plan:
       - put: slack-notification
-        no_get: true
         params:
           channel: ((channel))
           blocks:
@@ -70,6 +90,59 @@ jobs:
                   type: plain_text
                   text: "Version 2.0.0 is now available"
           crosspost:
-            channels:
-              - side-channel
-            text: "Read the release notes"
+            channel:
+              - ((side_channel))
+              - ((side_channel)) # Sending twice to test multiple crossposts
+            blocks:
+              - section:
+                  type: text
+                  text:
+                    type: mrkdwn
+                    text: ":rocket: New release available!"
+
+  # Crosspost with actions block
+  - name: crosspost-with-actions
+    plan:
+      - put: slack-notification
+        params:
+          channel: ((channel))
+          blocks:
+            - header:
+                text:
+                  type: plain_text
+                  text: "Test Results"
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "*E2E Tests:* Completed with failures"
+          crosspost:
+            channel: ((side_channel)) # Single channel
+            blocks:
+              - section:
+                  type: text
+                  text:
+                    type: mrkdwn
+                    text: ":warning: Test failure detected"
+
+  # Crosspost with no_link: true, no automatic permalink
+  - name: crosspost-no-link
+    plan:
+      - put: slack-notification
+        params:
+          channel: ((channel))
+          blocks:
+            - section:
+                type: text
+                text:
+                  type: plain_text
+                  text: "Announcement"
+          crosspost:
+            channel: ((side_channel))
+            no_link: true # Disable automatic permalink
+            blocks:
+              - section:
+                  type: text
+                  text:
+                    type: mrkdwn
+                    text: "Standalone crosspost without link back"

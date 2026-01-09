@@ -3,7 +3,7 @@ resource_types:
     type: registry-image
     source:
       repository: sunflowersoftware/send-to-slack
-      tag: v0.1.3
+      tag: ((TAG))
 
 resources:
   - name: slack-notification
@@ -18,7 +18,7 @@ jobs:
   - name: header-with-plain-text-only
     plan:
       - put: slack-notification
-        no_get: true
+        
         params:
           <<: *common_slack_params
           text: "Testing header block with plain_text only"
@@ -31,7 +31,7 @@ jobs:
   - name: header-with-block-id-and-maximum-text
     plan:
       - put: slack-notification
-        no_get: true
+        
         params:
           <<: *common_slack_params
           text: "Testing header block with block_id and maximum length text (150 characters)"

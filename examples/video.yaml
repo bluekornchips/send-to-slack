@@ -3,7 +3,7 @@ resource_types:
     type: registry-image
     source:
       repository: sunflowersoftware/send-to-slack
-      tag: v0.1.3
+      tag: ((TAG))
 
 resources:
   - name: slack-notification
@@ -18,7 +18,7 @@ jobs:
   - name: basic-video
     plan:
       - put: slack-notification
-        no_get: true
+        
         params:
           <<: *common_slack_params
           blocks:
@@ -34,7 +34,7 @@ jobs:
   - name: video-with-description
     plan:
       - put: slack-notification
-        no_get: true
+        
         params:
           <<: *common_slack_params
           blocks:
@@ -52,7 +52,7 @@ jobs:
   - name: video-with-provider-info
     plan:
       - put: slack-notification
-        no_get: true
+        
         params:
           <<: *common_slack_params
           blocks:
@@ -70,7 +70,7 @@ jobs:
   - name: video-with-author-info
     plan:
       - put: slack-notification
-        no_get: true
+        
         params:
           <<: *common_slack_params
           blocks:
@@ -89,7 +89,7 @@ jobs:
   - name: video-with-all-fields
     plan:
       - put: slack-notification
-        no_get: true
+        
         params:
           <<: *common_slack_params
           blocks:
@@ -112,7 +112,7 @@ jobs:
   - name: video-with-other-blocks
     plan:
       - put: slack-notification
-        no_get: true
+        
         params:
           <<: *common_slack_params
           blocks:

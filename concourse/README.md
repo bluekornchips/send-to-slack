@@ -12,7 +12,7 @@ resource_types:
     type: registry-image
     source:
       repository: sunflowersoftware/send-to-slack
-      tag: v0.1.3
+      tag:
 
 resources:
   - name: slack-notification

@@ -3,7 +3,7 @@ resource_types:
     type: registry-image
     source:
       repository: sunflowersoftware/send-to-slack
-      tag: v0.1.3
+      tag: ((TAG))
 
 resources:
   - name: slack-notification
@@ -18,7 +18,7 @@ jobs:
   - name: section-with-mrkdwn-text-and-button-accessory
     plan:
       - put: slack-notification
-        no_get: true
+        
         params:
           <<: *common_slack_params
           text: "Testing section block with mrkdwn text and button accessory"
@@ -40,7 +40,7 @@ jobs:
   - name: section-with-fields-array-and-block-id
     plan:
       - put: slack-notification
-        no_get: true
+        
         params:
           <<: *common_slack_params
           text: "Testing section block with fields array (side-by-side text) and block_id"
@@ -61,7 +61,7 @@ jobs:
   - name: section-with-plain-text-expand-and-image-accessory
     plan:
       - put: slack-notification
-        no_get: true
+        
         params:
           <<: *common_slack_params
           text: "Testing section block with plain_text, expand field, and image accessory"

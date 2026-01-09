@@ -3,7 +3,7 @@ resource_types:
     type: registry-image
     source:
       repository: sunflowersoftware/send-to-slack
-      tag: v0.1.3
+      tag: ((TAG))
 
 resources:
   - name: slack-notification
@@ -18,7 +18,7 @@ jobs:
   - name: context-with-image-and-text-elements
     plan:
       - put: slack-notification
-        no_get: true
+        
         params:
           <<: *common_slack_params
           text: "Testing context block with image element and mrkdwn text element"
@@ -34,7 +34,7 @@ jobs:
   - name: context-with-multiple-text-elements-and-block-id
     plan:
       - put: slack-notification
-        no_get: true
+        
         params:
           <<: *common_slack_params
           text: "Testing context block with multiple text elements (plain_text and mrkdwn) and block_id"

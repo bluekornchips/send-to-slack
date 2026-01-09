@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 #
 # Concourse resource 'check' script implementation
-# For notification resources, we don't track versions
-# Returns empty array to indicate no versions available
+# For notification resources, we emit the packaged VERSION so downstream succeeds
 # Ref: https://concourse-ci.org/implementing-resource-types.html#resource-check
 #
 set -eo pipefail
@@ -19,7 +18,7 @@ exec 1>&2
 #
 # Side Effects:
 # - Validates JSON input
-# - Outputs empty version array to stdout. These notification resources don't track versions.
+# - Outputs a single version array with the resource VERSION to stdout
 #
 # Returns:
 # - 0 on successful validation
@@ -41,7 +40,25 @@ main() {
 		return 1
 	fi
 
-	echo "[]" >&3
+	local script_dir
+	script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+	local version_path
+	version_path="${VERSION_PATH:-${script_dir}/../VERSION}"
+
+	local version_value="${VERSION_VALUE:-}"
+	if [[ -z "$version_value" && -f "$version_path" ]]; then
+		version_value=$(tr -d '\r\n' <"$version_path")
+	fi
+
+	if [[ -z "$version_value" ]]; then
+		version_value=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null) || {
+			echo "check:: failed to generate version fallback timestamp" >&2
+			return 1
+		}
+	fi
+
+	jq -n --arg version "$version_value" '[{"version": $version}]' >&3
 
 	return 0
 }

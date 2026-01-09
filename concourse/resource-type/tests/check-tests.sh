@@ -4,27 +4,14 @@
 #
 GIT_ROOT="$(git rev-parse --show-toplevel || echo "")"
 SCRIPT="$GIT_ROOT/concourse/resource-type/scripts/check.sh"
+EXPECTED_VERSION="$(tr -d '\r\n' <"$GIT_ROOT/VERSION" 2>/dev/null || echo "")"
 [[ ! -f "$SCRIPT" ]] && echo "Script not found: $SCRIPT" >&2 && return 1
 
 ########################################################
 # main
 ########################################################
-@test "main:: returns empty array for notification resource" {
-	run "$SCRIPT" <<<'{"version": {"timestamp": "2023-12-01T12:00:00Z"}}'
-
-	[[ "$status" -eq 0 ]]
-	echo "${output}" | grep -q "^\[\]$"
-}
-
-@test "main:: returns empty array when no version in payload" {
-	run "$SCRIPT" <<<'{"source": {"url": "https://example.com"}}'
-
-	[[ "$status" -eq 0 ]]
-	echo "${output}" | grep -q "^\[\]$"
-}
-
-@test "main:: outputs valid JSON array format" {
-	run "$SCRIPT" <<<'{"version": {"timestamp": "2023-12-01T12:00:00Z"}}'
+@test "main:: returns package version for notification resource" {
+	run env VERSION_PATH="$GIT_ROOT/VERSION" "$SCRIPT" <<<'{"version": {"timestamp": "2023-12-01T12:00:00Z"}}'
 
 	[[ "$status" -eq 0 ]]
 
@@ -34,7 +21,62 @@ SCRIPT="$GIT_ROOT/concourse/resource-type/scripts/check.sh"
 
 	local length
 	length=$(echo "${output}" | jq length)
-	[[ "$length" -eq 0 ]]
+	[[ "$length" -eq 1 ]]
+
+	local version
+	version=$(echo "${output}" | jq -r '.[0].version')
+
+	if [[ -n "${EXPECTED_VERSION}" ]]; then
+		[[ "$version" == "$EXPECTED_VERSION" ]]
+	else
+		[[ -n "$version" && "$version" != "null" ]]
+	fi
+}
+
+@test "main:: returns package version when no version in payload" {
+	run env VERSION_PATH="$GIT_ROOT/VERSION" "$SCRIPT" <<<'{"source": {"url": "https://example.com"}}'
+
+	[[ "$status" -eq 0 ]]
+
+	if ! echo "${output}" | jq . >/dev/null 2>&1; then
+		return 1
+	fi
+
+	local length
+	length=$(echo "${output}" | jq length)
+	[[ "$length" -eq 1 ]]
+
+	local version
+	version=$(echo "${output}" | jq -r '.[0].version')
+
+	if [[ -n "${EXPECTED_VERSION}" ]]; then
+		[[ "$version" == "$EXPECTED_VERSION" ]]
+	else
+		[[ -n "$version" && "$version" != "null" ]]
+	fi
+}
+
+@test "main:: outputs valid JSON array format" {
+	run env VERSION_PATH="$GIT_ROOT/VERSION" "$SCRIPT" <<<'{"version": {"timestamp": "2023-12-01T12:00:00Z"}}'
+
+	[[ "$status" -eq 0 ]]
+
+	if ! echo "${output}" | jq . >/dev/null 2>&1; then
+		return 1
+	fi
+
+	local length
+	length=$(echo "${output}" | jq length)
+	[[ "$length" -eq 1 ]]
+
+	local version
+	version=$(echo "${output}" | jq -r '.[0].version')
+
+	if [[ -n "${EXPECTED_VERSION}" ]]; then
+		[[ "$version" == "$EXPECTED_VERSION" ]] || [[ -n "$version" && "$version" != "null" ]]
+	else
+		[[ -n "$version" && "$version" != "null" ]]
+	fi
 }
 
 @test "main:: creates and uses temporary payload file" {
@@ -49,9 +91,25 @@ SCRIPT="$GIT_ROOT/concourse/resource-type/scripts/check.sh"
 	[[ "$status" -ne 0 ]]
 }
 
-@test "main:: handles empty input" {
-	run "$SCRIPT" <<<''
+@test "main:: handles empty input by emitting synthetic version" {
+	run env VERSION_PATH="$GIT_ROOT/VERSION" "$SCRIPT" <<<''
 
 	[[ "$status" -eq 0 ]]
-	echo "${output}" | grep -q "^\[\]$"
+
+	if ! echo "${output}" | jq . >/dev/null 2>&1; then
+		return 1
+	fi
+
+	local length
+	length=$(echo "${output}" | jq length)
+	[[ "$length" -eq 1 ]]
+
+	local version
+	version=$(echo "${output}" | jq -r '.[0].version')
+
+	if [[ -n "${EXPECTED_VERSION}" ]]; then
+		[[ "$version" == "$EXPECTED_VERSION" ]]
+	else
+		[[ -n "$version" && "$version" != "null" ]]
+	fi
 }
