@@ -318,8 +318,9 @@ See [Slack API Scopes](https://api.slack.com/scopes) for complete documentation.
     "thread_ts": "1763161862.880069",
     "create_thread": false,
     "crosspost": {
-      "channels": ["#channel1", "#channel2"],
-      "text": "See the original message"
+      "channel": ["#channel1", "#channel2"],
+      "blocks": [...],
+      "no_link": false
     },
     "raw": "{\"source\": {...}, \"params\": {...}}",
     "from_file": "./payload.json"
@@ -410,7 +411,7 @@ Set `create_thread: true` with multiple blocks. First block sent as regular mess
 
 ## Crossposting
 
-The program supports crossposting messages to additional channels after the initial notification is sent. When crossposting is enabled, the permalink to the original message is automatically appended to each crosspost.
+The program supports crossposting messages to additional channels after the initial notification is sent. Crosspost accepts the same params as a regular message, including blocks, text, thread_ts, and all other message params.
 
 ### Crosspost Configuration
 
@@ -422,8 +423,18 @@ Add a `crosspost` object to your `params` section:
     "channel": "#main-channel",
     "blocks": [...],
     "crosspost": {
-      "channels": ["#channel1", "#channel2"],
-      "text": "See the original message"
+      "channel": ["#channel1", "#channel2"],
+      "blocks": [
+        {
+          "section": {
+            "type": "text",
+            "text": {
+              "type": "mrkdwn",
+              "text": "Check out the original announcement!"
+            }
+          }
+        }
+      ]
     }
   }
 }
@@ -431,17 +442,24 @@ Add a `crosspost` object to your `params` section:
 
 ### Crosspost Parameters
 
-- `crosspost.channels` (required) - Channel name or ID; accepts a string or array
-- `crosspost.text` (optional) - Text to include in the crosspost message, defaults to `This is an automated crosspost.`
+- `crosspost.channel` - Channel name or ID; accepts a string or array
+- `crosspost.blocks` - Block Kit blocks to send, same format as `params.blocks`
+- `crosspost.text` - Optional fallback text for notifications
+- `crosspost.no_link` - Set to `true` to disable automatic permalink appending
+
+All other params supported by regular messages are also supported in crosspost.
+
+### Permalink in Crosspost
+
+The `$NOTIFICATION_PERMALINK` environment variable is available for use in crosspost blocks via envsubst. By default, a context block with a link to the original message is automatically appended unless `no_link: true` is set.
 
 ### How It Works
 
 1. The initial notification is sent to the channel specified in `params.channel`
-2. After successful delivery, the permalink to the original message is retrieved
-3. For each channel in `crosspost.channels`, a new message is created with:
-   - A rich-text block containing `crosspost.text` followed by the permalink
-   - The message is sent to the specified channel
-4. If a crosspost fails for a specific channel, the error is logged but processing continues for remaining channels
+2. After successful delivery, the permalink to the original message is stored in `$NOTIFICATION_PERMALINK`
+3. For each channel in `crosspost.channel`, a new message is created using the crosspost params
+4. Unless `no_link: true`, a context block with a link to the original message is appended
+5. If a crosspost fails for a specific channel, the error is logged but processing continues for remaining channels
 
 ## File Uploads
 

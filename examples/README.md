@@ -7,7 +7,7 @@ This directory contains complete configuration examples for all supported Slack 
 - [acceptance.yaml](acceptance.yaml) - Acceptance test examples
 - [actions.yaml](actions.yaml) - Interactive action blocks
 - [context.yaml](context.yaml) - Context block examples
-- [crosspost.yaml](crosspost.yaml) - Crossposting to multiple channels with permalinks
+- [crosspost.yaml](crosspost.yaml) - Crossposting to multiple channels with full Block Kit support
 - [divider.yaml](divider.yaml) - Divider block examples
 - [file-blocks.yaml](file-blocks.yaml) - File block variations
 - [file-upload.yaml](file-upload.yaml) - File upload examples
