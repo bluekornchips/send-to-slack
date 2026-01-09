@@ -232,7 +232,9 @@ teardown() {
 	[[ "$status" -eq 0 ]]
 
 	# Clean up PATH
-	export PATH=$(echo "$PATH" | tr ':' '\n' | grep -v "^${temp_prefix}$" | tr '\n' ':')
+	local new_path
+	new_path=$(echo "$PATH" | tr ':' '\n' | grep -v "^${temp_prefix}$" | tr '\n' ':')
+	export PATH="$new_path"
 	rm -rf "$temp_prefix"
 }
 

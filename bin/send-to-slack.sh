@@ -344,6 +344,7 @@ crosspost_notification() {
 	# By default, append a permalink block unless no_link is true
 	if [[ "$no_link" != "true" ]]; then
 		# Add a context block with the permalink at the end of blocks
+		# shellcheck disable=SC2016
 		local permalink_block='{"context": {"elements": [{"type": "mrkdwn", "text": "<$NOTIFICATION_PERMALINK|View original message>"}]}}'
 		crosspost_params=$(echo "$crosspost_params" | jq --argjson link "$permalink_block" '.blocks = (.blocks // []) + [$link]')
 	fi

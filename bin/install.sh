@@ -413,18 +413,15 @@ clone_repository() {
 	temp_clone_dir=$(mktemp -d "${output_dir}/send-to-slack-${ref}.XXXXXX")
 
 	# Try cloning with the ref as branch/tag
-	clone_output=$(git clone --depth 1 --branch "$ref" "$repo_url" "$temp_clone_dir" 2>&1)
-	if [[ $? -ne 0 ]]; then
+	if ! clone_output=$(git clone --depth 1 --branch "$ref" "$repo_url" "$temp_clone_dir" 2>&1); then
 		# If that fails, clone main and checkout the ref
-		clone_output=$(git clone --depth 1 "$repo_url" "$temp_clone_dir" 2>&1)
-		if [[ $? -ne 0 ]]; then
+		if ! clone_output=$(git clone --depth 1 "$repo_url" "$temp_clone_dir" 2>&1); then
 			echo "clone_repository:: failed to clone repository: $clone_output" >&2
 			rm -rf "$temp_clone_dir"
 			return 1
 		fi
 		cd "$temp_clone_dir" || return 1
-		clone_output=$(git checkout "$ref" 2>&1)
-		if [[ $? -ne 0 ]]; then
+		if ! clone_output=$(git checkout "$ref" 2>&1); then
 			echo "clone_repository:: failed to checkout ref $ref: $clone_output" >&2
 			cd - >/dev/null || true
 			rm -rf "$temp_clone_dir"

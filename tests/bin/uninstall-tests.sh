@@ -107,7 +107,9 @@ teardown() {
 	[[ ! -f "$other_target" ]]
 
 	# Clean up PATH
-	export PATH=$(echo "$PATH" | tr ':' '\n' | grep -v "^${other_prefix}$" | tr '\n' ':')
+	local new_path
+	new_path=$(echo "$PATH" | tr ':' '\n' | grep -v "^${other_prefix}$" | tr '\n' ':')
+	export PATH="$new_path"
 	rm -rf "$other_prefix"
 }
 

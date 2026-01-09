@@ -638,6 +638,7 @@ mock_curl_permalink_failure() {
 	source "$GIT_ROOT/bin/send-to-slack.sh"
 	local crosspost_params
 	crosspost_params=$(jq '.params.crosspost | del(.channel, .no_link)' "$input_payload")
+	# shellcheck disable=SC2016
 	local permalink_block='{"context": {"elements": [{"type": "mrkdwn", "text": "<$NOTIFICATION_PERMALINK|View original message>"}]}}'
 	crosspost_params=$(echo "$crosspost_params" | jq --argjson link "$permalink_block" '.blocks = (.blocks // []) + [$link]')
 
