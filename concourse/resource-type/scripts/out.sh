@@ -60,6 +60,12 @@ main() {
 		}
 	fi
 
+	# Export base directory for params.from_file resolution so relative paths resolve
+	# against the Concourse destination even when cwd differs
+	if [[ -n "$destination" ]] && [[ -d "$destination" ]]; then
+		export SEND_TO_SLACK_PAYLOAD_BASE_DIR="$destination"
+	fi
+
 	# Set SEND_TO_SLACK_OUTPUT so send-to-slack.sh writes JSON to this file
 	export SEND_TO_SLACK_OUTPUT
 

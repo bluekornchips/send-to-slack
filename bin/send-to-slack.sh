@@ -22,6 +22,7 @@ RETRY_MAX_ATTEMPTS=3
 RETRY_INITIAL_DELAY=1
 RETRY_MAX_DELAY=60
 RETRY_BACKOFF_MULTIPLIER=2
+MAX_PAYLOAD_SIZE=262144
 
 ERROR_CODES_TRUE_FAILURES=(
 	"invalid_auth"
@@ -185,6 +186,21 @@ check_dependencies() {
 	return 0
 }
 
+# Get safe payload size threshold to avoid exec argument overflow
+#
+# Outputs:
+#   Writes safe byte limit to stdout
+#
+# Returns:
+#   0 always
+_get_safe_payload_size() {
+	local arg_max
+	arg_max=$(getconf ARG_MAX 2>/dev/null || echo "$MAX_PAYLOAD_SIZE")
+	printf '%d' $((arg_max / 4))
+
+	return 0
+}
+
 # Create Concourse metadata output structure
 #
 # Arguments:
@@ -197,6 +213,9 @@ check_dependencies() {
 # - 0 on successful metadata creation
 create_metadata() {
 	local payload="$1"
+	local payload_for_metadata
+	local safe_size
+	local payload_file
 
 	if [[ "${SHOW_METADATA}" != "true" ]]; then
 		return 0
@@ -215,9 +234,30 @@ create_metadata() {
 	)
 
 	if [[ "${SHOW_PAYLOAD}" == "true" ]] && [[ -n "${payload}" ]]; then
-		METADATA=$(echo "$METADATA" | jq \
-			--arg payload "${payload}" \
-			'. += [{"name": "payload", "value": $payload}]')
+		payload_for_metadata="$payload"
+		safe_size=$(_get_safe_payload_size)
+
+		if [[ ${#payload_for_metadata} -gt "$safe_size" ]]; then
+			payload_file=$(mktemp /tmp/send-to-slack.payload.XXXXXX)
+			if chmod 0600 "$payload_file" 2>/dev/null && printf '%s' "$payload_for_metadata" >"$payload_file"; then
+				if METADATA=$(echo "$METADATA" | jq --rawfile payload "$payload_file" '. += [{"name": "payload", "value": $payload}]' 2>/dev/null); then
+					rm -f "$payload_file"
+				else
+					rm -f "$payload_file"
+					echo "create_metadata:: failed to append payload via file, skipping payload in metadata" >&2
+					METADATA=$(echo "$METADATA" | jq '. += [{"name": "payload_skipped", "value": "payload too large for metadata"}]')
+				fi
+			else
+				rm -f "$payload_file"
+				echo "create_metadata:: failed to write payload temp file, skipping payload in metadata" >&2
+				METADATA=$(echo "$METADATA" | jq '. += [{"name": "payload_skipped", "value": "payload too large for metadata"}]')
+			fi
+		else
+			if ! METADATA=$(echo "$METADATA" | jq --arg payload "${payload_for_metadata}" '. += [{"name": "payload", "value": $payload}]' 2>/dev/null); then
+				echo "create_metadata:: failed to append payload to metadata" >&2
+				METADATA=$(echo "$METADATA" | jq '. += [{"name": "payload_skipped", "value": "metadata append failed"}]')
+			fi
+		fi
 	fi
 
 	return 0

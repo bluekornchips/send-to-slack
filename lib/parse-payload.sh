@@ -398,6 +398,55 @@ EOF
 	return 0
 }
 
+# Validate and resolve params.from_file path for payload loading
+#
+# Arguments:
+#   $1 - raw_path: Value from params.from_file (may be relative or absolute)
+#
+# Outputs:
+#   Writes resolved absolute path to stdout on success
+#   Writes error messages to stderr on failure
+#
+# Returns:
+#   0 if path is valid and resolves to a readable regular file
+#   1 if path is invalid, empty, not found, is a directory, or unreadable
+_resolve_from_file_path() {
+	local raw_path="$1"
+	local candidate
+	local base
+
+	local trailing
+	trailing="${raw_path##*[![:space:]]}"
+	raw_path="${raw_path%"$trailing"}"
+
+	local leading
+	leading="${raw_path%%[![:space:]]*}"
+	raw_path="${raw_path#"$leading"}"
+	if [[ -z "$raw_path" ]] || [[ "$raw_path" == "." ]] || [[ "$raw_path" == ".." ]]; then
+		echo "parse_payload:: params.from_file is empty or invalid: ${raw_path:-empty}" >&2
+		return 1
+	fi
+
+	if [[ "$raw_path" == /* ]]; then
+		candidate="$raw_path"
+	else
+		for base in "${SEND_TO_SLACK_PAYLOAD_BASE_DIR:-}" "$PWD"; do
+			[[ -z "$base" ]] || [[ ! -d "$base" ]] && continue
+			candidate="${base}/${raw_path}"
+			[[ -f "$candidate" ]] && [[ -r "$candidate" ]] && echo "$candidate" && return 0
+			[[ -d "$candidate" ]] && echo "parse_payload:: params.from_file path is a directory: ${candidate}" >&2 && return 1
+		done
+		echo "parse_payload:: payload from file not found: ${raw_path}" >&2
+		return 1
+	fi
+
+	[[ -f "$candidate" ]] && [[ -r "$candidate" ]] && echo "$candidate" && return 0
+	[[ -d "$candidate" ]] && echo "parse_payload:: params.from_file path is a directory: ${candidate}" >&2 && return 1
+	echo "parse_payload:: payload from file not found: ${raw_path}" >&2
+
+	return 1
+}
+
 # Load input payload params conditionally, raw params or from_file
 #
 # Uses global variable: INPUT_PAYLOAD, modified in place
@@ -428,14 +477,10 @@ load_input_payload_params() {
 	fi
 
 	local source_file_path
-	source_file_path=$(jq -r '.params.from_file // empty' "$INPUT_PAYLOAD")
-	if [[ -n "$source_file_path" ]]; then
+	if jq -e '.params.from_file' "$INPUT_PAYLOAD" >/dev/null 2>&1; then
+		source_file_path=$(jq -r '.params.from_file' "$INPUT_PAYLOAD")
+		source_file_path=$(_resolve_from_file_path "$source_file_path") || return 1
 		echo "parse_payload:: using payload from file: $source_file_path" >&2
-
-		if [[ ! -f "$source_file_path" ]]; then
-			echo "parse_payload:: payload from file not found: $source_file_path" >&2
-			return 1
-		fi
 
 		if ! jq . "$source_file_path" >/dev/null 2>&1; then
 			echo "parse_payload:: payload file contains invalid JSON: $source_file_path" >&2

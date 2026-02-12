@@ -168,6 +168,35 @@ mock_curl_network_error() {
 	[[ "$METADATA" == "[]" ]]
 }
 
+@test "create_metadata:: non-UTF payload produces valid metadata" {
+	SHOW_METADATA="true"
+	SHOW_PAYLOAD="true"
+	local bad_payload
+	bad_payload=$(printf '{"channel":"#test","text":"\200"}')
+
+	run create_metadata "$bad_payload"
+	[[ "$status" -eq 0 ]]
+	echo "$METADATA" | jq -e '.' >/dev/null
+}
+
+@test "create_metadata:: oversize payload succeeds without argument overflow" {
+	SHOW_METADATA="true"
+	SHOW_PAYLOAD="true"
+	local big_file
+	local huge_payload
+	local safe_size
+	safe_size=$(($(getconf ARG_MAX 2>/dev/null || echo 262144) / 4))
+	big_file=$(mktemp send-to-slack-tests.big.XXXXXX)
+	head -c "$((safe_size + 1024))" </dev/zero | tr '\0' 'A' >"$big_file"
+	huge_payload=$(jq -n --rawfile txt "$big_file" '{"channel":"#test","text":$txt}')
+
+	run create_metadata "$huge_payload"
+	[[ "$status" -eq 0 ]]
+	echo "$METADATA" | jq -e '.' >/dev/null
+
+	rm -f "$big_file"
+}
+
 ########################################################
 # Debug mode override tests
 ########################################################

@@ -617,10 +617,7 @@ create_test_payload() {
 
 	run parse_payload "$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "payload from file not found"
-
-	rm -f "$payload_file"
-	trap - EXIT
+	echo "$output" | grep -q "not found"
 }
 
 @test "parse_payload:: params.from_file invalid json" {
@@ -639,6 +636,64 @@ create_test_payload() {
 	echo "$output" | grep -q "payload file contains invalid JSON"
 
 	rm -f "$payload_file"
+}
+
+@test "parse_payload:: params.from_file empty path fails" {
+	local test_payload
+	test_payload=$(jq -n '{ params: { from_file: "" } }')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "params.from_file is empty"
+}
+
+@test "parse_payload:: params.from_file path is directory fails" {
+	local dir_path
+	dir_path=$(mktemp -d parse-payload-tests.dir.XXXXXX)
+	trap 'rm -rf "$dir_path" 2>/dev/null || true' EXIT
+
+	local test_payload
+	test_payload=$(jq -n --arg dir "$dir_path" '{ params: { from_file: $dir } }')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "directory, not a file"
+
+	rm -rf "$dir_path"
+	trap - EXIT
+}
+
+@test "parse_payload:: params.from_file resolves with SEND_TO_SLACK_PAYLOAD_BASE_DIR" {
+	local base_dir
+	local params_file
+	base_dir=$(mktemp -d parse-payload-tests.base.XXXXXX)
+	trap 'rm -rf "$base_dir" 2>/dev/null || true' EXIT
+
+	params_file="${base_dir}/nested/slack-params.json"
+	mkdir -p "$(dirname "$params_file")"
+	jq -n '{ channel: "base-dir-channel", blocks: [{"section":{"type":"text","text":{"type":"plain_text","text":"From base dir"}}] }' >"$params_file"
+
+	local test_payload
+	test_payload=$(jq -n --arg file "nested/slack-params.json" '{
+		source: { slack_bot_user_oauth_token: "test-token" },
+		params: { from_file: $file }
+	}')
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	SEND_TO_SLACK_PAYLOAD_BASE_DIR="$base_dir"
+	export SEND_TO_SLACK_PAYLOAD_BASE_DIR
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	unset SEND_TO_SLACK_PAYLOAD_BASE_DIR
+
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "using payload from file"
+
+	rm -rf "$base_dir"
+	trap - EXIT
 }
 
 @test "parse_payload:: block count exceeds 50 blocks limit" {
