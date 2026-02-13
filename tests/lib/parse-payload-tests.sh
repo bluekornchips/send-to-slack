@@ -23,19 +23,20 @@ setup_file() {
 	fi
 
 	RICH_TEXT_EXAMPLES_FILE="$GIT_ROOT/examples/rich-text.yaml"
+	BLOCK_FIXTURES_DIR="$GIT_ROOT/tests/fixtures"
 
 	export GIT_ROOT
 	export SCRIPT
 	export RICH_TEXT_EXAMPLES_FILE
+	export BLOCK_FIXTURES_DIR
 
 	return 0
 }
 
 setup() {
-
 	source "$SCRIPT"
 
-	TEST_PAYLOAD_FILE=$(mktemp parse-payload-tests.test-payload.XXXXXX)
+	TEST_PAYLOAD_FILE=$(mktemp "/tmp/parse-payload-tests.test-payload.XXXXXX")
 	export TEST_PAYLOAD_FILE
 	create_test_payload
 
@@ -55,6 +56,7 @@ teardown() {
 	[[ -n "$invalid_file" ]] && rm -f "$invalid_file"
 	[[ -n "$output_file" ]] && rm -f "$output_file"
 	[[ -n "$payload_file" ]] && rm -f "$payload_file"
+	rm -rf /tmp/parse-payload-tests.* 2>/dev/null || true
 	return 0
 }
 
@@ -81,6 +83,9 @@ create_test_payload() {
 			}
 		}' >"$TEST_PAYLOAD_FILE"
 }
+
+# Extract block JSON from create_block output (strips create_block:: log lines)
+block_output_json() { echo "$output" | grep -v '^create_block::'; }
 
 ########################################################
 # create_block
@@ -175,10 +180,10 @@ create_test_payload() {
 	[[ "$status" -eq 0 ]]
 
 	# Verify variables were interpolated
-	echo "$output" | jq -e '.text.text | contains("12345")' >/dev/null
-	echo "$output" | jq -e '.text.text | contains("42")' >/dev/null
-	echo "$output" | jq -e '.text.text | contains("$BUILD_ID") == false' >/dev/null
-	echo "$output" | jq -e '.text.text | contains("$BUILD_NAME") == false' >/dev/null
+	block_output_json | jq -e '.text.text | contains("12345")' >/dev/null
+	block_output_json | jq -e '.text.text | contains("42")' >/dev/null
+	block_output_json | jq -e '.text.text | contains("$BUILD_ID") == false' >/dev/null
+	block_output_json | jq -e '.text.text | contains("$BUILD_NAME") == false' >/dev/null
 
 	unset BUILD_ID BUILD_NAME BUILD_JOB_NAME BUILD_PIPELINE_NAME BUILD_TEAM_NAME BUILD_CREATED_BY BUILD_PIPELINE_INSTANCE_VARS ATC_EXTERNAL_URL
 }
@@ -212,18 +217,18 @@ create_test_payload() {
 	[[ "$status" -eq 0 ]]
 
 	# Verify all variables were interpolated
-	echo "$output" | jq -e '.fields[0].text | contains("67890")' >/dev/null
-	echo "$output" | jq -e '.fields[1].text | contains("99")' >/dev/null
-	echo "$output" | jq -e '.fields[2].text | contains("metadata-job")' >/dev/null
-	echo "$output" | jq -e '.fields[3].text | contains("metadata-pipeline")' >/dev/null
-	echo "$output" | jq -e '.fields[4].text | contains("test-team")' >/dev/null
-	echo "$output" | jq -e '.fields[5].text | contains("ci-user")' >/dev/null
-	echo "$output" | jq -e '.fields[6].text | contains("prod")' >/dev/null
-	echo "$output" | jq -e '.fields[7].text | contains("https://ci.example.com")' >/dev/null
+	block_output_json | jq -e '.fields[0].text | contains("67890")' >/dev/null
+	block_output_json | jq -e '.fields[1].text | contains("99")' >/dev/null
+	block_output_json | jq -e '.fields[2].text | contains("metadata-job")' >/dev/null
+	block_output_json | jq -e '.fields[3].text | contains("metadata-pipeline")' >/dev/null
+	block_output_json | jq -e '.fields[4].text | contains("test-team")' >/dev/null
+	block_output_json | jq -e '.fields[5].text | contains("ci-user")' >/dev/null
+	block_output_json | jq -e '.fields[6].text | contains("prod")' >/dev/null
+	block_output_json | jq -e '.fields[7].text | contains("https://ci.example.com")' >/dev/null
 
 	# Verify variable references are gone
-	echo "$output" | jq -e '.fields[0].text | contains("$BUILD_ID") == false' >/dev/null
-	echo "$output" | jq -e '.fields[7].text | contains("$ATC_EXTERNAL_URL") == false' >/dev/null
+	block_output_json | jq -e '.fields[0].text | contains("$BUILD_ID") == false' >/dev/null
+	block_output_json | jq -e '.fields[7].text | contains("$ATC_EXTERNAL_URL") == false' >/dev/null
 
 	unset BUILD_ID BUILD_NAME BUILD_JOB_NAME BUILD_PIPELINE_NAME BUILD_TEAM_NAME BUILD_CREATED_BY BUILD_PIPELINE_INSTANCE_VARS ATC_EXTERNAL_URL
 }
@@ -245,7 +250,7 @@ create_test_payload() {
 	[[ "$status" -eq 0 ]]
 
 	# Missing variables should be replaced with empty string by envsubst
-	echo "$output" | jq -e '.text.text | contains("Build ID: ")' >/dev/null
+	block_output_json | jq -e '.text.text | contains("Build ID: ")' >/dev/null
 }
 
 @test "create_block:: interpolates variables in nested JSON structures" {
@@ -267,8 +272,8 @@ create_test_payload() {
 	[[ "$status" -eq 0 ]]
 
 	# Verify variable was interpolated in nested structure
-	echo "$output" | jq -e '.elements[0].elements[0].text | contains("nested-value")' >/dev/null
-	echo "$output" | jq -e '.elements[0].elements[0].text | contains("$TEST_VAR") == false' >/dev/null
+	block_output_json | jq -e '.elements[0].elements[0].text | contains("nested-value")' >/dev/null
+	block_output_json | jq -e '.elements[0].elements[0].text | contains("$TEST_VAR") == false' >/dev/null
 
 	unset TEST_VAR
 }
@@ -290,12 +295,12 @@ create_test_payload() {
 	[[ "$status" -eq 0 ]]
 
 	# Verify JSON structure is preserved
-	echo "$output" | jq -e '.type == "section"' >/dev/null
-	echo "$output" | jq -e '.block_id == "test-block"' >/dev/null
-	echo "$output" | jq -e '.fields | length == 2' >/dev/null
-	echo "$output" | jq -e '.fields[0].type == "mrkdwn"' >/dev/null
-	echo "$output" | jq -e '.fields[1].type == "plain_text"' >/dev/null
-	echo "$output" | jq -e '.fields[1].text == "Static text"' >/dev/null
+	block_output_json | jq -e '.type == "section"' >/dev/null
+	block_output_json | jq -e '.block_id == "test-block"' >/dev/null
+	block_output_json | jq -e '.fields | length == 2' >/dev/null
+	block_output_json | jq -e '.fields[0].type == "mrkdwn"' >/dev/null
+	block_output_json | jq -e '.fields[1].type == "plain_text"' >/dev/null
+	block_output_json | jq -e '.fields[1].text == "Static text"' >/dev/null
 
 	unset BUILD_ID
 }
@@ -316,7 +321,7 @@ create_test_payload() {
 	[[ "$status" -eq 0 ]]
 
 	# Verify variable was interpolated (envsubst handles special chars)
-	echo "$output" | jq -e '.text.text | contains("value with spaces")' >/dev/null
+	block_output_json | jq -e '.text.text | contains("value with spaces")' >/dev/null
 
 	unset SPECIAL_VAR
 }
@@ -342,8 +347,8 @@ create_test_payload() {
 	[[ "$status" -eq 0 ]]
 
 	# Verify variables were interpolated
-	echo "$output" | jq -e '.elements[0].elements[0].text | contains("99999")' >/dev/null
-	echo "$output" | jq -e '.elements[0].elements[1].text | contains("100")' >/dev/null
+	block_output_json | jq -e '.elements[0].elements[0].text | contains("99999")' >/dev/null
+	block_output_json | jq -e '.elements[0].elements[1].text | contains("100")' >/dev/null
 
 	unset BUILD_ID BUILD_NAME
 }
@@ -354,7 +359,7 @@ create_test_payload() {
 
 @test "parse_payload:: invalid json input" {
 	local invalid_file
-	invalid_file=$(mktemp parse-payload-tests.invalid-json.XXXXXX)
+	invalid_file=$(mktemp "/tmp/parse-payload-tests.invalid-json.XXXXXX")
 	trap 'rm -f "$invalid_file" 2>/dev/null || true' EXIT
 	echo "invalid json" >"$invalid_file"
 
@@ -512,7 +517,7 @@ create_test_payload() {
 	# Call parse_payload directly to check exported variables
 	# Capture output to temp file to avoid subshell issues
 	local output_file
-	output_file=$(mktemp parse-payload-tests.output.XXXXXX)
+	output_file=$(mktemp "/tmp/parse-payload-tests.output.XXXXXX")
 
 	if ! parse_payload "$TEST_PAYLOAD_FILE" >"$output_file" 2>&1; then
 		cat "$output_file"
@@ -555,7 +560,7 @@ create_test_payload() {
 
 	run parse_payload "$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "using raw payload"
+	echo "$output" | grep -q "load_input_payload_params:: loading params from params.raw"
 }
 
 @test "parse_payload:: params.raw invalid json" {
@@ -571,7 +576,7 @@ create_test_payload() {
 
 @test "parse_payload:: params.from_file" {
 	local payload_file
-	payload_file=$(mktemp parse-payload-tests.params-file.XXXXXX)
+	payload_file=$(mktemp "/tmp/parse-payload-tests.params-file.XXXXXX")
 	trap 'rm -f "$payload_file" 2>/dev/null || true' EXIT
 
 	# File contains only params (source is preserved from test payload)
@@ -603,7 +608,7 @@ create_test_payload() {
 
 	run parse_payload "$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "using payload from file"
+	echo "$output" | grep -q "load_input_payload_params:: loading params from file"
 
 	rm -f "$payload_file"
 	trap - EXIT
@@ -622,7 +627,7 @@ create_test_payload() {
 
 @test "parse_payload:: params.from_file invalid json" {
 	local payload_file
-	payload_file=$(mktemp parse-payload-tests.invalid-params-file.XXXXXX)
+	payload_file=$(mktemp "/tmp/parse-payload-tests.invalid-params-file.XXXXXX")
 	trap 'rm -f "$payload_file" 2>/dev/null || true' EXIT
 	echo "invalid json" >"$payload_file"
 
@@ -651,7 +656,7 @@ create_test_payload() {
 
 @test "parse_payload:: params.from_file path is directory fails" {
 	local dir_path
-	dir_path=$(mktemp -d parse-payload-tests.dir.XXXXXX)
+	dir_path=$(mktemp -d "/tmp/parse-payload-tests.dir.XXXXXX")
 	trap 'rm -rf "$dir_path" 2>/dev/null || true' EXIT
 
 	local test_payload
@@ -661,7 +666,7 @@ create_test_payload() {
 
 	run parse_payload "$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "directory, not a file"
+	echo "$output" | grep -q "path is a directory"
 
 	rm -rf "$dir_path"
 	trap - EXIT
@@ -670,12 +675,13 @@ create_test_payload() {
 @test "parse_payload:: params.from_file resolves with SEND_TO_SLACK_PAYLOAD_BASE_DIR" {
 	local base_dir
 	local params_file
-	base_dir=$(mktemp -d parse-payload-tests.base.XXXXXX)
-	trap 'rm -rf "$base_dir" 2>/dev/null || true' EXIT
+	base_dir=$(mktemp -d "/tmp/parse-payload-tests.base.XXXXXX")
 
 	params_file="${base_dir}/nested/slack-params.json"
 	mkdir -p "$(dirname "$params_file")"
-	jq -n '{ channel: "base-dir-channel", blocks: [{"section":{"type":"text","text":{"type":"plain_text","text":"From base dir"}}] }' >"$params_file"
+	jq -n --arg msg "From base dir" \
+		'{"channel": "base-dir-channel", "blocks": [{"section": {"type": "text", "text": {"type": "plain_text", "text": $msg}}}]}' \
+		>"$params_file"
 
 	local test_payload
 	test_payload=$(jq -n --arg file "nested/slack-params.json" '{
@@ -690,9 +696,238 @@ create_test_payload() {
 	unset SEND_TO_SLACK_PAYLOAD_BASE_DIR
 
 	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "using payload from file"
+	echo "$output" | grep -q "load_input_payload_params:: loading params from file"
 
 	rm -rf "$base_dir"
+}
+
+########################################################
+# Block-level from_file
+########################################################
+
+@test "parse_payload:: block from_file success" {
+	local block_file
+	block_file="$BLOCK_FIXTURES_DIR/blocks-from-file.json"
+
+	local test_payload
+	test_payload=$(jq -n \
+		--arg file "$block_file" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "test-token"
+			},
+			params: {
+				channel: "test-channel",
+				blocks: [{ from_file: $file }]
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "process_blocks:: expanded block from file"
+
+	local payload_output
+	payload_output=$(parse_payload "$TEST_PAYLOAD_FILE")
+	echo "$payload_output" | jq -e '.blocks[0].type == "section"' >/dev/null
+	echo "$payload_output" | jq -e '.blocks[0].text.text == "Blocks loaded from file"' >/dev/null
+}
+
+@test "parse_payload:: block from_file not found" {
+	local test_payload
+	test_payload=$(jq -n '{
+		source: { slack_bot_user_oauth_token: "test-token" },
+		params: {
+			channel: "test-channel",
+			blocks: [{ from_file: "/nonexistent/block.json" }]
+		}
+	}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "not found"
+}
+
+@test "parse_payload:: block from_file invalid json" {
+	local block_file
+	block_file=$(mktemp "/tmp/parse-payload-tests.block-invalid.XXXXXX")
+	trap 'rm -f "$block_file" 2>/dev/null || true' EXIT
+	echo "invalid json" >"$block_file"
+
+	local test_payload
+	test_payload=$(jq -n --arg file "$block_file" '{
+		source: { slack_bot_user_oauth_token: "test-token" },
+		params: {
+			channel: "test-channel",
+			blocks: [{ from_file: $file }]
+		}
+	}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "block file contains invalid JSON"
+
+	rm -f "$block_file"
+	trap - EXIT
+}
+
+@test "parse_payload:: block from_file empty path fails" {
+	local test_payload
+	test_payload=$(jq -n '{
+		source: { slack_bot_user_oauth_token: "test-token" },
+		params: {
+			channel: "test-channel",
+			blocks: [{ from_file: "" }]
+		}
+	}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "block from_file path is empty"
+}
+
+@test "parse_payload:: block from_file path is directory fails" {
+	local dir_path
+	dir_path=$(mktemp -d "/tmp/parse-payload-tests.block-dir.XXXXXX")
+	trap 'rm -rf "$dir_path" 2>/dev/null || true' EXIT
+
+	local test_payload
+	test_payload=$(jq -n --arg dir "$dir_path" '{
+		source: { slack_bot_user_oauth_token: "test-token" },
+		params: {
+			channel: "test-channel",
+			blocks: [{ from_file: $dir }]
+		}
+	}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "path is a directory"
+
+	rm -rf "$dir_path"
+	trap - EXIT
+}
+
+@test "parse_payload:: block from_file resolves with SEND_TO_SLACK_PAYLOAD_BASE_DIR" {
+	local base_dir
+	base_dir=$(mktemp -d "/tmp/parse-payload-tests.block-base.XXXXXX")
+	trap 'rm -rf "$base_dir" 2>/dev/null || true' EXIT
+
+	mkdir -p "${base_dir}/nested"
+	cp "$BLOCK_FIXTURES_DIR/blocks-from-file.json" "${base_dir}/nested/blocks.json"
+	jq '(.section.text.text) = "From base dir block"' "${base_dir}/nested/blocks.json" >"${base_dir}/nested/blocks.json.tmp"
+	mv "${base_dir}/nested/blocks.json.tmp" "${base_dir}/nested/blocks.json"
+
+	local test_payload
+	test_payload=$(jq -n '{
+		source: { slack_bot_user_oauth_token: "test-token" },
+		params: {
+			channel: "test-channel",
+			blocks: [{ from_file: "nested/blocks.json" }]
+		}
+	}')
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	SEND_TO_SLACK_PAYLOAD_BASE_DIR="$base_dir"
+	export SEND_TO_SLACK_PAYLOAD_BASE_DIR
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	unset SEND_TO_SLACK_PAYLOAD_BASE_DIR
+
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "process_blocks:: expanded block from file"
+
+	local payload_output
+	SEND_TO_SLACK_PAYLOAD_BASE_DIR="$base_dir"
+	export SEND_TO_SLACK_PAYLOAD_BASE_DIR
+	payload_output=$(parse_payload "$TEST_PAYLOAD_FILE")
+	unset SEND_TO_SLACK_PAYLOAD_BASE_DIR
+	echo "$payload_output" | jq -e '.blocks[0].text.text == "From base dir block"' >/dev/null
+
+	rm -rf "$base_dir"
+	trap - EXIT
+}
+
+@test "parse_payload:: block from_file mixed with inline blocks" {
+	local block_file
+	block_file="$BLOCK_FIXTURES_DIR/blocks-from-file.json"
+
+	local test_payload
+	test_payload=$(jq -n \
+		--arg file "$block_file" \
+		'{
+			source: { slack_bot_user_oauth_token: "test-token" },
+			params: {
+				channel: "test-channel",
+				blocks: [
+					{
+						section: {
+							type: "text",
+							text: { type: "plain_text", text: "Inline first" }
+						}
+					},
+					{ from_file: $file },
+					{
+						context: {
+							elements: [{ type: "plain_text", text: "Inline last" }]
+						}
+					}
+				]
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+
+	local payload_output
+	payload_output=$(parse_payload "$TEST_PAYLOAD_FILE")
+	echo "$payload_output" | jq -e '.blocks | length == 3' >/dev/null
+	echo "$payload_output" | jq -e '.blocks[0].text.text == "Inline first"' >/dev/null
+	echo "$payload_output" | jq -e '.blocks[1].text.text == "Blocks loaded from file"' >/dev/null
+	echo "$payload_output" | jq -e '.blocks[2].type == "context"' >/dev/null
+}
+
+@test "parse_payload:: block from_file with array expands to multiple blocks" {
+	local block_file
+	block_file="$BLOCK_FIXTURES_DIR/blocks-from-file-3.json"
+
+	mkdir -p "$GIT_ROOT/output"
+	echo "Example file for blocks-from-file-3" >"$GIT_ROOT/output/example.txt"
+	trap 'rm -rf "$GIT_ROOT/output"' EXIT
+	cd "$GIT_ROOT"
+
+	local test_payload
+	test_payload=$(jq -n \
+		--arg file "$block_file" \
+		'{
+			source: { slack_bot_user_oauth_token: "test-token" },
+			params: {
+				channel: "test-channel",
+				blocks: [{ from_file: $file }]
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+
+	local payload_output
+	payload_output=$(parse_payload "$TEST_PAYLOAD_FILE")
+	echo "$payload_output" | jq -e '.blocks[0].type == "header"' >/dev/null
+	echo "$payload_output" | jq -e '.blocks[0].text.text == "All Block Types from File"' >/dev/null
+
+	rm -rf "$GIT_ROOT/output"
 	trap - EXIT
 }
 
@@ -2167,7 +2402,7 @@ create_test_payload() {
 	}')
 
 	local params_file
-	params_file=$(mktemp parse-payload-tests.params.XXXXXX)
+	params_file=$(mktemp "/tmp/parse-payload-tests.params.XXXXXX")
 	echo "$file_params" >"$params_file"
 
 	local test_payload
@@ -2251,7 +2486,7 @@ create_test_payload() {
 	}')
 
 	local params_file
-	params_file=$(mktemp parse-payload-tests.params.XXXXXX)
+	params_file=$(mktemp "/tmp/parse-payload-tests.params.XXXXXX")
 	echo "$file_params" >"$params_file"
 
 	local test_payload

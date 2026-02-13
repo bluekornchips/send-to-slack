@@ -30,8 +30,11 @@ The server automatically creates a virtual environment and installs dependencies
 ## Environment Variables
 
 - `SLACK_BOT_USER_OAUTH_TOKEN` (required): Slack bot OAuth token
+- `SLACK_SIGNING_SECRET` (required): Signing secret for request verification
 - `PORT` (optional): Server port (default: 3000)
+- `BIND_HOST` (optional): Host to bind (default: 127.0.0.1)
 - `DEFAULT_ACTION_MESSAGE` (optional): Default message sent when buttons are clicked (default: `"Hello, world!"`)
+- `LOG_LEVEL` (optional): Logging level (default: INFO). Set to `DEBUG` to log incoming payload summaries, action context, and Slack API request/response details.
 
 ## Dependencies
 

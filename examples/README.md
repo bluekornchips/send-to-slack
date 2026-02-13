@@ -5,6 +5,7 @@ This directory contains complete configuration examples for all supported Slack 
 ## Available Examples
 
 - [acceptance.yaml](acceptance.yaml) - Acceptance test examples
+- [blocks-from-file.yaml](blocks-from-file.yaml) - Load individual blocks from JSON files
 - [actions.yaml](actions.yaml) - Interactive action blocks
 - [context.yaml](context.yaml) - Context block examples
 - [crosspost.yaml](crosspost.yaml) - Crossposting to multiple channels with full Block Kit support
@@ -218,3 +219,17 @@ Load payload configuration from an external file using `params.from_file`:
   }
 }
 ```
+
+### Blocks from File
+
+Load individual blocks from JSON files using block-level `from_file`. Each file must contain a single block object or array in keyed or native format. Path resolution uses the same rules as `params.from_file`:
+
+```yaml
+blocks:
+  - header:
+      text: { type: "plain_text", text: "Title" }
+  - from_file: blocks.json
+  - from_file: more-blocks.json
+```
+
+See [blocks-from-file.yaml](blocks-from-file.yaml) for a complete example. The referenced JSON files are in [tests/fixtures/](../tests/fixtures/); copy them to your payload base directory or ensure they exist where the pipeline runs. A file may contain a single block or an array of blocks.

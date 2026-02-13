@@ -294,6 +294,8 @@ get_message_permalink() {
 		return 1
 	fi
 
+	echo "get_message_permalink:: fetching permalink from Slack API (channel=${channel} ts=${message_ts})" >&2
+
 	local api_response
 	if ! api_response=$(curl -X POST "https://slack.com/api/chat.getPermalink" \
 		-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
@@ -352,9 +354,10 @@ crosspost_notification() {
 		return 0
 	fi
 
-	# Extract channel and normalize to array format. It accepts string or array, like params.channel.
+	# Extract channel(s) and normalize to array format.
+	# Supports both crosspost.channel and crosspost.channels for compatibility.
 	local channels_json
-	channels_json=$(jq '.params.crosspost.channel // null' "$input_payload")
+	channels_json=$(jq '.params.crosspost.channels // .params.crosspost.channel // null' "$input_payload")
 	if [[ "$channels_json" == "null" ]] || [[ -z "$channels_json" ]]; then
 		echo "crosspost_notification:: channel not set, skipping."
 		return 0
@@ -374,9 +377,9 @@ crosspost_notification() {
 	local no_link
 	no_link=$(jq -r '.params.crosspost.no_link // false' "$input_payload")
 
-	# Get all crosspost params except "channel" and "no_link". These become the message params.
+	# Get all crosspost params except channel selectors and no_link.
 	local crosspost_params
-	crosspost_params=$(jq '.params.crosspost | del(.channel, .no_link)' "$input_payload")
+	crosspost_params=$(jq '.params.crosspost | del(.channel, .channels, .no_link)' "$input_payload")
 
 	# Save the original permalink before the loop, as send_notification overwrites NOTIFICATION_PERMALINK
 	local original_permalink="$NOTIFICATION_PERMALINK"
@@ -424,6 +427,8 @@ crosspost_notification() {
 		fi
 		echo "$crosspost_payload" >"$temp_payload"
 
+		echo "crosspost_notification:: parsing crosspost payload for channel ${channel}" >&2
+
 		# Parse the payload using the same parser as regular messages
 		local parsed_payload
 		if ! parsed_payload=$(parse_payload "$temp_payload"); then
@@ -432,12 +437,19 @@ crosspost_notification() {
 			continue
 		fi
 
-		# Send the notification
+		echo "crosspost_notification:: sending notification to channel ${channel}" >&2
+
 		if ! send_notification "$parsed_payload"; then
 			echo "crosspost_notification:: failed to send notification to channel $channel" >&2
 			rm -f "${temp_payload}"
 			continue
 		fi
+
+		local block_count
+		block_count=$(echo "$parsed_payload" | jq '.blocks | length // 0')
+		echo "crosspost_notification:: sent to channel ${channel} (blocks=${block_count})" >&2
+		echo "crosspost_notification:: crosspost payload (sanitized):" >&2
+		echo "$parsed_payload" | jq '{channel, blocks: [.blocks[]? | {type: .type}]}' 2>/dev/null >&2
 
 		echo "crosspost_notification:: sent to channel ${channel}"
 		rm -f "${temp_payload}"
@@ -560,6 +572,8 @@ retry_with_backoff() {
 	local last_exit_code=1
 
 	while [[ $attempt -le $max_attempts ]]; do
+		echo "retry_with_backoff:: executing command (attempt ${attempt}/${max_attempts})" >&2
+
 		# Execute the command and capture exit code
 		local cmd_status=0
 		"$@" || cmd_status=$?
@@ -708,6 +722,8 @@ send_notification() {
 	local last_exit_code=0
 
 	while [[ $attempt -le $RETRY_MAX_ATTEMPTS ]]; do
+		echo "send_notification:: posting message to Slack API (attempt ${attempt}/${RETRY_MAX_ATTEMPTS})" >&2
+
 		# Make the API call
 		local curl_output
 		curl_output=$(curl -X POST "${SLACK_API_URL}" \
@@ -802,6 +818,18 @@ send_notification() {
 
 	echo "send_notification:: message delivered to Slack successfully"
 
+	if [[ "${LOG_VERBOSE:-}" == "true" ]]; then
+		local block_count
+		block_count=$(echo "$payload" | jq '.blocks | length // 0')
+		cat <<EOF >&2
+send_notification:: channel: ${channel}
+send_notification:: ts: ${message_ts}
+send_notification:: blocks: ${block_count}
+send_notification:: request payload (sanitized):
+$(echo "$payload" | jq 'del(.thread_ts) | .blocks |= (if type == "array" then [.[] | {type: .type}] else . end)' 2>/dev/null || echo "$payload" | jq . 2>/dev/null)
+EOF
+	fi
+
 	RESPONSE="$response"
 	export RESPONSE
 
@@ -877,6 +905,8 @@ process_input() {
 	fi
 
 	# Read from stdin or file and write to temp file
+	echo "process_input:: reading input into temp file ${input_payload}" >&2
+
 	if [[ "${use_stdin}" == "true" ]]; then
 		if ! cat >"${input_payload}"; then
 			echo "process_input:: failed to read from stdin" >&2
@@ -910,6 +940,10 @@ process_input() {
 			rm -f "${input_payload}"
 			return 1
 		fi
+	fi
+
+	if [[ "${use_stdin}" == "true" ]]; then
+		export SEND_TO_SLACK_INPUT_SOURCE="stdin"
 	fi
 
 	echo "${input_payload}"
@@ -1127,6 +1161,11 @@ main() {
 		SHOW_PAYLOAD="true"
 		export SHOW_METADATA
 		export SHOW_PAYLOAD
+		export LOG_VERBOSE="true"
+	fi
+
+	if [[ -n "${SEND_TO_SLACK_INPUT_SOURCE:-}" ]]; then
+		echo "main:: input source: ${SEND_TO_SLACK_INPUT_SOURCE}" >&2
 	fi
 
 	echo "main:: parsing payload"

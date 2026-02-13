@@ -36,7 +36,6 @@ setup_file() {
 }
 
 setup() {
-
 	source "$GIT_ROOT/lib/parse-payload.sh"
 	source "$SEND_TO_SLACK_SCRIPT"
 }
@@ -973,5 +972,89 @@ smoke_test_setup() {
 	echo "$payload_output" | jq -e '.blocks[0].text.text == "Smoke test for params.from_file"' >/dev/null
 
 	rm -f "$payload_file"
+	trap - EXIT
+}
+
+@test "smoke test, blocks from_file" {
+	local block_file
+	block_file="$GIT_ROOT/tests/fixtures/blocks-from-file.json"
+
+	local blocks_json
+	blocks_json=$(jq -n --arg file "$block_file" '[{ from_file: $file }]')
+
+	smoke_test_setup "$blocks_json"
+
+	local payload_output
+	if ! payload_output=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+		echo "parse_payload failed" >&2
+		return 1
+	fi
+
+	if [[ -z "$payload_output" ]]; then
+		echo "payload output is empty" >&2
+		return 1
+	fi
+
+	echo "$payload_output" | jq -e --arg channel "$CHANNEL" '.channel == $channel' >/dev/null
+	echo "$payload_output" | jq -e '.blocks[0].type == "section"' >/dev/null
+	echo "$payload_output" | jq -e '.blocks[0].text.type == "plain_text"' >/dev/null
+	echo "$payload_output" | jq -e '.blocks[0].text.text == "Blocks loaded from file"' >/dev/null
+}
+
+@test "smoke test, blocks from_file 2" {
+	local block_file
+	block_file="$GIT_ROOT/tests/fixtures/blocks-from-file-2.json"
+
+	local blocks_json
+	blocks_json=$(jq -n --arg file "$block_file" '[{ from_file: $file }]')
+
+	smoke_test_setup "$blocks_json"
+
+	local payload_output
+	if ! payload_output=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+		echo "parse_payload failed" >&2
+		return 1
+	fi
+
+	if [[ -z "$payload_output" ]]; then
+		echo "payload output is empty" >&2
+		return 1
+	fi
+
+	echo "$payload_output" | jq -e --arg channel "$CHANNEL" '.channel == $channel' >/dev/null
+	echo "$payload_output" | jq -e '.blocks[0].type == "context"' >/dev/null
+	echo "$payload_output" | jq -e '.blocks[0].elements[0].text == "Additional block from second file"' >/dev/null
+}
+
+@test "smoke test, blocks from_file 3" {
+	local block_file
+	block_file="$GIT_ROOT/tests/fixtures/blocks-from-file-3.json"
+	mkdir -p output
+	echo "Example file for blocks-from-file-3" >output/example.txt
+	trap 'rm -rf output' EXIT
+
+	local blocks_json
+	blocks_json=$(jq -n --arg file "$block_file" '[{ from_file: $file }]')
+
+	smoke_test_setup "$blocks_json"
+
+	local payload_output
+	if ! payload_output=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+		echo "parse_payload failed" >&2
+		rm -rf output
+		return 1
+	fi
+
+	if [[ -z "$payload_output" ]]; then
+		echo "payload output is empty" >&2
+		rm -rf output
+		return 1
+	fi
+
+	echo "$payload_output" | jq -e --arg channel "$CHANNEL" '.channel == $channel' >/dev/null
+	echo "$payload_output" | jq -e '.blocks[0].type == "header"' >/dev/null
+	echo "$payload_output" | jq -e '.blocks[0].text.text == "All Block Types from File"' >/dev/null
+
+	rm -rf output
 	trap - EXIT
 }

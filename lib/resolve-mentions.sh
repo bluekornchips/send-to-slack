@@ -44,13 +44,18 @@ resolve_user_id() {
 
 	# If user already looks like a valid ID, return it
 	if [[ "$user_name" =~ ^U[A-Z0-9]{8,}$ ]]; then
+		echo "resolve_user_id:: already valid ID: ${user_name}" >&2
 		echo "${user_name}"
 		return 0
 	fi
 
+	echo "resolve_user_id:: resolving @${user_name}" >&2
+
 	# Look up user by name via users.list API with pagination
 	local cursor=""
 	while true; do
+		echo "resolve_user_id:: fetching users.list page (cursor=${cursor:-initial})" >&2
+
 		local api_response
 		if ! api_response=$(curl -s -X GET \
 			-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
@@ -87,6 +92,7 @@ resolve_user_id() {
 			'.members[] | select(.name == $name) | .id' <<<"$api_response" | sed -n '1p')
 
 		if [[ -n "$found_id" ]]; then
+			echo "resolve_user_id:: found ${found_id} for @${user_name}" >&2
 			echo "${found_id}"
 			return 0
 		fi
@@ -135,13 +141,18 @@ resolve_channel_id() {
 	# Supports: C (public), G (private/groups), D (direct), Z (shared)
 	# Ref: https://docs.slack.dev/reference/conversations-api#channel_id
 	if [[ "$channel_name" =~ ^[CGDZ][A-Z0-9]{8,}$ ]]; then
+		echo "resolve_channel_id:: already valid ID: ${channel_name}" >&2
 		echo "${channel_name}"
 		return 0
 	fi
 
+	echo "resolve_channel_id:: resolving #${channel_name}" >&2
+
 	# Look up channel/group by name via conversations.list API
 	local cursor=""
 	while true; do
+		echo "resolve_channel_id:: fetching conversations.list page (cursor=${cursor:-initial})" >&2
+
 		local api_response
 		if ! api_response=$(curl -s -X GET \
 			-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
@@ -178,6 +189,7 @@ resolve_channel_id() {
 			'.channels[] | select(.name == $name) | .id' <<<"$api_response" | sed -n '1p')
 
 		if [[ -n "$found_id" ]]; then
+			echo "resolve_channel_id:: found ${found_id} for #${channel_name}" >&2
 			echo "${found_id}"
 			return 0
 		fi
@@ -220,9 +232,12 @@ resolve_dm_id() {
 
 	# If already a valid DM ID, return it as-is
 	if [[ "$dm_ref" =~ ^D[A-Z0-9]{8,}$ ]]; then
+		echo "resolve_dm_id:: already valid DM ID: ${dm_ref}" >&2
 		echo "$dm_ref"
 		return 0
 	fi
+
+	echo "resolve_dm_id:: resolving DM for ${dm_ref}" >&2
 
 	# Resolve user name/mention to user ID first
 	local user_id
@@ -230,6 +245,8 @@ resolve_dm_id() {
 		echo "resolve_dm_id:: could not resolve user: $dm_ref" >&2
 		return 1
 	fi
+
+	echo "resolve_dm_id:: opening DM conversation via API (user_id=${user_id})" >&2
 
 	# Open or get DM with the resolved user
 	local api_response
@@ -271,6 +288,8 @@ resolve_dm_id() {
 		echo "resolve_dm_id:: could not extract DM channel ID from response" >&2
 		return 1
 	fi
+
+	echo "resolve_dm_id:: found ${dm_id} for ${dm_ref}" >&2
 
 	echo "$dm_id"
 	return 0

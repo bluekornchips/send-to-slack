@@ -187,6 +187,8 @@ create_block() {
 	local resolved_script_path
 	resolved_script_path=$(_resolve_block_script_path "$script_path")
 
+	echo "create_block:: invoking block script: ${block_type} (${resolved_script_path})" >&2
+
 	local script_exit_code=0
 	block=$("$resolved_script_path" <<<"$block_input") || script_exit_code=$?
 
@@ -243,6 +245,10 @@ create_block() {
 
 	# Interpolate environment variables using $VAR syntax
 	block=$(printf '%s' "$block" | envsubst | jq .)
+
+	local output_type
+	output_type=$(echo "$block" | jq -r 'if type == "array" then "array(\(length))" else .type // "unknown" end')
+	echo "create_block:: resolved ${block_type} -> ${output_type}" >&2
 
 	# Validate JSON after interpolation
 	if ! echo "$block" | jq . >/dev/null 2>&1; then
@@ -447,6 +453,36 @@ _resolve_from_file_path() {
 	return 1
 }
 
+# Load a single block from a file for block-level from_file
+#
+# Arguments:
+#   $1 - raw_path: Value from block from_file (may be relative or absolute)
+#
+# Outputs:
+#   Writes block JSON to stdout on success
+#   Writes error messages to stderr on failure
+#
+# Returns:
+#   0 if path resolves and file contains valid JSON
+#   1 if path is invalid, file not found, or file contains invalid JSON
+_load_block_item_from_file() {
+	local raw_path="$1"
+	local source_file_path
+	local block_json
+
+	source_file_path=$(_resolve_from_file_path "$raw_path") || return 1
+
+	if ! jq . "$source_file_path" >/dev/null 2>&1; then
+		echo "parse_payload:: block file contains invalid JSON: $source_file_path" >&2
+		return 1
+	fi
+
+	block_json=$(jq '.' "$source_file_path")
+	echo "$block_json"
+
+	return 0
+}
+
 # Load input payload params conditionally, raw params or from_file
 #
 # Uses global variable: INPUT_PAYLOAD, modified in place
@@ -461,7 +497,7 @@ load_input_payload_params() {
 	local raw_params
 	raw_params=$(jq -r '.params.raw // empty' "$INPUT_PAYLOAD")
 	if [[ -n "$raw_params" ]]; then
-		echo "parse_payload:: using raw payload" >&2
+		echo "load_input_payload_params:: loading params from params.raw" >&2
 		if ! echo "$raw_params" | jq . >/dev/null 2>&1; then
 			echo "parse_payload:: raw payload is not valid JSON" >&2
 			return 1
@@ -474,13 +510,16 @@ load_input_payload_params() {
 		local updated_payload
 		updated_payload=$(jq --argjson parsed_params "$parsed_params" '.params = $parsed_params' "$INPUT_PAYLOAD")
 		echo "$updated_payload" >"$INPUT_PAYLOAD"
+		local param_keys
+		param_keys=$(echo "$parsed_params" | jq -r 'keys | join(", ")')
+		echo "load_input_payload_params:: loaded from params.raw, keys: ${param_keys}" >&2
 	fi
 
 	local source_file_path
 	if jq -e '.params.from_file' "$INPUT_PAYLOAD" >/dev/null 2>&1; then
 		source_file_path=$(jq -r '.params.from_file' "$INPUT_PAYLOAD")
 		source_file_path=$(_resolve_from_file_path "$source_file_path") || return 1
-		echo "parse_payload:: using payload from file: $source_file_path" >&2
+		echo "load_input_payload_params:: loading params from file: ${source_file_path}" >&2
 
 		if ! jq . "$source_file_path" >/dev/null 2>&1; then
 			echo "parse_payload:: payload file contains invalid JSON: $source_file_path" >&2
@@ -493,6 +532,9 @@ load_input_payload_params() {
 		local updated_payload
 		updated_payload=$(jq --argjson file_params "$file_params" '.params = $file_params' "$INPUT_PAYLOAD")
 		echo "$updated_payload" >"$INPUT_PAYLOAD"
+		local param_keys
+		param_keys=$(jq -r '.params | keys | join(", ")' "$INPUT_PAYLOAD")
+		echo "load_input_payload_params:: loaded from params.from_file: ${source_file_path}, keys: ${param_keys}" >&2
 	fi
 
 	return 0
@@ -576,6 +618,11 @@ load_configuration() {
 	export SLACK_BOT_USER_OAUTH_TOKEN
 	export CHANNEL
 
+	local token_preview
+	token_preview="set"
+	[[ -z "${SLACK_BOT_USER_OAUTH_TOKEN:-}" ]] && token_preview="empty"
+	echo "load_configuration:: channel=${CHANNEL} dry_run=${DRY_RUN} token=${token_preview}" >&2
+
 	return 0
 }
 
@@ -599,67 +646,41 @@ process_blocks() {
 
 	local blocks="[]"
 	local attachments="[]"
+	local block_index=0
 
 	# Process each block in the blocks array
 	while read -r block_item; do
-		local block_type
-		local block_value
-		local block_color
-
-		# Check if block uses the "type" field format (Slack API format)
-		# or the key-based format (intuitive YAML format)
-		if jq -e '.type' <<<"$block_item" >/dev/null 2>&1; then
-			# Format: {"type": "rich-text", ...contents...}
-			block_type=$(jq -r '.type' <<<"$block_item")
-			block_value=$(jq 'del(.type, .color)' <<<"$block_item")
-			block_color=$(jq -r '.color // empty' <<<"$block_item")
-
-			# Section blocks require a content type ("text" or "fields") which is different from the block type
-			if [[ "$block_type" == "section" ]]; then
-				if ! jq -e '.type' <<<"$block_value" >/dev/null 2>&1; then
-					if jq -e '.text' <<<"$block_value" >/dev/null 2>&1; then
-						block_value=$(jq '. + {type: "text"}' <<<"$block_value")
-					elif jq -e '.fields' <<<"$block_value" >/dev/null 2>&1; then
-						block_value=$(jq '. + {type: "fields"}' <<<"$block_value")
-					fi
-				fi
+		# Expand block-level from_file before type/value extraction
+		if jq -e '.from_file or (.type == "from_file")' <<<"$block_item" >/dev/null 2>&1; then
+			local block_from_file_path
+			block_from_file_path=$(jq -r '.path // .from_file // empty' <<<"$block_item")
+			if [[ -z "$block_from_file_path" ]]; then
+				echo "parse_payload:: block from_file path is empty" >&2
+				return 1
 			fi
-		else
-			# Format: {"rich-text": {...contents...}}
-			# Convert to key-value format for processing
-			local block_entry
-			block_entry=$(jq -c 'to_entries[0]' <<<"$block_item")
-			block_type=$(jq -r '.key' <<<"$block_entry")
-			block_value=$(jq '.value | del(.color)' <<<"$block_entry")
-			block_color=$(jq -r '.value.color // empty' <<<"$block_entry")
-		fi
-
-		local block
-		if ! block=$(create_block "$block_value" "$block_type"); then
-			echo "parse_payload:: failed to create block type '$block_type': $block_item" >&2
-			return 1
-		fi
-
-		# Normalize and wrap colored blocks in attachments
-		if [[ -n "$block_color" ]] || [[ "$block_type" == "table" ]]; then
-			# Normalize color value if needed
-			if [[ -n "$block_color" ]] && [[ ! "$block_color" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
-				case "$block_color" in
-				"danger") block_color="$DANGER_COLOR" ;;
-				"success") block_color="$SUCCESS_COLOR" ;;
-				"warning") block_color="$WARN_COLOR" ;;
-				*) block_color="$DANGER_COLOR" ;;
-				esac
+			local loaded_content
+			loaded_content=$(_load_block_item_from_file "$block_from_file_path") || return 1
+			echo "process_blocks:: expanded block from file: ${block_from_file_path}" >&2
+			if echo "$loaded_content" | jq -e 'type == "array"' >/dev/null 2>&1; then
+				while read -r block_item; do
+					_process_blocks_append_block "$block_item" || return 1
+				done < <(echo "$loaded_content" | jq -c '.[]')
+				continue
 			fi
-			attachments=$(jq \
-				--argjson block "$block" \
-				--arg color "${block_color:-}" \
-				'. += [{ color: $color, blocks: [$block]}]' <<<"$attachments")
-		else
-			blocks=$(jq --argjson block "$block" '. += [$block]' <<<"$blocks")
+			block_item="$loaded_content"
 		fi
 
+		_process_blocks_append_block "$block_item" || return 1
 	done < <(jq -r -c '.[]' <<<"$blocks_json")
+
+	local block_count_debug
+	local attachment_count_debug
+	block_count_debug=$(jq '. | length' <<<"$blocks")
+	attachment_count_debug=0
+	if [[ "$attachments" != "[]" ]]; then
+		attachment_count_debug=$(jq '. | length' <<<"$attachments")
+	fi
+	echo "process_blocks:: completed: ${block_count_debug} blocks, ${attachment_count_debug} attachments" >&2
 
 	# Validate block count against Slack's limit of 50 blocks per message
 	# Ref: https://docs.slack.dev/reference/block-kit/blocks
@@ -754,6 +775,95 @@ process_blocks() {
 	fi
 
 	echo "$payload"
+
+	return 0
+}
+
+# Helper used by process_blocks to process a single block_item and append to blocks/attachments
+#
+# Inputs:
+#   block_item - JSON object for one block in type-field or key-based format
+#
+# Side Effects:
+#   Updates blocks, attachments, block_index in caller scope
+#   Writes to stderr on failure
+#
+# Returns:
+#   0 on success
+#   1 if create_block fails
+_process_blocks_append_block() {
+	local block_item="$1"
+
+	if [[ -z "$block_item" ]]; then
+		echo "_process_blocks_append_block:: block_item is required" >&2
+		return 1
+	fi
+
+	if ! jq . >/dev/null 2>&1 <<<"$block_item"; then
+		echo "_process_blocks_append_block:: block_item must be valid JSON" >&2
+		return 1
+	fi
+
+	local block_type
+	local block_value
+	local block_color
+	local block
+	local dest
+
+	# Check if block uses the "type" field format (Slack API format)
+	# or the key-based format
+	if jq -e '.type' <<<"$block_item" >/dev/null 2>&1; then
+		block_type=$(jq -r '.type' <<<"$block_item")
+		block_value=$(jq 'del(.type, .color)' <<<"$block_item")
+		block_color=$(jq -r '.color // empty' <<<"$block_item")
+
+		if [[ "$block_type" == "section" ]]; then
+			if ! jq -e '.type' <<<"$block_value" >/dev/null 2>&1; then
+				if jq -e '.text' <<<"$block_value" >/dev/null 2>&1; then
+					block_value=$(jq '. + {type: "text"}' <<<"$block_value")
+				elif jq -e '.fields' <<<"$block_value" >/dev/null 2>&1; then
+					block_value=$(jq '. + {type: "fields"}' <<<"$block_value")
+				fi
+			fi
+		fi
+	else
+		local block_entry
+		block_entry=$(jq -c 'to_entries[0]' <<<"$block_item")
+		block_type=$(jq -r '.key' <<<"$block_entry")
+		block_value=$(jq '.value | del(.color)' <<<"$block_entry")
+		block_color=$(jq -r '.value.color // empty' <<<"$block_entry")
+	fi
+
+	if ! block=$(create_block "$block_value" "$block_type"); then
+		echo "_process_blocks_append_block:: failed to create block type '$block_type': $block_item" >&2
+		return 1
+	fi
+
+	if [[ -n "$block_color" ]] || [[ "$block_type" == "table" ]]; then
+		dest="attachments"
+	else
+		dest="blocks"
+	fi
+	echo "_process_blocks_append_block:: block ${block_index}: type=${block_type} dest=${dest}" >&2
+
+	if [[ -n "$block_color" ]] || [[ "$block_type" == "table" ]]; then
+		if [[ -n "$block_color" ]] && [[ ! "$block_color" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
+			case "$block_color" in
+			"danger") block_color="$DANGER_COLOR" ;;
+			"success") block_color="$SUCCESS_COLOR" ;;
+			"warning") block_color="$WARN_COLOR" ;;
+			*) block_color="$DANGER_COLOR" ;;
+			esac
+		fi
+		attachments=$(jq \
+			--argjson block "$block" \
+			--arg color "${block_color:-}" \
+			'. += [{ color: $color, blocks: [$block]}]' <<<"$attachments")
+	else
+		blocks=$(jq --argjson block "$block" '. += [$block]' <<<"$blocks")
+	fi
+
+	block_index=$((block_index + 1))
 
 	return 0
 }

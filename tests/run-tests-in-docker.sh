@@ -138,28 +138,46 @@ run_tests() {
 	fi
 
 	# Create isolated workspace copy to prevent container git ops from affecting host repo
-	temp_workspace="$(mktemp -d)"
+	# Use project-relative temp directory instead of /tmp for better Docker compatibility
+	temp_workspace="$(mktemp -d "${GIT_ROOT}/.test-workspace.XXXXXX")"
 	trap 'rm -rf "$temp_workspace"' EXIT
 
 	echo "Creating isolated workspace copy at ${temp_workspace}"
 	# Copy workspace excluding .git directory to isolate from host repository
-	rsync -a --exclude='.git' "${GIT_ROOT}/" "${temp_workspace}/"
+	if ! rsync -a --exclude='.git' "${GIT_ROOT}/" "${temp_workspace}/"; then
+		echo "run_tests:: failed to copy workspace files" >&2
+		return 1
+	fi
 
-	workspace_dir="${temp_workspace}"
+	# Verify files were copied
+	if [[ ! -f "${temp_workspace}/Makefile" ]] || [[ ! -d "${temp_workspace}/tests" ]]; then
+		echo "run_tests:: workspace copy verification failed - files not found" >&2
+		return 1
+	fi
+
+	# Ensure filesystem is synced before Docker mount
+	sync
+
+	# Resolve to absolute path for Docker mount (required for some Docker configurations)
+	if ! workspace_dir="$(cd "${temp_workspace}" && pwd)"; then
+		echo "run_tests:: failed to resolve absolute path for ${temp_workspace}" >&2
+		return 1
+	fi
+
 	docker_cmd="$(
 		cat <<EOF
 cd /workspace && git init -q && git config user.email 'test@test.com' && git config user.name 'Test' && git add -A && git commit -q -m 'test' && ${MAKE_COMMAND}
 EOF
 	)"
 
-	echo "docker_cmd: $docker_cmd"
+	# Use --mount instead of -v for better error reporting and compatibility
 	docker_flags=(
 		--rm
 		-i
 		--platform=linux/amd64
 		-e CHANNEL
 		-e SLACK_BOT_USER_OAUTH_TOKEN
-		-v "${workspace_dir}:/workspace"
+		--mount "type=bind,source=${workspace_dir},target=/workspace,readonly=false"
 		-w /workspace
 		--entrypoint /bin/bash
 	)

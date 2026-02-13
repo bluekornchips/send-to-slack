@@ -225,6 +225,7 @@ Enable debug mode by setting `params.debug: true` in your payload. When enabled,
 
 - Sanitized Payload Logging: Logs the input payload to stderr with sensitive authentication tokens redacted as `[REDACTED]`. This allows you to inspect the payload structure without exposing credentials.
 - Automatic Metadata Override: Forces `SHOW_METADATA` and `SHOW_PAYLOAD` to `true`, ensuring full metadata output regardless of environment variable settings.
+- Extended Debug Output: When enabled, also logs input source, block processing flow (type and destination per block), payload loading source (raw or from_file), configuration (channel, dry_run), send/crosspost request summaries, file upload steps, and mention resolution (user/channel/DM lookups).
 
 ### Usage
 
@@ -339,6 +340,7 @@ See [Slack API Scopes](https://api.slack.com/scopes) for complete documentation.
 - `params.debug` - Set to `true` to enable debug mode (default: `false`). When enabled:
   - Logs sanitized input payload (with auth tokens redacted) to stderr for debugging
   - Overrides `SHOW_METADATA` and `SHOW_PAYLOAD` to `true` regardless of environment variable settings
+  - Logs input source, block processing flow, payload loading, configuration, send/crosspost summaries, file upload steps, and mention resolution
 - `params.text` - Fallback text for notifications (max 40,000 characters)
 - `params.dry_run` - Set to `true` to validate without sending (default: `false`)
 - `params.thread_ts` - Thread timestamp or Slack message permalink (see Threading)
@@ -367,6 +369,12 @@ Blocks can be provided in either format:
     "text": { "type": "plain_text", "text": "Hello" }
   }
 }
+```
+
+- Block-level `from_file`: Load one or more blocks from a JSON file. The file may contain a single block object or an array of blocks. Path resolution matches `params.from_file` (relative paths use `SEND_TO_SLACK_PAYLOAD_BASE_DIR` then `PWD`):
+
+```json
+{ "from_file": "blocks.json" }
 ```
 
 Named colors on a block (`danger`, `success`, `warning`) or a `table` block are wrapped in legacy attachments automatically.
@@ -443,6 +451,7 @@ Add a `crosspost` object to your `params` section:
 ### Crosspost Parameters
 
 - `crosspost.channel` - Channel name or ID; accepts a string or array
+- `crosspost.channels` - Alias for `crosspost.channel`; also accepts a string or array
 - `crosspost.blocks` - Block Kit blocks to send, same format as `params.blocks`
 - `crosspost.text` - Optional fallback text for notifications
 - `crosspost.no_link` - Set to `true` to disable automatic permalink appending
@@ -457,7 +466,7 @@ The `$NOTIFICATION_PERMALINK` environment variable is available for use in cross
 
 1. The initial notification is sent to the channel specified in `params.channel`
 2. After successful delivery, the permalink to the original message is stored in `$NOTIFICATION_PERMALINK`
-3. For each channel in `crosspost.channel`, a new message is created using the crosspost params
+3. For each channel in `crosspost.channel` or `crosspost.channels`, a new message is created using the crosspost params
 4. Unless `no_link: true`, a context block with a link to the original message is appended
 5. If a crosspost fails for a specific channel, the error is logged but processing continues for remaining channels
 

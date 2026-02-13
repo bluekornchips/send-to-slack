@@ -13,6 +13,9 @@ build
 
 # Test artifacts
 .bats/
+.test-workspace.*
+parse-payload-tests.*
+send-to-slack-tests.*
 
 # IDE and editor files
 .vscode/

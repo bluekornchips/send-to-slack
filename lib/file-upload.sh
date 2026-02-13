@@ -50,6 +50,8 @@ get_file_permissions() {
 # - Sets FILE_ID and UPLOAD_URL environment variables
 #
 _get_upload_url() {
+	echo "_get_upload_url:: requesting upload URL from Slack API (filename=${FILENAME} size=${FILE_SIZE})" >&2
+
 	local api_response
 	if ! api_response=$(curl -s -X POST \
 		-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
@@ -121,6 +123,8 @@ EOF
 # Ref: https://docs.slack.dev/messaging/working-with-files/#upload-step-2
 #
 _post_file_contents() {
+	echo "_post_file_contents:: uploading file contents to Slack (path=${FILE_PATH} size=${FILE_SIZE})" >&2
+
 	local http_response
 	if ! http_response=$(curl -s -w "\n%{http_code}" \
 		-H "Content-Type: application/octet-stream" \
@@ -180,6 +184,8 @@ EOF
 # - Outputs file metadata JSON on success
 #
 _complete_upload() {
+	echo "_complete_upload:: finalizing upload via files.completeUploadExternal" >&2
+
 	local api_response
 	if ! api_response=$(curl -s -X POST \
 		-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
@@ -256,7 +262,6 @@ EOF
 		_complete_upload::   permalink: $permalink
 	EOF
 
-	# Print file permissions after upload for debugging
 	if [[ -n "$FILE_PATH" && -f "$FILE_PATH" ]]; then
 		local file_perms_after
 		local file_readable
@@ -432,7 +437,6 @@ validate_file_path() {
 		return 1
 	fi
 
-	# Print file permissions for debugging
 	local file_perms
 	file_perms=$(get_file_permissions "$FILE_PATH")
 	echo "file_upload:: file permissions: $file_perms" >&2
@@ -471,6 +475,7 @@ extract_file_metadata() {
 	local output_var
 	output_var=$(jq -r '.interpolate_file_contents_to_var // empty' <<<"$file_config")
 	if [[ -n "$output_var" ]]; then
+		echo "extract_file_metadata:: reading file contents for variable interpolation (path=${FILE_PATH})" >&2
 		local file_contents
 		file_contents=$(cat "$FILE_PATH")
 		export "$output_var"="$file_contents"
@@ -545,11 +550,11 @@ file_upload() {
 		return 1
 	fi
 
-	cat >&2 <<-EOF
-		file_upload:: file validated: $FILE_PATH
-		file_upload:: file size: $FILE_SIZE bytes
-		file_upload:: filename: $FILENAME
-	EOF
+	echo "file_upload:: starting upload (path=${FILE_PATH} size=${FILE_SIZE} bytes)" >&2
+
+	if [[ "${LOG_VERBOSE:-}" == "true" ]]; then
+		echo "file_upload:: filename: ${FILENAME}" >&2
+	fi
 
 	local title
 	if ! title=$(extract_file_metadata "$file_config"); then
@@ -602,24 +607,17 @@ file_upload() {
 		return 1
 	fi
 
-	echo "file_upload:: file metadata received:" >&2
-	echo "$file_metadata" | jq . >&2
-
-	# Create rich_text block with file link
 	local rich_text_block
 	local permalink
-
-	permalink=$(jq -r '.permalink // empty' <<<"$file_metadata")
-	local file_id_from_metadata file_size_from_metadata
+	local file_id_from_metadata
+	local file_size_from_metadata
 	file_id_from_metadata=$(jq -r '.id // "unknown"' <<<"$file_metadata")
 	file_size_from_metadata=$(jq -r '.size // "unknown"' <<<"$file_metadata")
+	permalink=$(jq -r '.permalink // empty' <<<"$file_metadata")
 
-	cat >&2 <<-EOF
-		file_upload:: final file metadata:
-		file_upload::   file_id: $file_id_from_metadata
-		file_upload::   file_size: $file_size_from_metadata bytes
-		file_upload::   permalink: $permalink
-	EOF
+	echo "file_upload:: upload complete, file_id: $file_id_from_metadata permalink: $permalink" >&2
+	echo "file_upload:: file metadata:" >&2
+	echo "$file_metadata" | jq . >&2
 
 	if [[ -z "$permalink" || "$permalink" == "null" || "$permalink" == "empty" ]]; then
 		echo "file_upload:: failed to get permalink from uploaded file: $FILE_PATH (file_id: $file_id_from_metadata)" >&2

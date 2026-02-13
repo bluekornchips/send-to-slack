@@ -1,0 +1,7 @@
+{
+  "context": {
+    "elements": [
+      { "type": "plain_text", "text": "Additional block from second file" }
+    ]
+  }
+}

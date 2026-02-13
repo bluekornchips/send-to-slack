@@ -1,0 +1,96 @@
+[
+  {
+    "header": {
+      "text": { "type": "plain_text", "text": "All Block Types from File" },
+      "block_id": "all_types_header"
+    }
+  },
+  {
+    "section": {
+      "type": "text",
+      "text": { "type": "plain_text", "text": "Section block with plain text" }
+    }
+  },
+  {
+    "section": {
+      "type": "fields",
+      "fields": [
+        { "type": "plain_text", "text": "Field 1" },
+        { "type": "mrkdwn", "text": "*Field 2*" }
+      ]
+    }
+  },
+  { "divider": { "block_id": "sep1" } },
+  {
+    "rich-text": {
+      "elements": [
+        {
+          "type": "rich_text_section",
+          "elements": [
+            { "type": "text", "text": "Rich text ", "style": { "bold": true } },
+            { "type": "text", "text": "block" }
+          ]
+        }
+      ]
+    }
+  },
+  { "markdown": { "text": "**Markdown** block with *formatting* and `code`" } },
+  {
+    "context": {
+      "elements": [{ "type": "plain_text", "text": "Context block" }]
+    }
+  },
+  {
+    "table": {
+      "color": "success",
+      "rows": [
+        [
+          { "type": "raw_text", "text": "Column 1" },
+          { "type": "raw_text", "text": "Column 2" }
+        ],
+        [
+          { "type": "raw_text", "text": "Value A" },
+          { "type": "raw_text", "text": "Value B" }
+        ]
+      ]
+    }
+  },
+  {
+    "actions": {
+      "elements": [
+        {
+          "type": "button",
+          "text": { "type": "plain_text", "text": "Action" },
+          "action_id": "example_action"
+        }
+      ]
+    }
+  },
+  {
+    "image": {
+      "image_url": "https://sunflowersoftware.ca/wp-content/uploads/2023/05/cropped-sunflower.gif",
+      "alt_text": "Example image",
+      "title": { "type": "plain_text", "text": "Image Block" }
+    }
+  },
+  {
+    "video": {
+      "video_url": "https://www.youtube.com/embed/pWTSK5waNs8",
+      "thumbnail_url": "https://i.ytimg.com/vi/pWTSK5waNs8/hqdefault.jpg",
+      "alt_text": "Example video",
+      "title": { "type": "plain_text", "text": "Video Block" }
+    }
+  },
+  { "file": { "path": "output/example.txt", "title": "File Block Example" } },
+  { "divider": {} },
+  {
+    "context": {
+      "elements": [
+        {
+          "type": "plain_text",
+          "text": "All 11 block types loaded from blocks-from-file-3.json"
+        }
+      ]
+    }
+  }
+]

@@ -12,7 +12,8 @@ from typing import Any, Dict, Optional
 import requests
 from flask import Flask, Response, Request, request
 
-logging.basicConfig(level=logging.INFO)
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
+logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO))
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
@@ -28,20 +29,27 @@ def send_slack_message(channel_id: str, text: str) -> None:
     """Send a simple text message to a Slack channel or user."""
     if not channel_id or not text or not SLACK_BOT_TOKEN:
         raise ValueError('Missing required parameters')
-    
+
+    payload = {'channel': channel_id, 'text': text}
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug('Slack API request: channel=%s text_len=%d', channel_id, len(text))
+
     response = requests.post(
         'https://slack.com/api/chat.postMessage',
         headers={
             'Authorization': f'Bearer {SLACK_BOT_TOKEN}',
             'Content-Type': 'application/json',
         },
-        json={'channel': channel_id, 'text': text},
+        json=payload,
         timeout=30,
     )
-    
+
     response.raise_for_status()
     data = response.json()
-    
+
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug('Slack API response: ok=%s ts=%s', data.get('ok'), data.get('ts'))
+
     if not data.get('ok'):
         raise RuntimeError(f'Slack API error: {data.get("error")}')
 
@@ -102,19 +110,32 @@ def require_valid_slack_signature() -> Optional[Response]:
     return None
 
 
+def _payload_debug_summary(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract non-sensitive fields for debug logging."""
+    return {
+        'action_id': (payload.get('actions') or [{}])[0].get('action_id'),
+        'user_id': payload.get('user', {}).get('id'),
+        'channel_id': payload.get('channel', {}).get('id'),
+        'trigger_id': payload.get('trigger_id', '')[:20] + '...' if payload.get('trigger_id') else None,
+    }
+
+
 @app.route('/slack/actions', methods=['POST'])
 def handle_actions():
     try:
         payload = parse_payload()
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug('Incoming payload summary: %s', _payload_debug_summary(payload))
+
         actions = payload.get('actions', [])
         action_id = actions[0].get('action_id') if actions else None
-        
+
         if not action_id:
             return Response('Missing action_id', status=400)
-        
+
         user_id = payload.get('user', {}).get('id')
         channel_id = payload.get('channel', {}).get('id')
-        
+
         if action_id == 'send_channel_message':
             send_slack_message(channel_id, DEFAULT_MESSAGE)
         elif action_id == 'send_user_message':

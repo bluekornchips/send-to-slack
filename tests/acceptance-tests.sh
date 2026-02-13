@@ -229,7 +229,7 @@ teardown() {
 	echo "$output" | grep -q "version"
 	echo "$output" | grep -q "timestamp"
 	echo "$output" | grep -q "main:: parsing payload"
-	echo "$output" | grep -q "using raw payload"
+	echo "$output" | grep -q "load_input_payload_params:: loading params from params.raw"
 	echo "$output" | grep -q "main:: creating Concourse metadata"
 	echo "$output" | grep -q "main:: sending notification"
 	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
@@ -308,12 +308,83 @@ teardown() {
 	echo "$output" | grep -q "version"
 	echo "$output" | grep -q "timestamp"
 	echo "$output" | grep -q "main:: parsing payload"
-	echo "$output" | grep -q "using payload from file"
+	echo "$output" | grep -q "load_input_payload_params:: loading params from file"
 	echo "$output" | grep -q "main:: creating Concourse metadata"
 	echo "$output" | grep -q "main:: sending notification"
 	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
 
 	[[ -f "$ACCEPTANCE_PAYLOAD_FILE" ]] && rm -f "$ACCEPTANCE_PAYLOAD_FILE"
+}
+
+@test "acceptance:: blocks from_file" {
+	if [[ "$ACCEPTANCE_TEST" != "true" ]]; then
+		skip "ACCEPTANCE_TEST is not set"
+	fi
+
+	if [[ -z "$REAL_TOKEN" ]]; then
+		skip "REAL_TOKEN is required for acceptance tests"
+	fi
+
+	local token="$REAL_TOKEN"
+	DRY_RUN="false"
+
+	local block_file_1 block_file_2 block_file_3
+	block_file_1="$GIT_ROOT/tests/fixtures/blocks-from-file.json"
+	block_file_2="$GIT_ROOT/tests/fixtures/blocks-from-file-2.json"
+	block_file_3="$GIT_ROOT/tests/fixtures/blocks-from-file-3.json"
+
+	mkdir -p output
+	echo "Example file for blocks-from-file-3" >output/example.txt
+	trap 'rm -rf output' EXIT
+
+	local test_payload
+	test_payload=$(jq -n \
+		--arg channel "$CHANNEL" \
+		--arg dry_run "$DRY_RUN" \
+		--arg block_file_1 "$block_file_1" \
+		--arg block_file_2 "$block_file_2" \
+		--arg block_file_3 "$block_file_3" \
+		--arg token "$token" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: $token
+			},
+			params: {
+				channel: $channel,
+				dry_run: $dry_run,
+				blocks: [
+					{
+						header: {
+							text: {
+								type: "plain_text",
+								text: "Blocks from_file Test"
+							}
+						}
+					},
+					{ from_file: $block_file_1 },
+					{ from_file: $block_file_2 },
+					{ from_file: $block_file_3 }
+				]
+			}
+		}')
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	if ! jq . "$TEST_PAYLOAD_FILE" >/dev/null 2>&1; then
+		echo "Invalid JSON in test payload file" >&2
+		cat "$TEST_PAYLOAD_FILE" >&2
+		rm -rf output
+		return 1
+	fi
+
+	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "version"
+	echo "$output" | grep -q "timestamp"
+	echo "$output" | grep -q "main:: parsing payload"
+	echo "$output" | grep -q "process_blocks:: expanded block from file"
+	echo "$output" | grep -q "main:: creating Concourse metadata"
+	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
 }
 
 @test "acceptance:: file block from prior job with 644 perms" {
