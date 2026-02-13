@@ -35,7 +35,7 @@ echo 'alias send-to-slack="path/to/send-to-slack/bin/send-to-slack.sh"' >> ~/.ba
 Install directly from GitHub Releases with a single command:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/bin/install.sh | bash
 ```
 
 The installer:
@@ -55,7 +55,7 @@ Example with custom prefix (useful in containers):
 
 ```bash
 curl --proto "=https" --tlsv1.2 --fail --show-error --location \
-  https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/install.sh | \
+  https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/bin/install.sh | \
   bash -s -- --prefix /tmp/send-to-slack/bin
 ```
 
@@ -70,7 +70,7 @@ export PATH="${HOME}/.local/bin:${PATH}"
 Run from the cloned repository:
 
 ```bash
-./install.sh
+./bin/install.sh
 ```
 
 - Default prefix is ${HOME}/.local/bin (or /usr/local/bin when run as root); override with --prefix when the default is not writable (for example --prefix /tmp/send-to-slack/bin inside containers).
@@ -82,7 +82,7 @@ Run from the cloned repository:
 Run from the cloned repository:
 
 ```bash
-./uninstall.sh
+./bin/uninstall.sh
 ```
 
 - Uninstall removes the installed send-to-slack shim only when it carries the install signature; use --force to override.
