@@ -56,12 +56,14 @@ resolve_user_id() {
 	while true; do
 		echo "resolve_user_id:: fetching users.list page (cursor=${cursor:-initial})" >&2
 
-		local api_response
 		if ! api_response=$(curl -s -X GET \
 			-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
 			--max-time 30 \
 			--connect-timeout 10 \
-			"https://slack.com/api/users.list?limit=100&cursor=${cursor}" 2>&1); then
+			-G \
+			--data-urlencode "limit=100" \
+			--data-urlencode "cursor=${cursor}" \
+			"https://slack.com/api/users.list" 2>&1); then
 			echo "resolve_user_id:: curl failed to send request" >&2
 			return 1
 		fi
@@ -153,12 +155,15 @@ resolve_channel_id() {
 	while true; do
 		echo "resolve_channel_id:: fetching conversations.list page (cursor=${cursor:-initial})" >&2
 
-		local api_response
 		if ! api_response=$(curl -s -X GET \
 			-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
 			--max-time 30 \
 			--connect-timeout 10 \
-			"https://slack.com/api/conversations.list?limit=100&types=public_channel,private_channel&cursor=${cursor}" 2>&1); then
+			-G \
+			--data-urlencode "limit=100" \
+			--data-urlencode "types=public_channel,private_channel" \
+			--data-urlencode "cursor=${cursor}" \
+			"https://slack.com/api/conversations.list" 2>&1); then
 			echo "resolve_channel_id:: curl failed to send request" >&2
 			return 1
 		fi

@@ -23,7 +23,7 @@ setup_file() {
 	fi
 
 	RICH_TEXT_EXAMPLES_FILE="$GIT_ROOT/examples/rich-text.yaml"
-	BLOCK_FIXTURES_DIR="$GIT_ROOT/tests/fixtures"
+	BLOCK_FIXTURES_DIR="$GIT_ROOT/examples/fixtures"
 
 	export GIT_ROOT
 	export SCRIPT
@@ -899,16 +899,36 @@ block_output_json() { echo "$output" | grep -v '^create_block::'; }
 
 @test "parse_payload:: block from_file with array expands to multiple blocks" {
 	local block_file
-	block_file="$BLOCK_FIXTURES_DIR/blocks-from-file-3.json"
+	# Use a file that contains an array of blocks to test array expansion
+	block_file="$BLOCK_FIXTURES_DIR/blocks-from-file.json"
 
-	mkdir -p "$GIT_ROOT/output"
-	echo "Example file for blocks-from-file-3" >"$GIT_ROOT/output/example.txt"
-	trap 'rm -rf "$GIT_ROOT/output"' EXIT
-	cd "$GIT_ROOT"
+	# Create a test file with an array of blocks
+	local array_file
+	array_file=$(mktemp "/tmp/parse-payload-tests.array-blocks.XXXXXX")
+	trap 'rm -f "$array_file"' EXIT
+
+	cat >"$array_file" <<'EOF'
+[
+  {
+    "header": {
+      "text": { "type": "plain_text", "text": "First Block from Array" }
+    }
+  },
+  {
+    "section": {
+      "type": "text",
+      "text": { "type": "plain_text", "text": "Second Block from Array" }
+    }
+  },
+  {
+    "divider": {}
+  }
+]
+EOF
 
 	local test_payload
 	test_payload=$(jq -n \
-		--arg file "$block_file" \
+		--arg file "$array_file" \
 		'{
 			source: { slack_bot_user_oauth_token: "test-token" },
 			params: {
@@ -924,10 +944,14 @@ block_output_json() { echo "$output" | grep -v '^create_block::'; }
 
 	local payload_output
 	payload_output=$(parse_payload "$TEST_PAYLOAD_FILE")
+	# Verify that the array was expanded into multiple blocks
+	echo "$payload_output" | jq -e '.blocks | length == 3' >/dev/null
 	echo "$payload_output" | jq -e '.blocks[0].type == "header"' >/dev/null
-	echo "$payload_output" | jq -e '.blocks[0].text.text == "All Block Types from File"' >/dev/null
+	echo "$payload_output" | jq -e '.blocks[0].text.text == "First Block from Array"' >/dev/null
+	echo "$payload_output" | jq -e '.blocks[1].type == "section"' >/dev/null
+	echo "$payload_output" | jq -e '.blocks[2].type == "divider"' >/dev/null
 
-	rm -rf "$GIT_ROOT/output"
+	rm -f "$array_file"
 	trap - EXIT
 }
 

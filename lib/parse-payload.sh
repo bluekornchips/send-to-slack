@@ -192,7 +192,7 @@ create_block() {
 	local script_exit_code=0
 	block=$("$resolved_script_path" <<<"$block_input") || script_exit_code=$?
 
-	if [[ $script_exit_code -ne 0 ]]; then
+	if [[ "$script_exit_code" -ne 0 ]]; then
 		echo "create_block:: block script failed with exit code $script_exit_code" >&2
 		case "$block_type" in
 		"section")
@@ -728,7 +728,7 @@ process_blocks() {
 		local converted_ts
 		converted_ts=$(convert_thread_ts "$thread_ts")
 		local convert_thread_ts_exit_code=$?
-		if [[ $convert_thread_ts_exit_code -ne 0 ]]; then
+		if [[ "$convert_thread_ts_exit_code" -ne 0 ]]; then
 			echo "parse_payload:: failed to convert thread_ts from permalink" >&2
 			return 1
 		fi

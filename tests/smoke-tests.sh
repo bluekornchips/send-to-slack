@@ -977,7 +977,7 @@ smoke_test_setup() {
 
 @test "smoke test, blocks from_file" {
 	local block_file
-	block_file="$GIT_ROOT/tests/fixtures/blocks-from-file.json"
+	block_file="$GIT_ROOT/examples/fixtures/blocks-from-file.json"
 
 	local blocks_json
 	blocks_json=$(jq -n --arg file "$block_file" '[{ from_file: $file }]')
@@ -1003,7 +1003,7 @@ smoke_test_setup() {
 
 @test "smoke test, blocks from_file 2" {
 	local block_file
-	block_file="$GIT_ROOT/tests/fixtures/blocks-from-file-2.json"
+	block_file="$GIT_ROOT/examples/fixtures/blocks-from-file-2.json"
 
 	local blocks_json
 	blocks_json=$(jq -n --arg file "$block_file" '[{ from_file: $file }]')
@@ -1028,7 +1028,7 @@ smoke_test_setup() {
 
 @test "smoke test, blocks from_file 3" {
 	local block_file
-	block_file="$GIT_ROOT/tests/fixtures/blocks-from-file-3.json"
+	block_file="$GIT_ROOT/examples/fixtures/blocks-from-file-3.json"
 	mkdir -p output
 	echo "Example file for blocks-from-file-3" >output/example.txt
 	trap 'rm -rf output' EXIT

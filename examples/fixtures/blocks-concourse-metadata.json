@@ -1,0 +1,31 @@
+[
+  {
+    "header": {
+      "text": { "type": "plain_text", "text": "Blocks from_file with Concourse metadata" }
+    }
+  },
+  {
+    "section": {
+      "type": "text",
+      "text": {
+        "type": "mrkdwn",
+        "text": "<$ATC_EXTERNAL_URL/teams/$BUILD_TEAM_NAME/pipelines/$BUILD_PIPELINE_NAME/jobs/$BUILD_JOB_NAME/builds/$BUILD_NAME|$BUILD_JOB_NAME #$BUILD_NAME>"
+      }
+    }
+  },
+  {
+    "section": {
+      "type": "fields",
+      "fields": [
+        { "type": "mrkdwn", "text": "*BUILD_ID:*\n`$BUILD_ID`" },
+        { "type": "mrkdwn", "text": "*BUILD_NAME:*\n`$BUILD_NAME`" },
+        { "type": "mrkdwn", "text": "*BUILD_JOB_NAME:*\n`$BUILD_JOB_NAME`" },
+        { "type": "mrkdwn", "text": "*BUILD_PIPELINE_NAME:*\n`$BUILD_PIPELINE_NAME`" },
+        { "type": "mrkdwn", "text": "*BUILD_TEAM_NAME:*\n`$BUILD_TEAM_NAME`" },
+        { "type": "mrkdwn", "text": "*BUILD_CREATED_BY:*\n`$BUILD_CREATED_BY`" },
+        { "type": "mrkdwn", "text": "*BUILD_PIPELINE_INSTANCE_VARS:*\n`$BUILD_PIPELINE_INSTANCE_VARS`" },
+        { "type": "mrkdwn", "text": "*ATC_EXTERNAL_URL:*\n<$ATC_EXTERNAL_URL|$ATC_EXTERNAL_URL>" }
+      ]
+    }
+  }
+]

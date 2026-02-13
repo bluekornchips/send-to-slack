@@ -1,6 +1,6 @@
 ---
 # Example Concourse CI pipeline for block-level from_file
-# Creates blocks-from-file-3.json and output/example.txt, then sends via from_file
+# Uses external JSON fixtures from the repository and output/example.txt
 
 resource_types:
   - name: slack-notification
@@ -10,6 +10,12 @@ resource_types:
       tag: ((TAG))
 
 resources:
+  - name: send-to-slack
+    type: git
+    source:
+      uri: https://github.com/sunflowersoftware/send-to-slack.git
+      branch: main
+
   - name: slack-notification
     type: slack-notification
     source:
@@ -22,7 +28,8 @@ jobs:
   - name: blocks-from-file-3
     public: true
     plan:
-      - task: prepare-blocks-and-file
+      - get: send-to-slack
+      - task: prepare-file
         config:
           platform: linux
           image_resource:
@@ -35,174 +42,23 @@ jobs:
               - -c
               - |
                 set -eo pipefail
-                mkdir -p workspace output
-
+                mkdir -p output
                 echo "Example file for blocks-from-file-3" > output/example.txt
-
-                cat > workspace/blocks-from-file-3.json << 'JSONEOF'
-                [
-                  {
-                    "header": {
-                      "text": { "type": "plain_text", "text": "All Block Types from File" },
-                      "block_id": "all_types_header"
-                    }
-                  },
-                  {
-                    "section": {
-                      "type": "text",
-                      "text": { "type": "plain_text", "text": "Section block with plain text" }
-                    }
-                  },
-                  {
-                    "section": {
-                      "type": "fields",
-                      "fields": [
-                        { "type": "plain_text", "text": "Field 1" },
-                        { "type": "mrkdwn", "text": "*Field 2*" }
-                      ]
-                    }
-                  },
-                  { "divider": { "block_id": "sep1" } },
-                  {
-                    "rich-text": {
-                      "elements": [
-                        {
-                          "type": "rich_text_section",
-                          "elements": [
-                            { "type": "text", "text": "Rich text ", "style": { "bold": true } },
-                            { "type": "text", "text": "block" }
-                          ]
-                        }
-                      ]
-                    }
-                  },
-                  { "markdown": { "text": "**Markdown** block with *formatting* and `code`" } },
-                  {
-                    "context": {
-                      "elements": [{ "type": "plain_text", "text": "Context block" }]
-                    }
-                  },
-                  {
-                    "table": {
-                      "color": "success",
-                      "rows": [
-                        [
-                          { "type": "raw_text", "text": "Column 1" },
-                          { "type": "raw_text", "text": "Column 2" }
-                        ],
-                        [
-                          { "type": "raw_text", "text": "Value A" },
-                          { "type": "raw_text", "text": "Value B" }
-                        ]
-                      ]
-                    }
-                  },
-                  {
-                    "actions": {
-                      "elements": [
-                        {
-                          "type": "button",
-                          "text": { "type": "plain_text", "text": "Action" },
-                          "action_id": "example_action"
-                        }
-                      ]
-                    }
-                  },
-                  {
-                    "image": {
-                      "image_url": "https://sunflowersoftware.ca/wp-content/uploads/2023/05/cropped-sunflower.gif",
-                      "alt_text": "Example image",
-                      "title": { "type": "plain_text", "text": "Image Block" }
-                    }
-                  },
-                  {
-                    "video": {
-                      "video_url": "https://www.youtube.com/embed/pWTSK5waNs8",
-                      "thumbnail_url": "https://i.ytimg.com/vi/pWTSK5waNs8/hqdefault.jpg",
-                      "alt_text": "Example video",
-                      "title": { "type": "plain_text", "text": "Video Block" }
-                    }
-                  },
-                  { "file": { "path": "output/example.txt", "title": "File Block Example" } },
-                  { "divider": {} },
-                  {
-                    "context": {
-                      "elements": [
-                        {
-                          "type": "plain_text",
-                          "text": "All 11 block types loaded from blocks-from-file-3.json"
-                        }
-                      ]
-                    }
-                  }
-                ]
-                JSONEOF
           outputs:
-            - name: workspace
             - name: output
 
       - put: slack-notification
         params:
           <<: *common_slack_params
           blocks:
-            - from_file: workspace/blocks-from-file-3.json
+            - from_file: send-to-slack/examples/fixtures/blocks-from-file-3.json
 
   - name: concourse-metadata
     public: true
     plan:
-      - task: prepare-blocks-with-metadata-vars
-        config:
-          platform: linux
-          image_resource:
-            type: registry-image
-            source:
-              repository: alpine
-          run:
-            path: sh
-            args:
-              - -c
-              - |
-                set -eo pipefail
-                mkdir -p workspace
-
-                cat > workspace/blocks-concourse-metadata.json << 'JSONEOF'
-                [
-                  {
-                    "header": {
-                      "text": { "type": "plain_text", "text": "Blocks from_file with Concourse metadata" }
-                    }
-                  },
-                  {
-                    "section": {
-                      "type": "text",
-                      "text": {
-                        "type": "mrkdwn",
-                        "text": "<$ATC_EXTERNAL_URL/teams/$BUILD_TEAM_NAME/pipelines/$BUILD_PIPELINE_NAME/jobs/$BUILD_JOB_NAME/builds/$BUILD_NAME|$BUILD_JOB_NAME #$BUILD_NAME>"
-                      }
-                    }
-                  },
-                  {
-                    "section": {
-                      "type": "fields",
-                      "fields": [
-                        { "type": "mrkdwn", "text": "*BUILD_ID:*\n`$BUILD_ID`" },
-                        { "type": "mrkdwn", "text": "*BUILD_NAME:*\n`$BUILD_NAME`" },
-                        { "type": "mrkdwn", "text": "*BUILD_JOB_NAME:*\n`$BUILD_JOB_NAME`" },
-                        { "type": "mrkdwn", "text": "*BUILD_PIPELINE_NAME:*\n`$BUILD_PIPELINE_NAME`" },
-                        { "type": "mrkdwn", "text": "*BUILD_TEAM_NAME:*\n`$BUILD_TEAM_NAME`" },
-                        { "type": "mrkdwn", "text": "*BUILD_CREATED_BY:*\n`$BUILD_CREATED_BY`" },
-                        { "type": "mrkdwn", "text": "*BUILD_PIPELINE_INSTANCE_VARS:*\n`$BUILD_PIPELINE_INSTANCE_VARS`" },
-                        { "type": "mrkdwn", "text": "*ATC_EXTERNAL_URL:*\n<$ATC_EXTERNAL_URL|$ATC_EXTERNAL_URL>" }
-                      ]
-                    }
-                  }
-                ]
-                JSONEOF
-          outputs:
-            - name: workspace
-
+      - get: send-to-slack
       - put: slack-notification
         params:
           <<: *common_slack_params
           blocks:
-            - from_file: workspace/blocks-concourse-metadata.json
+            - from_file: send-to-slack/examples/fixtures/blocks-concourse-metadata.json

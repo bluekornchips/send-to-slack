@@ -329,9 +329,9 @@ teardown() {
 	DRY_RUN="false"
 
 	local block_file_1 block_file_2 block_file_3
-	block_file_1="$GIT_ROOT/tests/fixtures/blocks-from-file.json"
-	block_file_2="$GIT_ROOT/tests/fixtures/blocks-from-file-2.json"
-	block_file_3="$GIT_ROOT/tests/fixtures/blocks-from-file-3.json"
+	block_file_1="$GIT_ROOT/examples/fixtures/blocks-from-file.json"
+	block_file_2="$GIT_ROOT/examples/fixtures/blocks-from-file-2.json"
+	block_file_3="$GIT_ROOT/examples/fixtures/blocks-from-file-3.json"
 
 	mkdir -p output
 	echo "Example file for blocks-from-file-3" >output/example.txt

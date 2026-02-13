@@ -343,7 +343,7 @@ mock_curl_network_error() {
 	[[ "$status" -eq 0 ]]
 
 	# Required pre-step logs appear regardless
-	echo "$output" | grep -q "process_input:: reading input into temp file"
+	echo "$output" | grep -q "process_input_to_file:: reading input into"
 	echo "$output" | grep -q "main:: parsing payload"
 
 	# Verbose logs appear when debug is true
@@ -380,7 +380,7 @@ mock_curl_network_error() {
 	[[ "$status" -eq 0 ]]
 
 	# Required pre-step logs still appear
-	echo "$output" | grep -q "process_input:: reading input into temp file"
+	echo "$output" | grep -q "process_input_to_file:: reading input into"
 	echo "$output" | grep -q "main:: parsing payload"
 
 	# Verbose logs do not appear when debug is false
@@ -1180,7 +1180,7 @@ mock_curl_permalink_failure() {
 
 	run "$SCRIPT" -file
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "process_input::"
+	echo "$output" | grep -q "process_input_to_file::"
 	echo "$output" | grep -q "requires a file path argument"
 }
 
@@ -1188,7 +1188,7 @@ mock_curl_permalink_failure() {
 
 	run "$SCRIPT" --file
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "process_input::"
+	echo "$output" | grep -q "process_input_to_file::"
 	echo "$output" | grep -q "requires a file path argument"
 }
 
@@ -1198,7 +1198,7 @@ mock_curl_permalink_failure() {
 
 	run "$SCRIPT" -file "$nonexistent_file"
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "process_input::"
+	echo "$output" | grep -q "process_input_to_file::"
 	echo "$output" | grep -q "input file does not exist"
 }
 
@@ -1209,7 +1209,7 @@ mock_curl_permalink_failure() {
 
 	run "$SCRIPT" -file "$empty_file"
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "process_input::"
+	echo "$output" | grep -q "process_input_to_file::"
 	echo "$output" | grep -q "input file is empty"
 
 	rm -f "$empty_file"
@@ -1233,7 +1233,7 @@ mock_curl_permalink_failure() {
 	# When stdin is empty (/dev/null), script will try to read and detect empty input
 	run "$SCRIPT" </dev/null
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "process_input::"
+	echo "$output" | grep -q "process_input_to_file::"
 	echo "$output" | grep -q "no input received on stdin"
 }
 
@@ -1242,7 +1242,7 @@ mock_curl_permalink_failure() {
 
 	run "$SCRIPT" -file "$TEST_PAYLOAD_FILE" -file "$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "process_input::"
+	echo "$output" | grep -q "process_input_to_file::"
 	echo "$output" | grep -q "can only be specified once"
 }
 
@@ -1250,7 +1250,7 @@ mock_curl_permalink_failure() {
 
 	run "$SCRIPT" --unknown-option
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "process_input::"
+	echo "$output" | grep -q "process_input_to_file::"
 	echo "$output" | grep -q "unknown option"
 }
 

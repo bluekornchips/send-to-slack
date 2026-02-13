@@ -571,26 +571,26 @@ retry_with_backoff() {
 	local delay="$RETRY_INITIAL_DELAY"
 	local last_exit_code=1
 
-	while [[ $attempt -le $max_attempts ]]; do
+	while [[ "$attempt" -le "$max_attempts" ]]; do
 		echo "retry_with_backoff:: executing command (attempt ${attempt}/${max_attempts})" >&2
 
 		# Execute the command and capture exit code
 		local cmd_status=0
 		"$@" || cmd_status=$?
 
-		if [[ $cmd_status -eq 0 ]]; then
+		if [[ "$cmd_status" -eq 0 ]]; then
 			return 0
 		fi
 
 		last_exit_code=$cmd_status
 
 		# Check if we should retry
-		if [[ $attempt -lt $max_attempts ]]; then
+		if [[ "$attempt" -lt "$max_attempts" ]]; then
 			echo "retry_with_backoff:: Attempt $attempt failed, retrying in ${delay}s." >&2
 			sleep "$delay"
 
 			delay=$((delay * RETRY_BACKOFF_MULTIPLIER))
-			if [[ $delay -gt $RETRY_MAX_DELAY ]]; then
+			if [[ "$delay" -gt "$RETRY_MAX_DELAY" ]]; then
 				delay="$RETRY_MAX_DELAY"
 			fi
 
@@ -675,7 +675,7 @@ health_check() {
 		echo "health_check:: SLACK_BOT_USER_OAUTH_TOKEN not set, skipping API connectivity check"
 	fi
 
-	if [[ $errors -eq 0 ]]; then
+	if [[ "$errors" -eq 0 ]]; then
 		echo "health_check:: Health check passed"
 		return 0
 	else
@@ -721,7 +721,7 @@ send_notification() {
 	local delay="$RETRY_INITIAL_DELAY"
 	local last_exit_code=0
 
-	while [[ $attempt -le $RETRY_MAX_ATTEMPTS ]]; do
+	while [[ "$attempt" -le "$RETRY_MAX_ATTEMPTS" ]]; do
 		echo "send_notification:: posting message to Slack API (attempt ${attempt}/${RETRY_MAX_ATTEMPTS})" >&2
 
 		# Make the API call
@@ -783,12 +783,12 @@ send_notification() {
 			break
 		fi
 
-		if [[ $attempt -lt $RETRY_MAX_ATTEMPTS ]] && [[ $last_exit_code -ne 0 ]]; then
+		if [[ "$attempt" -lt "$RETRY_MAX_ATTEMPTS" ]] && [[ "$last_exit_code" -ne 0 ]]; then
 			echo "send_notification:: Attempt $attempt failed, retrying in ${delay}s." >&2
 			sleep "$delay"
 
 			delay=$((delay * RETRY_BACKOFF_MULTIPLIER))
-			if [[ $delay -gt $RETRY_MAX_DELAY ]]; then
+			if [[ "$delay" -gt "$RETRY_MAX_DELAY" ]]; then
 				delay="$RETRY_MAX_DELAY"
 			fi
 
@@ -838,45 +838,48 @@ EOF
 
 # Process input from stdin or file specified via -f|--file option
 #
-# Inputs:
-# - $@: Command line arguments, may include -f|--file <path>
-#
-# Outputs:
-# - Writes path to temporary input payload file to stdout on success
+# Arguments:
+#   $1 - output_file: Path to write the input payload to
+#   $@ - remaining arguments: Command line arguments, may include -f|--file <path>
 #
 # Side Effects:
-# - Creates temporary file for input payload
+# - Writes input payload to specified output_file
 # - Outputs error messages to stderr
 #
 # Returns:
 # - 0 on successful input processing
 # - 1 if argument parsing, validation, or input reading fails
-process_input() {
-	local input_file
-	local use_stdin
-	local input_payload
+process_input_to_file() {
+	local output_file="$1"
+	shift
 
-	input_file=""
-	use_stdin="false"
+	local input_file=""
+	local use_stdin="false"
+
+	# Prepare output file
+	if ! touch "${output_file}" && chmod 0600 "${output_file}"; then
+		echo "process_input_to_file:: failed to secure output file ${output_file}" >&2
+		return 1
+	fi
 
 	# Parse command line arguments
 	while [[ $# -gt 0 ]]; do
 		case $1 in
 		-f | -file | --file)
 			if [[ -n "${input_file}" ]]; then
-				echo "process_input:: -f|-file|--file option can only be specified once" >&2
+				echo "process_input_to_file:: -f|-file|--file option can only be specified once" >&2
 				return 1
 			fi
 			if [[ $# -lt 2 ]]; then
-				echo "process_input:: -f|-file|--file requires a file path argument" >&2
+				echo "process_input_to_file:: -f|-file|--file requires a file path argument" >&2
 				return 1
 			fi
 			input_file="$2"
 			shift 2
 			;;
 		*)
-			echo "process_input:: unknown option: $1" >&2
-			echo "process_input:: use -f|-file|--file <path> to specify input file, or provide input via stdin" >&2
+			echo "process_input_to_file:: unknown option: $1" >&2
+			echo "process_input_to_file:: use -f|-file|--file <path> to specify input file, or provide input via stdin" >&2
 			return 1
 			;;
 		esac
@@ -885,59 +888,38 @@ process_input() {
 	# Use file if specified, otherwise use stdin
 	if [[ -n "${input_file}" ]]; then
 		if [[ ! -f "${input_file}" ]]; then
-			echo "process_input:: input file does not exist: ${input_file}" >&2
+			echo "process_input_to_file:: input file does not exist: ${input_file}" >&2
 			return 1
 		fi
 		use_stdin="false"
 	else
 		if [[ -t 0 ]]; then
-			echo "process_input:: no input provided: use -f|--file <path> or provide input via stdin" >&2
+			echo "process_input_to_file:: no input provided: use -f|--file <path> or provide input via stdin" >&2
 			return 1
 		fi
 		use_stdin="true"
 	fi
 
-	input_payload=$(mktemp /tmp/send-to-slack.resource-in.XXXXXX)
-	if ! chmod 0600 "$input_payload"; then
-		echo "process_input:: failed to secure temp input ${input_payload}" >&2
-		rm -f "$input_payload"
-		return 1
-	fi
-
-	# Read from stdin or file and write to temp file
-	echo "process_input:: reading input into temp file ${input_payload}" >&2
+	# Read from stdin or file and write to target file
+	echo "process_input_to_file:: reading input into ${output_file}" >&2
 
 	if [[ "${use_stdin}" == "true" ]]; then
-		if ! cat >"${input_payload}"; then
-			echo "process_input:: failed to read from stdin" >&2
-			rm -f "${input_payload}"
+		if ! cat >"${output_file}"; then
+			echo "process_input_to_file:: failed to read from stdin" >&2
 			return 1
 		fi
-		if [[ ! -f "${input_payload}" ]]; then
-			echo "process_input:: input file was not created" >&2
-			rm -f "${input_payload}"
-			return 1
-		fi
-		if [[ ! -s "${input_payload}" ]]; then
-			echo "process_input:: no input received on stdin" >&2
-			rm -f "${input_payload}"
+		if [[ ! -s "${output_file}" ]]; then
+			echo "process_input_to_file:: no input received on stdin" >&2
 			return 1
 		fi
 	else
-		if ! cat -- "${input_file}" >"${input_payload}"; then
-			echo "process_input:: failed to read input file: ${input_file}" >&2
+		if ! cat -- "${input_file}" >"${output_file}"; then
+			echo "process_input_to_file:: failed to read input file: ${input_file}" >&2
 			ls -l "${input_file}" >&2
-			rm -f "${input_payload}"
 			return 1
 		fi
-		if [[ ! -f "${input_payload}" ]]; then
-			echo "process_input:: failed to copy input file to temp file" >&2
-			rm -f "${input_payload}"
-			return 1
-		fi
-		if [[ ! -s "${input_payload}" ]]; then
-			echo "process_input:: input file is empty: ${input_file}" >&2
-			rm -f "${input_payload}"
+		if [[ ! -s "${output_file}" ]]; then
+			echo "process_input_to_file:: input file is empty: ${input_file}" >&2
 			return 1
 		fi
 	fi
@@ -945,8 +927,6 @@ process_input() {
 	if [[ "${use_stdin}" == "true" ]]; then
 		export SEND_TO_SLACK_INPUT_SOURCE="stdin"
 	fi
-
-	echo "${input_payload}"
 
 	return 0
 }
@@ -1109,12 +1089,12 @@ main() {
 	parse_result=0
 	parse_main_args "$@" || parse_result=$?
 
-	if [[ $parse_result -eq 2 ]]; then
+	if [[ "$parse_result" -eq 2 ]]; then
 		# Version or help was requested and already printed
 		return 0
 	fi
 
-	if [[ $parse_result -ne 0 ]]; then
+	if [[ "$parse_result" -ne 0 ]]; then
 		echo "main:: failed to parse arguments" >&2
 		return 1
 	fi
@@ -1143,13 +1123,24 @@ main() {
 
 	echo "main:: starting task to send notification to Slack from Concourse"
 
-	# Process input and get path to temp file
-	if ! input_payload=$(process_input "${main_args[@]}"); then
+	# Create a temporary directory for this run to ensure cleanup of all temp files
+	local run_temp_dir
+	run_temp_dir=$(mktemp -d /tmp/send-to-slack.run.XXXXXX)
+	if ! chmod 0700 "${run_temp_dir}"; then
+		echo "main:: failed to secure temporary directory ${run_temp_dir}" >&2
+		rm -rf "${run_temp_dir}"
+		return 1
+	fi
+	trap 'rm -rf "$run_temp_dir"' EXIT ERR
+
+	# Use the temp directory for input payload
+	input_payload="${run_temp_dir}/input_payload"
+
+	# Process input and write to the designated file in our temp dir
+	if ! process_input_to_file "${input_payload}" "${main_args[@]}"; then
 		echo "main:: failed to process input" >&2
 		return 1
 	fi
-
-	trap 'rm -f "$input_payload" "${parsed_payload_file:-}"' EXIT ERR
 
 	timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
@@ -1184,15 +1175,9 @@ main() {
 	fi
 
 	local parsed_payload_file
-	parsed_payload_file=$(mktemp /tmp/send-to-slack.parsed-payload.XXXXXX)
-	if ! chmod 0600 "${parsed_payload_file}"; then
-		echo "main:: failed to secure parsed payload file ${parsed_payload_file}" >&2
-		rm -f "${parsed_payload_file}"
-		return 1
-	fi
+	parsed_payload_file="${run_temp_dir}/parsed_payload"
 	if ! parse_payload "${input_payload}" >"${parsed_payload_file}"; then
 		echo "main:: failed to parse payload" >&2
-		rm -f "${parsed_payload_file}"
 		return 1
 	fi
 	local parsed_payload
