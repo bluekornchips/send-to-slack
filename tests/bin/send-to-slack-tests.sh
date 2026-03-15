@@ -172,22 +172,37 @@ mock_curl_network_error() {
 	echo "$METADATA" | jq -e '.' >/dev/null
 }
 
-@test "create_metadata:: oversize payload succeeds without argument overflow" {
+@test "create_metadata:: oversize payload strips blocks and attachments" {
 	SHOW_METADATA="true"
 	SHOW_PAYLOAD="true"
-	local big_file
-	local huge_payload
 	local safe_size
+	local huge_payload
 	safe_size=$(($(getconf ARG_MAX 2>/dev/null || echo 262144) / 4))
-	big_file=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.big.XXXXXX")
-	head -c "$((safe_size + 1024))" </dev/zero | tr '\0' 'A' >"$big_file"
-	huge_payload=$(jq -n --rawfile txt "$big_file" '{"channel":"#test","text":$txt}')
+	local big_text_file
+	big_text_file=$(mktemp)
+	head -c "$((safe_size + 1024))" /dev/zero | tr '\0' 'A' >"$big_text_file"
+	huge_payload=$(jq -n \
+		--rawfile big_text "$big_text_file" \
+		'{"channel":"#test","blocks":[{"type":"section","text":{"type":"mrkdwn","text":$big_text}}],"attachments":[{"text":"attach"}]}')
+	rm -f "$big_text_file"
 
-	run create_metadata "$huge_payload"
-	[[ "$status" -eq 0 ]]
+	create_metadata "$huge_payload"
 	echo "$METADATA" | jq -e '.' >/dev/null
+	echo "$METADATA" | jq -e '.[] | select(.name == "payload") | .value | fromjson | has("blocks") | not' >/dev/null
+	echo "$METADATA" | jq -e '.[] | select(.name == "payload") | .value | fromjson | has("attachments") | not' >/dev/null
+	echo "$METADATA" | jq -e '.[] | select(.name == "payload_note")' >/dev/null
+	[[ ${#METADATA} -le "$safe_size" ]]
+}
 
-	rm -f "$big_file"
+@test "create_metadata:: normal-sized payload with blocks preserves blocks in metadata" {
+	SHOW_METADATA="true"
+	SHOW_PAYLOAD="true"
+	local payload
+	payload='{"channel":"#test","blocks":[{"type":"section","text":{"type":"mrkdwn","text":"hello"}}]}'
+
+	create_metadata "$payload"
+	echo "$METADATA" | jq -e '.[] | select(.name == "payload") | .value | fromjson | .blocks | length > 0' >/dev/null
+	echo "$METADATA" | jq -e '[.[] | .name] | contains(["payload_note"]) | not' >/dev/null
 }
 
 ########################################################
