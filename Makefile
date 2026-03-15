@@ -3,14 +3,19 @@ TARGET_VERSION ?= $(VERSION)
 SYSTEM_PREFIX := /usr/local
 TAG ?= $(TARGET_VERSION)
 
+# Lint
+lint:
+	shellcheck --version >/dev/null 2>&1 || (echo "shellcheck is not installed" && exit 1)
+	shellcheck $(shell find . -name "*.sh" -type f)
+#################################################
+# Testing
+#################################################
+
 # Bats
 TEST_FILES := $(shell find tests concourse -name '*-tests.sh' -type f)
 SHELL_FILES := $(shell find . -name "*.sh" -type f)
 BATS_COMMAND := bats --timing --verbose-run
 
-#################################################
-# Testing
-#################################################
 test:
 	clear && ${BATS_COMMAND} ${TEST_FILES}
 
