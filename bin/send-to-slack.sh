@@ -230,7 +230,6 @@ create_metadata() {
 	local payload="$1"
 	local payload_for_metadata
 	local safe_size
-	local payload_file
 
 	if [[ "${SHOW_METADATA}" != "true" ]]; then
 		return 0
@@ -253,18 +252,18 @@ create_metadata() {
 		safe_size=$(_get_safe_payload_size)
 
 		if [[ ${#payload_for_metadata} -gt "$safe_size" ]]; then
-			payload_file=$(mktemp "$_SLACK_WORKSPACE/send-to-slack.payload.XXXXXX")
-			if chmod 0600 "$payload_file" 2>/dev/null && printf '%s' "$payload_for_metadata" >"$payload_file"; then
-				if METADATA=$(echo "$METADATA" | jq --rawfile payload "$payload_file" '. += [{"name": "payload", "value": $payload}]' 2>/dev/null); then
-					rm -f "$payload_file"
-				else
-					rm -f "$payload_file"
-					echo "create_metadata:: failed to append payload via file, skipping payload in metadata" >&2
+			local stripped
+			if stripped=$(echo "$payload_for_metadata" | jq 'del(.blocks, .attachments)' 2>/dev/null) && \
+				[[ ${#stripped} -le "$safe_size" ]]; then
+				if ! METADATA=$(echo "$METADATA" | jq \
+					--arg payload "$stripped" \
+					'. += [{"name": "payload", "value": $payload}, {"name": "payload_note", "value": "blocks and attachments excluded: payload exceeded safe metadata size"}]' \
+					2>/dev/null); then
+					echo "create_metadata:: failed to append stripped payload to metadata" >&2
 					METADATA=$(echo "$METADATA" | jq '. += [{"name": "payload_skipped", "value": "payload too large for metadata"}]')
 				fi
 			else
-				rm -f "$payload_file"
-				echo "create_metadata:: failed to write payload temp file, skipping payload in metadata" >&2
+				echo "create_metadata:: payload too large even after stripping blocks, skipping payload in metadata" >&2
 				METADATA=$(echo "$METADATA" | jq '. += [{"name": "payload_skipped", "value": "payload too large for metadata"}]')
 			fi
 		else
