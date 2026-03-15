@@ -4,11 +4,6 @@
 # Processes JSON payload from stdin and sends message to Slack channel via API
 # Supports Block Kit formatting, file uploads, and attachments
 #
-# Only set strict error handling when executed directly, not when sourced
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-	set -eo pipefail
-	umask 077
-fi
 
 ########################################################
 # Default values
@@ -32,6 +27,26 @@ ERROR_CODES_TRUE_FAILURES=(
 	"invalid_blocks"
 	"invalid_attachments")
 ERROR_CODES_RETRYABLE=("rate_limited")
+
+# Check if error code is in the given list. Used for retry vs fail branching.
+#
+# Inputs:
+# - $1 - code: error code string to look up
+# - $2 ... - list of error code strings
+#
+# Returns:
+# - 0 if code is in the list, 1 otherwise
+_is_error_in_list() {
+	local code="$1"
+	shift
+	local elem
+	for elem in "$@"; do
+		if [[ "$code" == "$elem" ]]; then
+			return 0
+		fi
+	done
+	return 1
+}
 
 ########################################################
 # Documentation URLs
@@ -238,7 +253,7 @@ create_metadata() {
 		safe_size=$(_get_safe_payload_size)
 
 		if [[ ${#payload_for_metadata} -gt "$safe_size" ]]; then
-			payload_file=$(mktemp /tmp/send-to-slack.payload.XXXXXX)
+			payload_file=$(mktemp "$_SLACK_WORKSPACE/send-to-slack.payload.XXXXXX")
 			if chmod 0600 "$payload_file" 2>/dev/null && printf '%s' "$payload_for_metadata" >"$payload_file"; then
 				if METADATA=$(echo "$METADATA" | jq --rawfile payload "$payload_file" '. += [{"name": "payload", "value": $payload}]' 2>/dev/null); then
 					rm -f "$payload_file"
@@ -327,133 +342,6 @@ get_message_permalink() {
 	export NOTIFICATION_PERMALINK
 
 	echo "get_message_permalink:: permalink extracted: ${NOTIFICATION_PERMALINK}"
-
-	return 0
-}
-
-# Send crosspost notifications to additional channels
-#
-# Crosspost accepts the same params as a regular message.
-# The "channel" field works exactly like params.channel, it accepts string or array.
-# $NOTIFICATION_PERMALINK is available for use in blocks via envsubst.
-#
-# Arguments:
-#   $1 - input_payload: Path to the original input payload file
-#
-# Returns:
-#   0 on success or if no crosspost configured
-#   1 on failure
-crosspost_notification() {
-	local input_payload="$1"
-
-	local crosspost
-	crosspost=$(jq '.params.crosspost // {}' "$input_payload")
-
-	if [[ -z "${crosspost}" ]] || [[ "${crosspost}" == "{}" ]]; then
-		echo "crosspost_notification:: crosspost is empty, skipping."
-		return 0
-	fi
-
-	# Extract channel(s) and normalize to array format.
-	# Supports both crosspost.channel and crosspost.channels for compatibility.
-	local channels_json
-	channels_json=$(jq '.params.crosspost.channels // .params.crosspost.channel // null' "$input_payload")
-	if [[ "$channels_json" == "null" ]] || [[ -z "$channels_json" ]]; then
-		echo "crosspost_notification:: channel not set, skipping."
-		return 0
-	fi
-	channels_json=$(echo "${channels_json}" | jq 'if type == "string" then [.] elif type == "array" then . else [] end')
-
-	if [[ "${channels_json}" == "[]" ]]; then
-		echo "crosspost_notification:: channel is empty, skipping."
-		return 0
-	fi
-
-	# Get source from original payload to be used in crosspost
-	local source_json
-	source_json=$(jq '.source // {}' "$input_payload")
-
-	# Check if no_link is set to skip automatic permalink
-	local no_link
-	no_link=$(jq -r '.params.crosspost.no_link // false' "$input_payload")
-
-	# Get all crosspost params except channel selectors and no_link.
-	local crosspost_params
-	crosspost_params=$(jq '.params.crosspost | del(.channel, .channels, .no_link)' "$input_payload")
-
-	# Save the original permalink before the loop, as send_notification overwrites NOTIFICATION_PERMALINK
-	local original_permalink="$NOTIFICATION_PERMALINK"
-
-	# By default, append a permalink block unless no_link is true
-	if [[ "$no_link" != "true" ]]; then
-		# Add a context block with the permalink at the end of blocks
-		# shellcheck disable=SC2016
-		local permalink_block='{"context": {"elements": [{"type": "mrkdwn", "text": "<$NOTIFICATION_PERMALINK|View original message>"}]}}'
-		crosspost_params=$(echo "$crosspost_params" | jq --argjson link "$permalink_block" '.blocks = (.blocks // []) + [$link]')
-	fi
-
-	# Process each channel
-	local channel_count
-	channel_count=$(jq '. | length' <<<"${channels_json}")
-	echo "crosspost_notification:: sending to ${channel_count} channel(s)"
-
-	for ((i = 0; i < channel_count; i++)); do
-		local channel
-		channel=$(jq -r ".[$i]" <<<"${channels_json}")
-		echo "crosspost_notification:: processing channel ${channel}"
-
-		# Restore original permalink before each iteration, as send_notification overwrites it
-		NOTIFICATION_PERMALINK="$original_permalink"
-		export NOTIFICATION_PERMALINK
-
-		# Build full payload: source + crosspost params with channel replaced
-		local crosspost_payload
-		crosspost_payload=$(jq -n \
-			--argjson source "$source_json" \
-			--argjson params "$crosspost_params" \
-			--arg channel "$channel" \
-			'{
-				"source": $source,
-				"params": ($params + {"channel": $channel})
-			}')
-
-		# Write payload to temp file for parsing
-		local temp_payload
-		temp_payload=$(mktemp /tmp/send-to-slack.crosspost-payload.XXXXXX)
-		if ! chmod 0600 "${temp_payload}"; then
-			echo "crosspost_notification:: failed to secure temp payload ${temp_payload}" >&2
-			rm -f "${temp_payload}"
-			return 1
-		fi
-		echo "$crosspost_payload" >"$temp_payload"
-
-		echo "crosspost_notification:: parsing crosspost payload for channel ${channel}" >&2
-
-		# Parse the payload using the same parser as regular messages
-		local parsed_payload
-		if ! parsed_payload=$(parse_payload "$temp_payload"); then
-			echo "crosspost_notification:: failed to parse payload for channel $channel" >&2
-			rm -f "${temp_payload}"
-			continue
-		fi
-
-		echo "crosspost_notification:: sending notification to channel ${channel}" >&2
-
-		if ! send_notification "$parsed_payload"; then
-			echo "crosspost_notification:: failed to send notification to channel $channel" >&2
-			rm -f "${temp_payload}"
-			continue
-		fi
-
-		local block_count
-		block_count=$(echo "$parsed_payload" | jq '.blocks | length // 0')
-		echo "crosspost_notification:: sent to channel ${channel} (blocks=${block_count})" >&2
-		echo "crosspost_notification:: crosspost payload (sanitized):" >&2
-		echo "$parsed_payload" | jq '{channel, blocks: [.blocks[]? | {type: .type}]}' 2>/dev/null >&2
-
-		echo "crosspost_notification:: sent to channel ${channel}"
-		rm -f "${temp_payload}"
-	done
 
 	return 0
 }
@@ -721,6 +609,10 @@ send_notification() {
 	local delay="$RETRY_INITIAL_DELAY"
 	local last_exit_code=0
 
+	local payload_file
+	payload_file=$(mktemp "$_SLACK_WORKSPACE/send_notification.payload.XXXXXX")
+	printf '%s' "$payload" >"$payload_file"
+
 	while [[ "$attempt" -le "$RETRY_MAX_ATTEMPTS" ]]; do
 		echo "send_notification:: posting message to Slack API (attempt ${attempt}/${RETRY_MAX_ATTEMPTS})" >&2
 
@@ -729,7 +621,7 @@ send_notification() {
 		curl_output=$(curl -X POST "${SLACK_API_URL}" \
 			-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
 			-H "Content-type: application/json; charset=utf-8" \
-			-d "${payload}" \
+			-d "@${payload_file}" \
 			--silent --show-error \
 			--max-time 30 \
 			--connect-timeout 10 \
@@ -758,27 +650,20 @@ send_notification() {
 			local error_code
 			error_code=$(echo "$response" | jq -r '.error // "unknown"' 2>/dev/null)
 
-			# Check if error is retryable or not
-			case "$error_code" in
-			"${ERROR_CODES_RETRYABLE[@]}")
-				echo "send_notification:: Rate limited, will retry" >&2
-				last_exit_code=1
-				;;
-			"${ERROR_CODES_TRUE_FAILURES[@]}")
-				# fail immediately
+			if _is_error_in_list "$error_code" "${ERROR_CODES_TRUE_FAILURES[@]}"; then
 				handle_slack_api_error "$response" "send_notification"
 				echo "send_notification:: Full request payload:" >&2
 				jq . <<<"$payload" >&2
 				return 1
-				;;
-			*)
-				# Retries okay
+			elif _is_error_in_list "$error_code" "${ERROR_CODES_RETRYABLE[@]}"; then
+				echo "send_notification:: Rate limited, will retry" >&2
+				last_exit_code=1
+			else
 				echo "send_notification:: Slack API error: $error_code, will retry" >&2
 				echo "send_notification:: Error response:" >&2
 				echo "$response" | jq . >&2 2>/dev/null || echo "$response" >&2
 				last_exit_code=1
-				;;
-			esac
+			fi
 		else
 			break
 		fi
@@ -980,14 +865,14 @@ find_root_dir() {
 	return 1
 }
 
-# Initialize script environment and locate lib directory
+# Initialize script environment and locate root directory
 #
 # Outputs:
-#   Writes lib_dir path to stdout
+#   Writes root_dir path to stdout
 #
 # Returns:
 #   0 on success
-#   1 if lib directory cannot be located
+#   1 if root directory cannot be located
 initialize_script_environment() {
 	local root_dir
 	local lib_dir
@@ -1003,7 +888,7 @@ initialize_script_environment() {
 		return 1
 	fi
 
-	echo "$lib_dir"
+	echo "$root_dir"
 
 	return 0
 }
@@ -1071,16 +956,10 @@ parse_main_args() {
 main() {
 	local input_payload
 	local timestamp
-	local bin_dir
+	local root_dir
 	local parse_result
 
-	if ! bin_dir=$(initialize_script_environment); then
-		return 1
-	fi
-
-	local root_dir
-	if ! root_dir=$(find_root_dir); then
-		echo "main:: cannot determine root directory" >&2
+	if ! root_dir=$(initialize_script_environment); then
 		return 1
 	fi
 
@@ -1112,7 +991,8 @@ main() {
 		return 0
 	fi
 
-	export SEND_TO_SLACK_BIN_DIR="$bin_dir"
+	SEND_TO_SLACK_BIN_DIR="$root_dir"
+	export SEND_TO_SLACK_BIN_DIR
 	export METADATA
 	export SHOW_METADATA
 	export SHOW_PAYLOAD
@@ -1123,18 +1003,11 @@ main() {
 
 	echo "main:: starting task to send notification to Slack from Concourse"
 
-	# Create a temporary directory for this run to ensure cleanup of all temp files
-	local run_temp_dir
-	run_temp_dir=$(mktemp -d /tmp/send-to-slack.run.XXXXXX)
-	if ! chmod 0700 "${run_temp_dir}"; then
-		echo "main:: failed to secure temporary directory ${run_temp_dir}" >&2
-		rm -rf "${run_temp_dir}"
-		return 1
-	fi
-	trap 'rm -rf "$run_temp_dir"' EXIT ERR
+	_SLACK_WORKSPACE=$(mktemp -d /tmp/send-to-slack.run.XXXXXX)
+	export _SLACK_WORKSPACE
+	trap 'rm -rf "$_SLACK_WORKSPACE"' EXIT ERR
 
-	# Use the temp directory for input payload
-	input_payload="${run_temp_dir}/input_payload"
+	input_payload="${_SLACK_WORKSPACE}/input_payload"
 
 	# Process input and write to the designated file in our temp dir
 	if ! process_input_to_file "${input_payload}" "${main_args[@]}"; then
@@ -1167,15 +1040,29 @@ main() {
 		return 1
 	fi
 
-	if [[ -f "${bin_dir}/parse-payload.sh" ]]; then
-		source "${bin_dir}/parse-payload.sh"
+	if [[ -f "${root_dir}/lib/parse-payload.sh" ]]; then
+		source "${root_dir}/lib/parse-payload.sh"
 	else
-		echo "main:: cannot locate parse-payload.sh at ${bin_dir}/parse-payload.sh" >&2
+		echo "main:: cannot locate parse-payload.sh at ${root_dir}/lib/parse-payload.sh" >&2
+		return 1
+	fi
+
+	if [[ -f "${root_dir}/bin/crosspost.sh" ]]; then
+		source "${root_dir}/bin/crosspost.sh"
+	else
+		echo "main:: cannot locate crosspost.sh at ${root_dir}/bin/crosspost.sh" >&2
+		return 1
+	fi
+
+	if [[ -f "${root_dir}/bin/replies.sh" ]]; then
+		source "${root_dir}/bin/replies.sh"
+	else
+		echo "main:: cannot locate replies.sh at ${root_dir}/bin/replies.sh" >&2
 		return 1
 	fi
 
 	local parsed_payload_file
-	parsed_payload_file="${run_temp_dir}/parsed_payload"
+	parsed_payload_file="${_SLACK_WORKSPACE}/parsed_payload"
 	if ! parse_payload "${input_payload}" >"${parsed_payload_file}"; then
 		echo "main:: failed to parse payload" >&2
 		return 1
@@ -1184,46 +1071,26 @@ main() {
 	parsed_payload=$(cat "${parsed_payload_file}")
 	rm -f "${parsed_payload_file}"
 
-	# Handle create_thread: send first block as regular message, then remaining blocks in thread
-	local create_thread
-	create_thread=$(jq -r '.params.create_thread // false' "${input_payload}")
-	if [[ "$create_thread" == "true" ]]; then
-		local block_count
-		block_count=$(echo "$parsed_payload" | jq '.blocks | length')
-
-		if ((block_count > 1)); then
-			echo "main:: create_thread is true, sending first block as regular message"
-
-			# Extract first block
-			local first_block_payload
-			first_block_payload=$(echo "$parsed_payload" | jq '{channel: .channel, blocks: [.blocks[0]]}')
-
-			# Send first block as regular message
-			if ! send_notification "$first_block_payload"; then
-				echo "main:: failed to send first block message" >&2
-				return 1
-			fi
-
-			# Get thread_ts from the response
-			local thread_ts
-			thread_ts=$(echo "$RESPONSE" | jq -r '.ts // empty')
-
-			if [[ -z "$thread_ts" || "$thread_ts" == "null" ]]; then
-				echo "main:: failed to get thread_ts from first message response" >&2
-				return 1
-			fi
-
-			# Modify parsed_payload to include thread_ts and exclude first block (send remaining blocks)
-			parsed_payload=$(echo "$parsed_payload" | jq --arg thread_ts "$thread_ts" '. + {thread_ts: $thread_ts} | .blocks = .blocks[1:]')
-
-			echo "main:: sending remaining blocks as thread reply with thread_ts: ${thread_ts}"
-		fi
-	fi
-
 	echo "main:: sending notification"
 	if ! send_notification "$parsed_payload"; then
 		echo "main:: failed to send notification" >&2
 		return 1
+	fi
+
+	# Capture ts from primary message for use as thread anchor in replies
+	local primary_ts
+	primary_ts=$(echo "$RESPONSE" | jq -r '.ts // empty')
+
+	# Resolve thread_ts for replies: prefer the one in parsed_payload (thread_ts path),
+	# fall back to primary message ts
+	local reply_thread_ts
+	reply_thread_ts=$(echo "$parsed_payload" | jq -r '.thread_ts // empty')
+	if [[ -z "$reply_thread_ts" || "$reply_thread_ts" == "null" ]]; then
+		reply_thread_ts="${primary_ts:-}"
+	fi
+
+	if ! send_thread_replies "${input_payload}" "$reply_thread_ts" "$parsed_payload"; then
+		echo "main:: send_thread_replies encountered failures, continuing" >&2
 	fi
 
 	if ! crosspost_notification "${input_payload}"; then
@@ -1261,5 +1128,8 @@ main() {
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+	set -eo pipefail
+	umask 077
 	main "$@"
+	exit $?
 fi

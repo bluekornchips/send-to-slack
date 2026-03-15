@@ -3,11 +3,6 @@
 # Build script for send-to-slack Docker image
 # Builds the Dockerfile and optionally runs healthcheck/test message
 #
-# Only enable strict error handling when executed directly, not when sourced
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-	set -eo pipefail
-fi
-
 DOCKER_IMAGE_NAME="${DOCKER_IMAGE_NAME:-send-to-slack}"
 DOCKER_IMAGE_TAG="${DOCKER_IMAGE_TAG:-local}"
 GITHUB_ACTION="${GITHUB_ACTION:-false}"
@@ -402,7 +397,8 @@ send_test_message() {
 		dockerfile_display="Dockerfile.${DOCKERFILE_CHOICE}"
 	fi
 
-	payload_file=$(mktemp)
+	payload_file=$(mktemp /tmp/build-sh.payload.XXXXXX)
+	chmod 0600 "$payload_file"
 
 	# Always use table format
 	# Try to get branch and commit from git if not available from CI metadata
@@ -622,6 +618,8 @@ main() {
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+	set -eo pipefail
+	umask 077
 	main "$@"
 	exit $?
 fi

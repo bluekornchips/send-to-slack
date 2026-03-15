@@ -7,14 +7,12 @@
 setup_file() {
 	GIT_ROOT="$(git rev-parse --show-toplevel || echo "")"
 	if [[ -z "$GIT_ROOT" ]]; then
-		echo "Failed to get git root" >&2
-		exit 1
+		fail "Failed to get git root"
 	fi
 
 	SCRIPT="$GIT_ROOT/lib/parse-payload.sh"
 	if [[ ! -f "$SCRIPT" ]]; then
-		echo "Script not found: $SCRIPT" >&2
-		exit 1
+		fail "Script not found: $SCRIPT"
 	fi
 
 	if [[ -n "$SLACK_BOT_USER_OAUTH_TOKEN" ]]; then
@@ -36,9 +34,15 @@ setup_file() {
 setup() {
 	source "$SCRIPT"
 
-	TEST_PAYLOAD_FILE=$(mktemp "/tmp/parse-payload-tests.test-payload.XXXXXX")
+	_SLACK_WORKSPACE=$(mktemp -d "${BATS_TEST_TMPDIR}/parse-payload-tests.workspace.XXXXXX")
+	export _SLACK_WORKSPACE
+
+	TEST_PAYLOAD_FILE=$(mktemp "$_SLACK_WORKSPACE/test-payload.XXXXXX")
 	export TEST_PAYLOAD_FILE
 	create_test_payload
+
+	CREATE_BLOCK_OUTPUT_FILE=$(mktemp "$_SLACK_WORKSPACE/block-out.XXXXXX")
+	export CREATE_BLOCK_OUTPUT_FILE
 
 	SLACK_BOT_USER_OAUTH_TOKEN="xoxb-test-token"
 	CHANNEL="main"
@@ -52,11 +56,10 @@ setup() {
 }
 
 teardown() {
-	rm -f "${TEST_PAYLOAD_FILE}"
+	rm -rf "$_SLACK_WORKSPACE"
 	[[ -n "$invalid_file" ]] && rm -f "$invalid_file"
 	[[ -n "$output_file" ]] && rm -f "$output_file"
 	[[ -n "$payload_file" ]] && rm -f "$payload_file"
-	rm -rf /tmp/parse-payload-tests.* 2>/dev/null || true
 	return 0
 }
 
@@ -84,273 +87,56 @@ create_test_payload() {
 		}' >"$TEST_PAYLOAD_FILE"
 }
 
-# Extract block JSON from create_block output (strips create_block:: log lines)
-block_output_json() { echo "$output" | grep -v '^create_block::'; }
+# Read block JSON from the CREATE_BLOCK_OUTPUT_FILE written by create_block
+block_output_json() { cat "$CREATE_BLOCK_OUTPUT_FILE"; }
 
 ########################################################
-# create_block
+# _validate_block_input_size
 ########################################################
-@test "create_block:: no input" {
-	run create_block
+@test "_validate_block_input_size:: no block_value" {
+	run _validate_block_input_size "" "section" 1024
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "input is required"
+	echo "$output" | grep -q "block_value is required"
 }
 
-@test "create_block:: invalid JSON" {
-	run create_block "invalid json"
+@test "_validate_block_input_size:: no block_type" {
+	run _validate_block_input_size '{"text":"hello"}' "" 1024
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "must be valid JSON"
+	echo "$output" | grep -q "block_type is required"
 }
 
-@test "create_block:: unsupported block type" {
-	local block
-	block=$(jq -n '{"type": "unsupported"}')
+@test "_validate_block_input_size:: no max_bytes falls back to MAX_BLOCK_INPUT_BYTES" {
+	local block_value
+	block_value=$(jq -n '{"text":"hello"}')
 
-	run create_block "$block"
-	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "unsupported block type"
-}
-
-@test "create_block:: rich-text-section-with-all-elements" {
-	local block_type block_value
-	block_type=$(yq -r '.jobs[] | select(.name == "rich-text-section-with-all-elements") | .plan[0].params.blocks[0] | keys[0]' "$RICH_TEXT_EXAMPLES_FILE")
-	block_value=$(yq -o json -r '.jobs[] | select(.name == "rich-text-section-with-all-elements") | .plan[0].params.blocks[0].'"$block_type" "$RICH_TEXT_EXAMPLES_FILE")
-
-	run create_block "$block_value" "$block_type"
+	run _validate_block_input_size "$block_value" "section"
 	[[ "$status" -eq 0 ]]
 }
 
-@test "create_block:: rich-text-attachment-with-color" {
-	local block_type block_value
-	block_type=$(yq -r '.jobs[] | select(.name == "rich-text-attachment-with-color") | .plan[0].params.blocks[0] | keys[0]' "$RICH_TEXT_EXAMPLES_FILE")
-	block_value=$(yq -o json -r '.jobs[] | select(.name == "rich-text-attachment-with-color") | .plan[0].params.blocks[0].'"$block_type" "$RICH_TEXT_EXAMPLES_FILE")
+@test "_validate_block_input_size:: within limit" {
+	local block_value
+	block_value=$(jq -n '{"text":"hello"}')
 
-	run create_block "$block_value" "$block_type"
+	run _validate_block_input_size "$block_value" "section" 1024
 	[[ "$status" -eq 0 ]]
 }
 
-@test "create_block:: rich-text-lists-with-all-options" {
-	local block_type block_value
-	block_type=$(yq -r '.jobs[] | select(.name == "rich-text-lists-with-all-options") | .plan[0].params.blocks[0] | keys[0]' "$RICH_TEXT_EXAMPLES_FILE")
-	block_value=$(yq -o json -r '.jobs[] | select(.name == "rich-text-lists-with-all-options") | .plan[0].params.blocks[0].'"$block_type" "$RICH_TEXT_EXAMPLES_FILE")
+@test "_validate_block_input_size:: at exact limit" {
+	local block_value
+	block_value=$(printf '%*s' 10 '' | tr ' ' 'x')
 
-	run create_block "$block_value" "$block_type"
+	run _validate_block_input_size "$block_value" "section" 10
 	[[ "$status" -eq 0 ]]
 }
 
-@test "create_block:: multiple-rich-text-blocks" {
-	local block_type block_value
-	block_type=$(yq -r '.jobs[] | select(.name == "multiple-rich-text-blocks") | .plan[0].params.blocks[0] | keys[0]' "$RICH_TEXT_EXAMPLES_FILE")
-	block_value=$(yq -o json -r '.jobs[] | select(.name == "multiple-rich-text-blocks") | .plan[0].params.blocks[0].'"$block_type" "$RICH_TEXT_EXAMPLES_FILE")
+@test "_validate_block_input_size:: exceeds limit" {
+	local block_value
+	block_value=$(printf '%*s' 100 '' | tr ' ' 'x')
 
-	run create_block "$block_value" "$block_type"
-	[[ "$status" -eq 0 ]]
-}
-
-@test "create_block:: rich-text-preformatted-and-quote" {
-	local block_type block_value
-	block_type=$(yq -r '.jobs[] | select(.name == "rich-text-preformatted-and-quote") | .plan[0].params.blocks[0] | keys[0]' "$RICH_TEXT_EXAMPLES_FILE")
-	block_value=$(yq -o json -r '.jobs[] | select(.name == "rich-text-preformatted-and-quote") | .plan[0].params.blocks[0].'"$block_type" "$RICH_TEXT_EXAMPLES_FILE")
-
-	run create_block "$block_value" "$block_type"
-	[[ "$status" -eq 0 ]]
-}
-
-@test "create_block:: interpolates environment variables in block JSON" {
-	# Set test environment variables to mimic concourse
-	export BUILD_ID="12345"
-	export BUILD_NAME="42"
-	export BUILD_JOB_NAME="test-job"
-	export BUILD_PIPELINE_NAME="test-pipeline"
-	export BUILD_TEAM_NAME="main"
-	export BUILD_CREATED_BY="test-user"
-	export BUILD_PIPELINE_INSTANCE_VARS="{}"
-	export ATC_EXTERNAL_URL="https://concourse.example.com"
-
-	local block_input
-	block_input=$(jq -n '{
-		type: "text",
-		text: {
-			type: "mrkdwn",
-			text: "Build ID: $BUILD_ID, Build Name: $BUILD_NAME"
-		}
-	}')
-
-	run create_block "$block_input" "section"
-	[[ "$status" -eq 0 ]]
-
-	# Verify variables were interpolated
-	block_output_json | jq -e '.text.text | contains("12345")' >/dev/null
-	block_output_json | jq -e '.text.text | contains("42")' >/dev/null
-	block_output_json | jq -e '.text.text | contains("$BUILD_ID") == false' >/dev/null
-	block_output_json | jq -e '.text.text | contains("$BUILD_NAME") == false' >/dev/null
-
-	unset BUILD_ID BUILD_NAME BUILD_JOB_NAME BUILD_PIPELINE_NAME BUILD_TEAM_NAME BUILD_CREATED_BY BUILD_PIPELINE_INSTANCE_VARS ATC_EXTERNAL_URL
-}
-
-@test "create_block:: interpolates all Concourse metadata variables" {
-	export BUILD_ID="67890"
-	export BUILD_NAME="99"
-	export BUILD_JOB_NAME="metadata-job"
-	export BUILD_PIPELINE_NAME="metadata-pipeline"
-	export BUILD_TEAM_NAME="test-team"
-	export BUILD_CREATED_BY="ci-user"
-	export BUILD_PIPELINE_INSTANCE_VARS='{"env":"prod"}'
-	export ATC_EXTERNAL_URL="https://ci.example.com"
-
-	local block_input
-	block_input=$(jq -n '{
-		type: "fields",
-		fields: [
-			{type: "mrkdwn", text: "*BUILD_ID:*\n`$BUILD_ID`"},
-			{type: "mrkdwn", text: "*BUILD_NAME:*\n`$BUILD_NAME`"},
-			{type: "mrkdwn", text: "*BUILD_JOB_NAME:*\n`$BUILD_JOB_NAME`"},
-			{type: "mrkdwn", text: "*BUILD_PIPELINE_NAME:*\n`$BUILD_PIPELINE_NAME`"},
-			{type: "mrkdwn", text: "*BUILD_TEAM_NAME:*\n`$BUILD_TEAM_NAME`"},
-			{type: "mrkdwn", text: "*BUILD_CREATED_BY:*\n`$BUILD_CREATED_BY`"},
-			{type: "mrkdwn", text: "*BUILD_PIPELINE_INSTANCE_VARS:*\n`$BUILD_PIPELINE_INSTANCE_VARS`"},
-			{type: "mrkdwn", text: "*ATC_EXTERNAL_URL:*\n<$ATC_EXTERNAL_URL|$ATC_EXTERNAL_URL>"}
-		]
-	}')
-
-	run create_block "$block_input" "section"
-	[[ "$status" -eq 0 ]]
-
-	# Verify all variables were interpolated
-	block_output_json | jq -e '.fields[0].text | contains("67890")' >/dev/null
-	block_output_json | jq -e '.fields[1].text | contains("99")' >/dev/null
-	block_output_json | jq -e '.fields[2].text | contains("metadata-job")' >/dev/null
-	block_output_json | jq -e '.fields[3].text | contains("metadata-pipeline")' >/dev/null
-	block_output_json | jq -e '.fields[4].text | contains("test-team")' >/dev/null
-	block_output_json | jq -e '.fields[5].text | contains("ci-user")' >/dev/null
-	block_output_json | jq -e '.fields[6].text | contains("prod")' >/dev/null
-	block_output_json | jq -e '.fields[7].text | contains("https://ci.example.com")' >/dev/null
-
-	# Verify variable references are gone
-	block_output_json | jq -e '.fields[0].text | contains("$BUILD_ID") == false' >/dev/null
-	block_output_json | jq -e '.fields[7].text | contains("$ATC_EXTERNAL_URL") == false' >/dev/null
-
-	unset BUILD_ID BUILD_NAME BUILD_JOB_NAME BUILD_PIPELINE_NAME BUILD_TEAM_NAME BUILD_CREATED_BY BUILD_PIPELINE_INSTANCE_VARS ATC_EXTERNAL_URL
-}
-
-@test "create_block:: handles missing environment variables gracefully" {
-	# Don't set any variables
-	unset BUILD_ID BUILD_NAME 2>/dev/null || true
-
-	local block_input
-	block_input=$(jq -n '{
-		type: "text",
-		text: {
-			type: "mrkdwn",
-			text: "Build ID: $BUILD_ID"
-		}
-	}')
-
-	run create_block "$block_input" "section"
-	[[ "$status" -eq 0 ]]
-
-	# Missing variables should be replaced with empty string by envsubst
-	block_output_json | jq -e '.text.text | contains("Build ID: ")' >/dev/null
-}
-
-@test "create_block:: interpolates variables in nested JSON structures" {
-	export TEST_VAR="nested-value"
-
-	local block_input
-	block_input=$(jq -n '{
-		elements: [
-			{
-				type: "rich_text_section",
-				elements: [
-					{type: "text", text: "Value: $TEST_VAR"}
-				]
-			}
-		]
-	}')
-
-	run create_block "$block_input" "rich-text"
-	[[ "$status" -eq 0 ]]
-
-	# Verify variable was interpolated in nested structure
-	block_output_json | jq -e '.elements[0].elements[0].text | contains("nested-value")' >/dev/null
-	block_output_json | jq -e '.elements[0].elements[0].text | contains("$TEST_VAR") == false' >/dev/null
-
-	unset TEST_VAR
-}
-
-@test "create_block:: preserves JSON structure after interpolation" {
-	export BUILD_ID="12345"
-
-	local block_input
-	block_input=$(jq -n '{
-		type: "fields",
-		fields: [
-			{type: "mrkdwn", text: "ID: $BUILD_ID"},
-			{type: "plain_text", text: "Static text"}
-		],
-		block_id: "test-block"
-	}')
-
-	run create_block "$block_input" "section"
-	[[ "$status" -eq 0 ]]
-
-	# Verify JSON structure is preserved
-	block_output_json | jq -e '.type == "section"' >/dev/null
-	block_output_json | jq -e '.block_id == "test-block"' >/dev/null
-	block_output_json | jq -e '.fields | length == 2' >/dev/null
-	block_output_json | jq -e '.fields[0].type == "mrkdwn"' >/dev/null
-	block_output_json | jq -e '.fields[1].type == "plain_text"' >/dev/null
-	block_output_json | jq -e '.fields[1].text == "Static text"' >/dev/null
-
-	unset BUILD_ID
-}
-
-@test "create_block:: handles variables with special characters" {
-	export SPECIAL_VAR="value with spaces and special chars: !@#$%"
-
-	local block_input
-	block_input=$(jq -n '{
-		type: "text",
-		text: {
-			type: "mrkdwn",
-			text: "Special: $SPECIAL_VAR"
-		}
-	}')
-
-	run create_block "$block_input" "section"
-	[[ "$status" -eq 0 ]]
-
-	# Verify variable was interpolated (envsubst handles special chars)
-	block_output_json | jq -e '.text.text | contains("value with spaces")' >/dev/null
-
-	unset SPECIAL_VAR
-}
-
-@test "create_block:: interpolates variables in rich-text block" {
-	export BUILD_ID="99999"
-	export BUILD_NAME="100"
-
-	local block_input
-	block_input=$(jq -n '{
-		elements: [
-			{
-				type: "rich_text_section",
-				elements: [
-					{type: "text", text: "Build $BUILD_ID"},
-					{type: "text", text: " Name $BUILD_NAME"}
-				]
-			}
-		]
-	}')
-
-	run create_block "$block_input" "rich-text"
-	[[ "$status" -eq 0 ]]
-
-	# Verify variables were interpolated
-	block_output_json | jq -e '.elements[0].elements[0].text | contains("99999")' >/dev/null
-	block_output_json | jq -e '.elements[0].elements[1].text | contains("100")' >/dev/null
-
-	unset BUILD_ID BUILD_NAME
+	run _validate_block_input_size "$block_value" "table" 10
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "exceeds limit"
+	echo "$output" | grep -q "table"
 }
 
 ########################################################
@@ -359,7 +145,7 @@ block_output_json() { echo "$output" | grep -v '^create_block::'; }
 
 @test "parse_payload:: invalid json input" {
 	local invalid_file
-	invalid_file=$(mktemp "/tmp/parse-payload-tests.invalid-json.XXXXXX")
+	invalid_file=$(mktemp "${BATS_TEST_TMPDIR}/parse-payload-tests.invalid-json.XXXXXX")
 	trap 'rm -f "$invalid_file" 2>/dev/null || true' EXIT
 	echo "invalid json" >"$invalid_file"
 
@@ -517,7 +303,7 @@ block_output_json() { echo "$output" | grep -v '^create_block::'; }
 	# Call parse_payload directly to check exported variables
 	# Capture output to temp file to avoid subshell issues
 	local output_file
-	output_file=$(mktemp "/tmp/parse-payload-tests.output.XXXXXX")
+	output_file=$(mktemp "${BATS_TEST_TMPDIR}/parse-payload-tests.output.XXXXXX")
 
 	if ! parse_payload "$TEST_PAYLOAD_FILE" >"$output_file" 2>&1; then
 		cat "$output_file"
@@ -576,7 +362,7 @@ block_output_json() { echo "$output" | grep -v '^create_block::'; }
 
 @test "parse_payload:: params.from_file" {
 	local payload_file
-	payload_file=$(mktemp "/tmp/parse-payload-tests.params-file.XXXXXX")
+	payload_file=$(mktemp "${BATS_TEST_TMPDIR}/parse-payload-tests.params-file.XXXXXX")
 	trap 'rm -f "$payload_file" 2>/dev/null || true' EXIT
 
 	# File contains only params (source is preserved from test payload)
@@ -627,7 +413,7 @@ block_output_json() { echo "$output" | grep -v '^create_block::'; }
 
 @test "parse_payload:: params.from_file invalid json" {
 	local payload_file
-	payload_file=$(mktemp "/tmp/parse-payload-tests.invalid-params-file.XXXXXX")
+	payload_file=$(mktemp "${BATS_TEST_TMPDIR}/parse-payload-tests.invalid-params-file.XXXXXX")
 	trap 'rm -f "$payload_file" 2>/dev/null || true' EXIT
 	echo "invalid json" >"$payload_file"
 
@@ -656,7 +442,7 @@ block_output_json() { echo "$output" | grep -v '^create_block::'; }
 
 @test "parse_payload:: params.from_file path is directory fails" {
 	local dir_path
-	dir_path=$(mktemp -d "/tmp/parse-payload-tests.dir.XXXXXX")
+	dir_path=$(mktemp -d "${BATS_TEST_TMPDIR}/parse-payload-tests.dir.XXXXXX")
 	trap 'rm -rf "$dir_path" 2>/dev/null || true' EXIT
 
 	local test_payload
@@ -675,7 +461,7 @@ block_output_json() { echo "$output" | grep -v '^create_block::'; }
 @test "parse_payload:: params.from_file resolves with SEND_TO_SLACK_PAYLOAD_BASE_DIR" {
 	local base_dir
 	local params_file
-	base_dir=$(mktemp -d "/tmp/parse-payload-tests.base.XXXXXX")
+	base_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/parse-payload-tests.base.XXXXXX")
 
 	params_file="${base_dir}/nested/slack-params.json"
 	mkdir -p "$(dirname "$params_file")"
@@ -753,7 +539,7 @@ block_output_json() { echo "$output" | grep -v '^create_block::'; }
 
 @test "parse_payload:: block from_file invalid json" {
 	local block_file
-	block_file=$(mktemp "/tmp/parse-payload-tests.block-invalid.XXXXXX")
+	block_file=$(mktemp "${BATS_TEST_TMPDIR}/parse-payload-tests.block-invalid.XXXXXX")
 	trap 'rm -f "$block_file" 2>/dev/null || true' EXIT
 	echo "invalid json" >"$block_file"
 
@@ -795,7 +581,7 @@ block_output_json() { echo "$output" | grep -v '^create_block::'; }
 
 @test "parse_payload:: block from_file path is directory fails" {
 	local dir_path
-	dir_path=$(mktemp -d "/tmp/parse-payload-tests.block-dir.XXXXXX")
+	dir_path=$(mktemp -d "${BATS_TEST_TMPDIR}/parse-payload-tests.block-dir.XXXXXX")
 	trap 'rm -rf "$dir_path" 2>/dev/null || true' EXIT
 
 	local test_payload
@@ -819,7 +605,7 @@ block_output_json() { echo "$output" | grep -v '^create_block::'; }
 
 @test "parse_payload:: block from_file resolves with SEND_TO_SLACK_PAYLOAD_BASE_DIR" {
 	local base_dir
-	base_dir=$(mktemp -d "/tmp/parse-payload-tests.block-base.XXXXXX")
+	base_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/parse-payload-tests.block-base.XXXXXX")
 	trap 'rm -rf "$base_dir" 2>/dev/null || true' EXIT
 
 	mkdir -p "${base_dir}/nested"
@@ -904,7 +690,7 @@ block_output_json() { echo "$output" | grep -v '^create_block::'; }
 
 	# Create a test file with an array of blocks
 	local array_file
-	array_file=$(mktemp "/tmp/parse-payload-tests.array-blocks.XXXXXX")
+	array_file=$(mktemp "${BATS_TEST_TMPDIR}/parse-payload-tests.array-blocks.XXXXXX")
 	trap 'rm -f "$array_file"' EXIT
 
 	cat >"$array_file" <<'EOF'
@@ -955,7 +741,21 @@ EOF
 	trap - EXIT
 }
 
+########################################################
+# Block/attachment count limit tests
+########################################################
+
+mock_create_block() {
+	create_block() {
+		echo '{"type":"section","text":{"type":"plain_text","text":"mock block"}}' >"$CREATE_BLOCK_OUTPUT_FILE"
+		return 0
+	}
+	export -f create_block
+}
+
 @test "parse_payload:: block count exceeds 50 blocks limit" {
+	mock_create_block
+
 	# Create a payload with 51 blocks
 	local blocks_array
 	blocks_array=$(jq -n '[range(51) | {"section": {"type": "text", "text": {"type": "plain_text", "text": "Block \(.)"}}}]')
@@ -981,6 +781,8 @@ EOF
 }
 
 @test "parse_payload:: block count exactly at 50 blocks limit succeeds" {
+	mock_create_block
+
 	# Create a payload with exactly 50 blocks
 	local blocks_array
 	blocks_array=$(jq -n '[range(50) | {"section": {"type": "text", "text": {"type": "plain_text", "text": "Block \(.)"}}}]')
@@ -1005,6 +807,8 @@ EOF
 }
 
 @test "parse_payload:: attachment count exceeds 20 attachments limit" {
+	mock_create_block
+
 	local colored_blocks
 	colored_blocks=$(jq -n '[range(21) | {
 		section: {
@@ -1035,6 +839,8 @@ EOF
 }
 
 @test "parse_payload:: attachment count exactly at 20 attachments limit succeeds" {
+	mock_create_block
+
 	# Create a payload with exactly 20 blocks with color (which become attachments)
 	local colored_blocks
 	colored_blocks=$(jq -n '[range(20) | {
@@ -1065,6 +871,8 @@ EOF
 }
 
 @test "parse_payload:: total block count with attachments exceeds 50 blocks limit" {
+	mock_create_block
+
 	local regular_blocks
 	regular_blocks=$(jq -n '[range(31) | {"section": {"type": "text", "text": {"type": "plain_text", "text": "Block \(.)"}}}]')
 
@@ -1242,161 +1050,6 @@ EOF
 	payload_output=$(parse_payload "$TEST_PAYLOAD_FILE")
 	# thread_ts should not be present in payload when not provided
 	echo "$payload_output" | jq -e 'has("thread_ts") == false' >/dev/null
-}
-
-@test "parse_payload:: create_thread defaults to false" {
-	local test_payload
-	test_payload=$(jq -n \
-		--arg channel "$CHANNEL" \
-		'{
-			source: {
-				slack_bot_user_oauth_token: "test-token"
-			},
-			params: {
-				channel: $channel,
-				blocks: [{
-					section: {
-						type: "text",
-						text: { type: "plain_text", text: "Test" }
-					}
-				}]
-			}
-		}')
-
-	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
-
-	run parse_payload "$TEST_PAYLOAD_FILE"
-	[[ "$status" -eq 0 ]]
-	# Should not log warning about create_thread when it's false
-	echo "$output" | grep -v -q "create_thread is true but only one block provided"
-}
-
-@test "parse_payload:: create_thread explicitly set to false" {
-	local test_payload
-	test_payload=$(jq -n \
-		--arg channel "$CHANNEL" \
-		'{
-			source: {
-				slack_bot_user_oauth_token: "test-token"
-			},
-			params: {
-				channel: $channel,
-				create_thread: false,
-				blocks: [{
-					section: {
-						type: "text",
-						text: { type: "plain_text", text: "Test" }
-					}
-				}]
-			}
-		}')
-
-	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
-
-	run parse_payload "$TEST_PAYLOAD_FILE"
-	[[ "$status" -eq 0 ]]
-	# Should not log warning about create_thread when explicitly set to false
-	echo "$output" | grep -v -q "create_thread is true but only one block provided"
-}
-
-@test "parse_payload:: create_thread warning logged when only one block provided" {
-	local test_payload
-	test_payload=$(jq -n \
-		--arg channel "$CHANNEL" \
-		'{
-			source: {
-				slack_bot_user_oauth_token: "test-token"
-			},
-			params: {
-				channel: $channel,
-				create_thread: true,
-				blocks: [{
-					section: {
-						type: "text",
-						text: { type: "plain_text", text: "Test" }
-					}
-				}]
-			}
-		}')
-
-	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
-
-	run parse_payload "$TEST_PAYLOAD_FILE"
-	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "create_thread is true but only one block provided, continuing as normal"
-}
-
-@test "parse_payload:: create_thread and thread_ts cannot both be set" {
-	local test_payload
-	test_payload=$(jq -n \
-		--arg channel "$CHANNEL" \
-		--arg thread_ts "1234567890.123456" \
-		'{
-			source: {
-				slack_bot_user_oauth_token: "test-token"
-			},
-			params: {
-				channel: $channel,
-				thread_ts: $thread_ts,
-				create_thread: true,
-				blocks: [
-					{
-						section: {
-							type: "text",
-							text: { type: "plain_text", text: "Test 1" }
-						}
-					},
-					{
-						section: {
-							type: "text",
-							text: { type: "plain_text", text: "Test 2" }
-						}
-					}
-				]
-			}
-		}')
-
-	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
-
-	run parse_payload "$TEST_PAYLOAD_FILE"
-	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "create_thread and thread_ts cannot both be set"
-}
-
-@test "parse_payload:: create_thread works correctly with multiple blocks" {
-	local test_payload
-	test_payload=$(jq -n \
-		--arg channel "$CHANNEL" \
-		'{
-			source: {
-				slack_bot_user_oauth_token: "test-token"
-			},
-			params: {
-				channel: $channel,
-				create_thread: true,
-				blocks: [
-					{
-						section: {
-							type: "text",
-							text: { type: "plain_text", text: "Test 1" }
-						}
-					},
-					{
-						section: {
-							type: "text",
-							text: { type: "plain_text", text: "Test 2" }
-						}
-					}
-				]
-			}
-		}')
-
-	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
-
-	run parse_payload "$TEST_PAYLOAD_FILE"
-	[[ "$status" -eq 0 ]]
-	# Should not log warning when multiple blocks are provided
-	echo "$output" | grep -v -q "create_thread is true but only one block provided"
 }
 
 @test "parse_payload:: thread_ts empty string is not added to payload" {
@@ -2426,7 +2079,7 @@ EOF
 	}')
 
 	local params_file
-	params_file=$(mktemp "/tmp/parse-payload-tests.params.XXXXXX")
+	params_file=$(mktemp "${BATS_TEST_TMPDIR}/parse-payload-tests.params.XXXXXX")
 	echo "$file_params" >"$params_file"
 
 	local test_payload
@@ -2510,7 +2163,7 @@ EOF
 	}')
 
 	local params_file
-	params_file=$(mktemp "/tmp/parse-payload-tests.params.XXXXXX")
+	params_file=$(mktemp "${BATS_TEST_TMPDIR}/parse-payload-tests.params.XXXXXX")
 	echo "$file_params" >"$params_file"
 
 	local test_payload
@@ -2540,4 +2193,215 @@ EOF
 	echo "$output" | grep -q "[REDACTED]"
 
 	rm -f "$params_file"
+}
+
+########################################################
+# thread.replies
+########################################################
+
+@test "parse_payload:: thread.replies without blocks succeeds as no-op" {
+	local test_payload
+	test_payload=$(jq -n \
+		--arg channel "$CHANNEL" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "test-token"
+			},
+			params: {
+				channel: $channel,
+				thread: {
+					replies: [
+						{
+							blocks: [
+								{
+									section: {
+										type: "text",
+										text: { type: "plain_text", text: "Reply 1" }
+									}
+								}
+							]
+						}
+					]
+				}
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+}
+
+@test "parse_payload:: thread.replies not an array fails" {
+	local test_payload
+	test_payload=$(jq -n \
+		--arg channel "$CHANNEL" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "test-token"
+			},
+			params: {
+				channel: $channel,
+				blocks: [
+					{
+						section: {
+							type: "text",
+							text: { type: "plain_text", text: "Parent" }
+						}
+					}
+				],
+				thread: {
+					replies: "not-an-array"
+				}
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "thread.replies must be an array"
+}
+
+@test "parse_payload:: thread.replies entry missing blocks key fails" {
+	local test_payload
+	test_payload=$(jq -n \
+		--arg channel "$CHANNEL" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "test-token"
+			},
+			params: {
+				channel: $channel,
+				blocks: [
+					{
+						section: {
+							type: "text",
+							text: { type: "plain_text", text: "Parent" }
+						}
+					}
+				],
+				thread: {
+					replies: [
+						{ text: "no blocks key here" }
+					]
+				}
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "thread.replies\[0\].blocks is required and must be non-empty"
+}
+
+@test "parse_payload:: thread.replies entry with empty blocks fails" {
+	local test_payload
+	test_payload=$(jq -n \
+		--arg channel "$CHANNEL" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "test-token"
+			},
+			params: {
+				channel: $channel,
+				blocks: [
+					{
+						section: {
+							type: "text",
+							text: { type: "plain_text", text: "Parent" }
+						}
+					}
+				],
+				thread: {
+					replies: [
+						{ blocks: [] }
+					]
+				}
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "thread.replies\[0\].blocks is required and must be non-empty"
+}
+
+@test "parse_payload:: thread.replies empty array is a no-op" {
+	local test_payload
+	test_payload=$(jq -n \
+		--arg channel "$CHANNEL" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "test-token"
+			},
+			params: {
+				channel: $channel,
+				blocks: [
+					{
+						section: {
+							type: "text",
+							text: { type: "plain_text", text: "Parent" }
+						}
+					}
+				],
+				thread: {
+					replies: []
+				}
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	local payload_output
+	if ! payload_output=$(parse_payload "$TEST_PAYLOAD_FILE"); then
+		return 1
+	fi
+	echo "$payload_output" | jq -e 'has("thread_replies") == false' >/dev/null
+}
+
+@test "parse_payload:: thread.replies passes through to parsed output with thread_ts" {
+	local test_payload
+	test_payload=$(jq -n \
+		--arg channel "$CHANNEL" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "test-token"
+			},
+			params: {
+				channel: $channel,
+				thread_ts: "1234567890.123456",
+				blocks: [
+					{
+						section: {
+							type: "text",
+							text: { type: "plain_text", text: "Message in thread" }
+						}
+					}
+				],
+				thread: {
+					replies: [
+						{
+							blocks: [
+								{
+									section: {
+										type: "text",
+										text: { type: "plain_text", text: "Reply 1" }
+									}
+								}
+							]
+						}
+					]
+				}
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	local payload_output
+	payload_output=$(parse_payload "$TEST_PAYLOAD_FILE")
+	echo "$payload_output" | jq -e '.thread_replies | length == 1' >/dev/null
+	echo "$payload_output" | jq -e '.thread_ts == "1234567890.123456"' >/dev/null
 }

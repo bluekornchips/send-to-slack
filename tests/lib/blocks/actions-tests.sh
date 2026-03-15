@@ -6,8 +6,7 @@
 setup_file() {
 	GIT_ROOT="$(git rev-parse --show-toplevel || echo "")"
 	if [[ -z "$GIT_ROOT" ]]; then
-		echo "Failed to get git root" >&2
-		exit 1
+		fail "Failed to get git root"
 	fi
 
 	SCRIPT="$GIT_ROOT/lib/blocks/actions.sh"
@@ -15,13 +14,11 @@ setup_file() {
 	SEND_TO_SLACK_SCRIPT="$GIT_ROOT/bin/send-to-slack.sh"
 
 	if [[ ! -f "$SCRIPT" ]]; then
-		echo "Script not found: $SCRIPT" >&2
-		exit 1
+		fail "Script not found: $SCRIPT"
 	fi
 
 	if [[ ! -f "$EXAMPLES_FILE" ]]; then
-		echo "Examples file not found: $EXAMPLES_FILE" >&2
-		exit 1
+		fail "Examples file not found: $EXAMPLES_FILE"
 	fi
 
 	export GIT_ROOT

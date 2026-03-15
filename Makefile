@@ -3,46 +3,41 @@ TARGET_VERSION ?= $(VERSION)
 SYSTEM_PREFIX := /usr/local
 TAG ?= $(TARGET_VERSION)
 
+# Lint
 lint:
-	find . -name "*.sh" -type f -print0 | xargs -0 shellcheck --shell=bash
-
+	shellcheck --version >/dev/null 2>&1 || (echo "shellcheck is not installed" && exit 1)
+	shellcheck $(shell find . -name "*.sh" -type f)
+#################################################
 # Testing
+#################################################
+
+# Bats
+TEST_FILES := $(shell find tests concourse -name '*-tests.sh' -type f)
+SHELL_FILES := $(shell find . -name "*.sh" -type f)
+BATS_COMMAND := bats --timing --verbose-run
+
 test:
-	clear && bats --timing --verbose-run \
-		./concourse/resource-type/tests/*tests.sh \
-		./tests/lib/file-upload-tests.sh \
-		./tests/lib/parse-payload-tests.sh \
-		./tests/lib/resolve-mentions-tests.sh \
-		./tests/bin/send-to-slack-tests.sh \
-		./tests/lib/blocks/*tests.sh
+	clear && ${BATS_COMMAND} ${TEST_FILES}
 
 test-smoke:
-	clear && SMOKE_TEST=true bats --timing --verbose-run \
-		./tests/smoke-tests.sh
+	clear && RUN_SMOKE_TEST=true ${BATS_COMMAND} ${TEST_FILES} -f "smoke_test::"
 
 test-acceptance:
-	clear && ACCEPTANCE_TEST=true bats --timing --verbose-run \
-		./tests/acceptance-tests.sh
+	clear && RUN_ACCEPTANCE_TEST=true ${BATS_COMMAND} ${TEST_FILES} -f "acceptance_test::"
 
 test-all:
-	clear && SMOKE_TEST=true ACCEPTANCE_TEST=true \
-		bats --timing --verbose-run \
-		./concourse/resource-type/tests/*tests.sh \
-		./tests/lib/*-tests.sh \
-		./tests/bin/*-tests.sh \
-		./tests/lib/blocks/*tests.sh
+	clear && RUN_SMOKE_TEST=true RUN_ACCEPTANCE_TEST=true ${BATS_COMMAND} ${TEST_FILES}
 
 test-in-docker:
 	clear && ./tests/run-tests-in-docker.sh --make "make test"
 
-# concourse
-check-docker-deps:
-	@command -v docker-compose >/dev/null 2>&1 || { echo "Error: docker-compose is required but not installed" >&2; exit 1; }
-
-concourse-up: check-docker-deps
+#################################################
+# Concourse
+#################################################
+concourse-up:
 	docker-compose -f concourse/server.yaml up -d
 
-concourse-down: check-docker-deps
+concourse-down:
 	docker-compose -f concourse/server.yaml down
 
 concourse-load-examples:
@@ -56,3 +51,10 @@ concourse-load-examples:
 			-v TAG=$(TAG) \
 			|| exit 1; \
 	done
+
+concourse-clean-restart:
+	clear && \
+		make concourse-down && \
+		make concourse-up && \
+		./ci/build.sh && \
+		./ci/run-all-examples.sh

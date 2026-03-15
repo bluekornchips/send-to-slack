@@ -4,8 +4,6 @@
 # Coordinates the 3-step file upload process to Slack
 # Ref: https://docs.slack.dev/messaging/working-with-files/#upload
 #
-set -eo pipefail
-umask 077
 
 # Validate file size against Slack's 1 GB limit
 # Ref: https://docs.slack.dev/messaging/working-with-files
@@ -419,6 +417,27 @@ validate_file_upload_input() {
 #   0 if file is valid
 #   1 if file validation fails
 validate_file_path() {
+	# Expand glob patterns in FILE_PATH to a concrete path.
+	# If the path contains a wildcard and matches exactly one file, use that file.
+	# Multiple matches or zero matches are both treated as errors.
+	if [[ "$FILE_PATH" == *"*"* || "$FILE_PATH" == *"?"* ]]; then
+		local matched_files
+		# shellcheck disable=SC2206 # We want to split the glob pattern into an array
+		matched_files=(${FILE_PATH})
+
+		if [[ ${#matched_files[@]} -eq 0 ]] || [[ ! -f "${matched_files[0]}" ]]; then
+			echo "file_upload:: file not found: $FILE_PATH" >&2
+			return 1
+		fi
+
+		if [[ ${#matched_files[@]} -gt 1 ]]; then
+			echo "file_upload:: glob matched ${#matched_files[@]} files, expected exactly 1: $FILE_PATH" >&2
+			return 1
+		fi
+
+		FILE_PATH="${matched_files[0]}"
+	fi
+
 	if [[ ! -f "$FILE_PATH" ]]; then
 		echo "file_upload:: file not found: $FILE_PATH" >&2
 		return 1
@@ -578,13 +597,7 @@ file_upload() {
 	fi
 
 	local upload_payload_file
-	upload_payload_file=$(mktemp /tmp/file-upload.sh.payload.XXXXXX)
-	if ! chmod 0600 "$upload_payload_file"; then
-		echo "file_upload:: failed to secure upload payload file ${upload_payload_file}" >&2
-		rm -f "$upload_payload_file"
-		return 1
-	fi
-	trap 'rm -f "$upload_payload_file"' RETURN EXIT ERR
+	upload_payload_file=$(mktemp "$_SLACK_WORKSPACE/file-upload.payload.XXXXXX")
 
 	jq -n \
 		--arg file_id "$FILE_ID" \
@@ -646,6 +659,8 @@ file_upload() {
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+	set -eo pipefail
+	umask 077
 	file_upload "$@"
 	exit $?
 fi

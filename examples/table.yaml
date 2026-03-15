@@ -115,3 +115,87 @@ jobs:
                             - type: link
                               url: "https://api.slack.com/messaging/composing/layouts"
                               text: "Layout Guide"
+
+  - name: table-size-10x5
+    public: true
+    plan:
+      - task: prepare-table-10x5
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: alpine
+          run:
+            path: sh
+            args:
+              - -c
+              - |
+                set -eo pipefail
+                apk add --no-cache jq >/dev/null 2>&1
+                mkdir -p workspace
+
+                jq -n '
+                  {
+                    table: {
+                      rows: [range(10) as $r |
+                        [range(5) as $c |
+                          {
+                            type: "raw_text",
+                            text: ("r\($r)c\($c)-" + ("x" * (10 + (($r * 5 + $c) % 91))))
+                          }
+                        ]
+                      ]
+                    }
+                  }
+                ' > workspace/table-10x5.json
+          outputs:
+            - name: workspace
+
+      - put: slack-notification
+        params:
+          <<: *common_slack_params
+          blocks:
+            - from_file: workspace/table-10x5.json
+
+  - name: table-size-40x14
+    public: true
+    plan:
+      - task: prepare-table-40x14
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: alpine
+          run:
+            path: sh
+            args:
+              - -c
+              - |
+                set -eo pipefail
+                apk add --no-cache jq >/dev/null 2>&1
+                mkdir -p workspace
+
+                jq -n '
+                  {
+                    table: {
+                      rows: [range(40) as $r |
+                        [range(14) as $c |
+                          {
+                            type: "raw_text",
+                            text: ("r\($r)c\($c) " + ("x" * (7 + (($r * 14 + $c) % 3))))
+                          }
+                        ]
+                      ]
+                    }
+                  }
+                ' > workspace/table-40x14.json
+          outputs:
+            - name: workspace
+
+      - put: slack-notification
+        params:
+          <<: *common_slack_params
+          blocks:
+            - from_file: workspace/table-40x14.json

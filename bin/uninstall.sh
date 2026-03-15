@@ -191,9 +191,15 @@ uninstall_binary() {
 			return 1
 		fi
 
-		# Remove install_root directory if it exists
+		# Remove install_root only if it is a known install path and the resolved target is under it
 		if [[ -n "$install_root" ]] && [[ -d "$install_root" ]]; then
-			rm -rf "$install_root"
+			local allowed_root
+			for allowed_root in "/usr/local/send-to-slack" "${HOME}/.local/share/send-to-slack"; do
+				if [[ "$install_root" == "$allowed_root" ]] && { [[ "$actual_file" == "$install_root"/* ]] || [[ "$actual_file" == "$install_root" ]]; }; then
+					rm -rf "$install_root"
+					break
+				fi
+			done
 		fi
 
 		echo "uninstall_binary:: removed $target"

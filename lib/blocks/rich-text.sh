@@ -3,8 +3,6 @@
 # Rich Text Block implementation for wysiwyg content
 # Ref: https://docs.slack.dev/reference/block-kit/blocks/rich-text-block
 #
-set -eo pipefail
-umask 077
 
 BLOCK_TYPE="rich_text"
 MAX_RICH_TEXT_CHARS=4000
@@ -21,18 +19,24 @@ DOC_URL_RICH_TEXT_BLOCK="https://docs.slack.dev/reference/block-kit/blocks/rich-
 ########################################################
 EXAMPLE_RICH_TEXT_BLOCK='{"elements": [{"type": "rich_text_section", "elements": [{"type": "text", "text": "Content"}]}]}'
 
-# Upload the content as a file if it exceeds the max allowed characters
+# Upload the content as a file when it exceeds the max allowed characters.
+#
+# Inputs:
+# - $1 - extracted_text: plain text that exceeded MAX_RICH_TEXT_CHARS
+#
+# Side Effects:
+# - Writes extracted text to a temp file under _SLACK_WORKSPACE, invokes file upload script
+#
+# Outputs:
+# - Block JSON for the file attachment to stdout
+#
+# Returns:
+# - 0 on success, 1 on resolution or upload failure
 handle_oversize_text() {
 	local extracted_text="$1"
 
 	local file_path
-	file_path=$(mktemp /tmp/rich-text.sh.oversize.XXXXXX)
-	if ! chmod 0600 "$file_path"; then
-		echo "handle_oversize_text:: failed to secure temp file ${file_path}" >&2
-		rm -f "$file_path"
-		return 1
-	fi
-	trap 'rm -f "$file_path"' RETURN EXIT ERR
+	file_path=$(mktemp "$_SLACK_WORKSPACE/rich-text.oversize.XXXXXX")
 
 	# Write the extracted text to the file
 	echo "$extracted_text" >"$file_path"
@@ -110,13 +114,7 @@ create_rich_text() {
 	fi
 
 	local input_json
-	input_json=$(mktemp /tmp/rich-text.sh.input-json.XXXXXX)
-	if ! chmod 0600 "$input_json"; then
-		echo "create_rich_text:: failed to secure temp file ${input_json}" >&2
-		rm -f "$input_json"
-		return 1
-	fi
-	trap 'rm -f "$input_json"' RETURN EXIT ERR
+	input_json=$(mktemp "$_SLACK_WORKSPACE/rich-text.input-json.XXXXXX")
 	echo "$input" >"$input_json"
 
 	if ! jq . "$input_json" >/dev/null 2>&1; then
@@ -183,5 +181,8 @@ create_rich_text() {
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+	set -eo pipefail
+	umask 077
 	create_rich_text "$@"
+	exit $?
 fi

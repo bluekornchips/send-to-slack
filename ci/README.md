@@ -84,6 +84,7 @@ GitHub Actions mode:
 - `--no-cache` Disable Docker build cache
 - `--healthcheck` Run local health check after build
 - `--send-test-message` Send a test message after build (requires CHANNEL and SLACK_BOT_USER_OAUTH_TOKEN)
+- `--dockerfile <name>` Which Dockerfile to build: `concourse`, `test`, `remote`, or `all` (default: `Docker/Dockerfile`)
 - `-h, --help` Show help
 
 ### Environment Variables
@@ -100,3 +101,52 @@ GitHub Actions mode:
 ### Notes
 
 - build-verification.sh and notification.json are removed; the test-message flow now lives behind `--send-test-message`.
+
+## run-all-examples.sh
+
+Starts a local Concourse environment, loads all example pipelines from `examples/`, and triggers every job in every pipeline in order, waiting for each to finish. Used for end-to-end validation of all Concourse example configurations.
+
+### Behavior
+
+- Starts Concourse via `docker-compose -f concourse/server.yaml up -d`
+- Logs in with `fly` to target `local` (http://localhost:8080, user `local`, password `slacker`)
+- For each `*.yaml` in `examples/`, sets the pipeline and unpauses it
+- Triggers every job in each pipeline in YAML order with `fly trigger-job -w`; stops on first job failure
+
+### Prerequisites
+
+- Docker and docker-compose (Concourse server)
+- `fly` CLI (Concourse client)
+- `yq` (YAML parsing for job names)
+
+### Usage
+
+From the repository root:
+
+```bash
+export SLACK_BOT_USER_OAUTH_TOKEN="xoxb-your-token"
+export CHANNEL="#your-channel"
+./ci/run-all-examples.sh
+```
+
+Or use the Makefile target:
+
+```bash
+make concourse-run-all-examples
+```
+
+### Options
+
+- `--start-from <pipeline/job>` Skip all jobs before this one and resume from here
+- `-h, --help` Show help
+
+### Environment Variables
+
+- `SLACK_BOT_USER_OAUTH_TOKEN` (required): Slack bot OAuth token for pipeline variables
+- `CHANNEL` (required): Primary Slack channel for pipeline variables
+- `SIDE_CHANNEL` (optional): Secondary Slack channel; defaults to empty
+- `TAG` (optional): Docker image tag for the resource type; defaults to contents of `VERSION` file
+
+### Notes
+
+- Jobs listed in the hardcoded `SKIPPED_JOBS` array are silently skipped. This includes `thread-replies/thread-replies-with-thread-ts` and all `video/*` jobs, which require external Slack app configuration not available in a local environment.

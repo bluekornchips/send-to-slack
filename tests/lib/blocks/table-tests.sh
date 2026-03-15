@@ -6,15 +6,13 @@
 setup_file() {
 	GIT_ROOT="$(git rev-parse --show-toplevel || echo "")"
 	if [[ -z "$GIT_ROOT" ]]; then
-		echo "Failed to get git root" >&2
-		exit 1
+		fail "Failed to get git root"
 	fi
 
 	SCRIPT="$GIT_ROOT/lib/blocks/table.sh"
 
 	if [[ ! -f "$SCRIPT" ]]; then
-		echo "Script not found: $SCRIPT" >&2
-		exit 1
+		fail "Script not found: $SCRIPT"
 	fi
 
 	export GIT_ROOT
@@ -24,12 +22,29 @@ setup_file() {
 setup() {
 	source "$SCRIPT"
 
+	_SLACK_WORKSPACE=$(mktemp -d "${BATS_TEST_TMPDIR}/table-tests.workspace.XXXXXX")
+	export _SLACK_WORKSPACE
+
+	TABLE_BLOCK_OUTPUT_FILE=$(mktemp "$_SLACK_WORKSPACE/table-tests.out.XXXXXX")
+	export TABLE_BLOCK_OUTPUT_FILE
+
 	return 0
+}
+
+teardown() {
+	rm -rf "$_SLACK_WORKSPACE"
 }
 
 ########################################################
 # create_table
 ########################################################
+
+@test "create_table:: TABLE_BLOCK_OUTPUT_FILE is required" {
+	unset TABLE_BLOCK_OUTPUT_FILE
+	run create_table <<<'{"rows": [[{"type": "raw_text", "text": "x"}]]}'
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "TABLE_BLOCK_OUTPUT_FILE is required"
+}
 
 @test "create_table:: handles no input" {
 	run create_table <<<''
@@ -52,18 +67,21 @@ setup() {
 @test "create_table:: with rows" {
 	run create_table <<<'{"rows": [[{"type": "raw_text", "text": "Hello, world!"}]]}'
 	[[ "$status" -eq 0 ]]
+	output=$(cat "$TABLE_BLOCK_OUTPUT_FILE")
 	echo "$output" | jq '.rows[0][0].text == "Hello, world!"' >/dev/null
 }
 
 @test "create_table:: with block_id" {
 	run create_table <<<'{"block_id": "test_id", "rows": [[{"type": "raw_text", "text": "test"}]]}'
 	[[ "$status" -eq 0 ]]
+	output=$(cat "$TABLE_BLOCK_OUTPUT_FILE")
 	echo "$output" | jq '.block_id == "test_id"' >/dev/null
 }
 
 @test "create_table:: with column_settings" {
 	run create_table <<<'{"column_settings": [{"align": "left"}], "rows": [[{"type": "raw_text", "text": "test"}]]}'
 	[[ "$status" -eq 0 ]]
+	output=$(cat "$TABLE_BLOCK_OUTPUT_FILE")
 	echo "$output" | jq '.column_settings[0].align == "left"' >/dev/null
 }
 
@@ -112,6 +130,7 @@ setup() {
 
 	run create_table <<<"$test_input"
 	[[ "$status" -eq 0 ]]
+	output=$(cat "$TABLE_BLOCK_OUTPUT_FILE")
 	echo "$output" | jq -e '.column_settings[0].align == "left"' >/dev/null
 }
 
@@ -124,6 +143,7 @@ setup() {
 
 	run create_table <<<"$test_input"
 	[[ "$status" -eq 0 ]]
+	output=$(cat "$TABLE_BLOCK_OUTPUT_FILE")
 	echo "$output" | jq -e '.column_settings[0].align == "center"' >/dev/null
 }
 
@@ -136,6 +156,7 @@ setup() {
 
 	run create_table <<<"$test_input"
 	[[ "$status" -eq 0 ]]
+	output=$(cat "$TABLE_BLOCK_OUTPUT_FILE")
 	echo "$output" | jq -e '.column_settings[0].align == "right"' >/dev/null
 }
 
@@ -148,6 +169,7 @@ setup() {
 
 	run create_table <<<"$test_input"
 	[[ "$status" -eq 0 ]]
+	output=$(cat "$TABLE_BLOCK_OUTPUT_FILE")
 	echo "$output" | jq -e '.column_settings[0].is_wrapped == true' >/dev/null
 }
 
@@ -160,6 +182,7 @@ setup() {
 
 	run create_table <<<"$test_input"
 	[[ "$status" -eq 0 ]]
+	output=$(cat "$TABLE_BLOCK_OUTPUT_FILE")
 	echo "$output" | jq -e '.column_settings[0].is_wrapped == false' >/dev/null
 }
 
@@ -181,6 +204,7 @@ setup() {
 
 	run create_table <<<"$test_input"
 	[[ "$status" -eq 0 ]]
+	output=$(cat "$TABLE_BLOCK_OUTPUT_FILE")
 	echo "$output" | jq -e '.rows[0][0].type == "rich_text"' >/dev/null
 	echo "$output" | jq -e '.rows[0][0].elements[0].elements[0].type == "link"' >/dev/null
 	echo "$output" | jq -e '.rows[0][0].elements[0].elements[0].url == "https://slack.com"' >/dev/null
@@ -204,6 +228,7 @@ setup() {
 
 	run create_table <<<"$test_input"
 	[[ "$status" -eq 0 ]]
+	output=$(cat "$TABLE_BLOCK_OUTPUT_FILE")
 	echo "$output" | jq -e '.rows[0][0].type == "rich_text"' >/dev/null
 	echo "$output" | jq -e '.rows[0][0].elements[0].elements[0].style.bold == true' >/dev/null
 }
@@ -231,6 +256,7 @@ setup() {
 
 	run create_table <<<"$test_input"
 	[[ "$status" -eq 0 ]]
+	output=$(cat "$TABLE_BLOCK_OUTPUT_FILE")
 	echo "$output" | jq -e '.rows | length == 2' >/dev/null
 	echo "$output" | jq -e '.rows[0][0].type == "raw_text"' >/dev/null
 	echo "$output" | jq -e '.rows[1][1].type == "rich_text"' >/dev/null
@@ -263,4 +289,79 @@ setup() {
 	run create_table <<<"$(jq -n --argjson settings "$many_settings" --argjson rows "$rows_json" '{column_settings: $settings, rows: $rows}')"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "column_settings cannot exceed 20 entries"
+}
+
+########################################################
+# Table overflow (char count > TABLE_MAX_CHAR_COUNT)
+########################################################
+
+@test "create_table:: overflow produces context block and file block array" {
+	TABLE_MAX_CHAR_COUNT=1
+	export TABLE_MAX_CHAR_COUNT
+
+	local overflow_input
+	overflow_input=$(jq -n '{rows: [[{type: "raw_text", text: "AB"}, {type: "raw_text", text: "CD"}]]}')
+
+	run create_table <<<"$overflow_input"
+	[[ "$status" -eq 0 ]]
+
+	local output_content
+	output_content=$(cat "$TABLE_BLOCK_OUTPUT_FILE")
+
+	echo "$output_content" | jq -e 'type == "array"' >/dev/null
+	echo "$output_content" | jq -e 'length == 2' >/dev/null
+	echo "$output_content" | jq -e '.[0].type == "context"' >/dev/null
+	echo "$output_content" | jq -e '.[0].elements[0].text | test("too large")' >/dev/null
+	echo "$output_content" | jq -e '.[1].file.path | test(".json$")' >/dev/null
+	echo "$output_content" | jq -e '.[1].file.title | test("1x2")' >/dev/null
+}
+
+@test "create_table:: overflow context block mentions char count and limit" {
+	TABLE_MAX_CHAR_COUNT=1
+	export TABLE_MAX_CHAR_COUNT
+
+	local overflow_input
+	overflow_input=$(jq -n '{rows: [[{type: "raw_text", text: "Hello"}, {type: "raw_text", text: "World"}]]}')
+
+	run create_table <<<"$overflow_input"
+	[[ "$status" -eq 0 ]]
+
+	local context_text
+	context_text=$(cat "$TABLE_BLOCK_OUTPUT_FILE" | jq -r '.[0].elements[0].text')
+
+	echo "$context_text" | grep -q "chars"
+	echo "$context_text" | grep -q "limit"
+}
+
+@test "create_table:: overflow json file contains original table rows" {
+	TABLE_MAX_CHAR_COUNT=1
+	export TABLE_MAX_CHAR_COUNT
+
+	local overflow_input
+	overflow_input=$(jq -n '{rows: [[{type: "raw_text", text: "r0c0"}, {type: "raw_text", text: "r0c1"}], [{type: "raw_text", text: "r1c0"}, {type: "raw_text", text: "r1c1"}]]}')
+
+	run create_table <<<"$overflow_input"
+	[[ "$status" -eq 0 ]]
+
+	local json_path
+	json_path=$(cat "$TABLE_BLOCK_OUTPUT_FILE" | jq -r '.[1].file.path')
+
+	[[ -f "$json_path" ]]
+	jq -e '.rows | length == 2' "$json_path" >/dev/null
+	jq -e '.rows[0][0].text == "r0c0"' "$json_path" >/dev/null
+	jq -e '.rows[1][1].text == "r1c1"' "$json_path" >/dev/null
+}
+
+@test "create_table:: table within char limit does not fall back to file" {
+	local small_input
+	small_input=$(jq -n '{rows: [[{type: "raw_text", text: "A"}, {type: "raw_text", text: "B"}]]}')
+
+	run create_table <<<"$small_input"
+	[[ "$status" -eq 0 ]]
+
+	local output_content
+	output_content=$(cat "$TABLE_BLOCK_OUTPUT_FILE")
+
+	echo "$output_content" | jq -e 'type == "object"' >/dev/null
+	echo "$output_content" | jq -e '.type == "table"' >/dev/null
 }

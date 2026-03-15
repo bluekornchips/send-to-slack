@@ -19,7 +19,6 @@ setup_file() {
 }
 
 setup() {
-	# shellcheck disable=SC1091,SC1090
 	source "$RESOLVE_SCRIPT"
 	return 0
 }

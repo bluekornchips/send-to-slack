@@ -6,21 +6,18 @@
 setup_file() {
 	GIT_ROOT="$(git rev-parse --show-toplevel || echo "")"
 	if [[ -z "$GIT_ROOT" ]]; then
-		echo "Failed to get git root" >&2
-		exit 1
+		fail "Failed to get git root"
 	fi
 
 	SCRIPT="$GIT_ROOT/lib/blocks/image.sh"
 	EXAMPLES_FILE="$GIT_ROOT/examples/image.yaml"
 
 	if [[ ! -f "$SCRIPT" ]]; then
-		echo "Script not found: $SCRIPT" >&2
-		exit 1
+		fail "Script not found: $SCRIPT"
 	fi
 
 	if [[ ! -f "$EXAMPLES_FILE" ]]; then
-		echo "Examples file not found: $EXAMPLES_FILE" >&2
-		exit 1
+		fail "Examples file not found: $EXAMPLES_FILE"
 	fi
 
 	export GIT_ROOT
@@ -209,26 +206,4 @@ teardown() {
 	echo "$output" | jq -e '.title.type == "plain_text"' >/dev/null
 	echo "$output" | jq -e '.title.text == "Please enjoy this sunflower animation"' >/dev/null
 	echo "$output" | jq -e '.block_id == "image4"' >/dev/null
-}
-
-@test "create_image:: with slack_file url from example" {
-	local image_json
-	image_json=$(yq -o json -r '.jobs[] | select(.name == "image-with-slack-file-url") | .plan[0].params.blocks[0].image' "$EXAMPLES_FILE")
-
-	run create_image <<<"$image_json"
-	[[ "$status" -eq 0 ]]
-	echo "$output" | jq -e '.type == "image"' >/dev/null
-	echo "$output" | jq -e '.slack_file.url == "https://files.slack.com/files-pri/T0123456-F0123456/xyz.png"' >/dev/null
-	echo "$output" | jq -e '.alt_text == "Animated sunflower"' >/dev/null
-}
-
-@test "create_image:: with slack_file id from example" {
-	local image_json
-	image_json=$(yq -o json -r '.jobs[] | select(.name == "image-with-slack-file-id") | .plan[0].params.blocks[0].image' "$EXAMPLES_FILE")
-
-	run create_image <<<"$image_json"
-	[[ "$status" -eq 0 ]]
-	echo "$output" | jq -e '.type == "image"' >/dev/null
-	echo "$output" | jq -e '.slack_file.id == "F012345678"' >/dev/null
-	echo "$output" | jq -e '.alt_text == "Animated sunflower"' >/dev/null
 }

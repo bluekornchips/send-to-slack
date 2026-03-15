@@ -1,0 +1,93 @@
+# Example Concourse CI pipeline for Slack thread replies
+#
+# thread.replies sends additional messages into a thread after the primary message.
+# Each entry in thread.replies becomes a separate Slack message in the thread.
+#
+# When no thread_ts is set, the primary message's ts is used as the thread anchor,
+# so replies attach to the message just sent. With thread_ts, blocks and replies
+# go into an existing thread.
+#
+# Failures in individual replies produce a warning but do not fail the overall run.
+
+resource_types:
+  - name: slack-notification
+    type: registry-image
+    source:
+      repository: sunflowersoftware/send-to-slack
+      tag: ((TAG))
+
+resources:
+  - name: slack-notification
+    type: slack-notification
+    source:
+      slack_bot_user_oauth_token: ((SLACK_BOT_USER_OAUTH_TOKEN))
+
+jobs:
+  # Thread replies after primary message
+  # blocks are posted as the parent message; its ts is used as the thread anchor.
+  # Each entry in thread.replies is sent as a separate reply in that thread.
+  - name: thread-replies-after-primary
+    plan:
+      - put: slack-notification
+        params:
+          channel: ((channel))
+          blocks:
+            - header:
+                text:
+                  type: plain_text
+                  text: "Deployment pipeline started"
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "Starting deployment to production..."
+          thread:
+            replies:
+              - blocks:
+                  - section:
+                      type: text
+                      text:
+                        type: mrkdwn
+                        text: ":white_check_mark: Unit tests passed"
+              - blocks:
+                  - section:
+                      type: text
+                      text:
+                        type: mrkdwn
+                        text: ":white_check_mark: Integration tests passed"
+              - blocks:
+                  - section:
+                      type: text
+                      text:
+                        type: mrkdwn
+                        text: ":rocket: Deployment complete"
+
+  # Thread replies with thread_ts
+  # blocks are posted as a reply to the existing thread identified by thread_ts.
+  # Each entry in thread.replies is then sent as a separate subsequent reply in the same thread.
+  - name: thread-replies-with-thread-ts
+    plan:
+      - put: slack-notification
+        params:
+          channel: ((channel))
+          thread_ts: ((existing_thread_ts))
+          blocks:
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "Build #$BUILD_ID started"
+          thread:
+            replies:
+              - blocks:
+                  - section:
+                      type: text
+                      text:
+                        type: mrkdwn
+                        text: ":package: Dependencies installed"
+              - blocks:
+                  - section:
+                      type: text
+                      text:
+                        type: mrkdwn
+                        text: ":hammer: Build completed successfully"

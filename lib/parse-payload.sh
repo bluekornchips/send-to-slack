@@ -8,7 +8,6 @@
 # Legacy attachments may change in future Slack updates in ways that reduce visibility or utility.
 # See: https://api.slack.com/reference/messaging/payload#legacy
 #
-set -eo pipefail
 
 DANGER_COLOR="#F44336"  # Red
 SUCCESS_COLOR="#4CAF50" # Green
@@ -36,6 +35,7 @@ DEFAULT_DRY_RUN="false"
 MAX_TEXT_LENGTH=40000
 MAX_BLOCKS=50
 MAX_ATTACHMENTS=20
+MAX_BLOCK_INPUT_BYTES=524288 # 512 KiB
 
 ########################################################
 # Documentation URLs
@@ -51,217 +51,46 @@ DOC_URL_BLOCK_KIT_SECTION="https://docs.slack.dev/reference/block-kit/blocks/sec
 DOC_URL_BLOCK_KIT_VIDEO="https://docs.slack.dev/reference/block-kit/blocks/video-block"
 DOC_URL_LEGACY_ATTACHMENTS="https://api.slack.com/reference/messaging/payload#legacy"
 
-# Find the root directory based on this script's location
-# This script is in lib/, so the root is the parent directory
-# Resolves symlinks in a cool way with cd and pwd
-#
-# Outputs:
-#   Writes root_dir path to stdout
-#
-# Returns:
-#   0 on success
-#   1 if root directory cannot be located
-_find_root_dir() {
-	local lib_dir
-	local root_dir
-	local script_path
-
-	if [[ -z "${BASH_SOURCE[0]:-}" ]]; then
-		echo "_find_root_dir:: BASH_SOURCE[0] is not set" >&2
-		return 1
-	fi
-
-	# Get the absolute path of the directory containing this script
-	script_path="${BASH_SOURCE[0]}"
-	if [[ ! "$script_path" = /* ]]; then
-		script_path=$(cd "$(dirname "$script_path")" && pwd)/$(basename "$script_path")
-	fi
-
-	lib_dir=$(cd "$(dirname "$script_path")" && pwd)
-	if [[ -z "$lib_dir" ]]; then
-		echo "_find_root_dir:: cannot determine lib directory" >&2
-		return 1
-	fi
-
-	root_dir=$(dirname "$lib_dir")
-	if [[ -z "$root_dir" ]]; then
-		echo "_find_root_dir:: cannot determine root directory from lib_dir: ${lib_dir}" >&2
-		return 1
-	fi
-
-	echo "$root_dir"
-	return 0
-}
-
-# Resolve script path relative to root directory
+# Validate block input JSON byte size before dispatching to a block script.
+# Catches pathologically large inputs before any subprocess is spawned.
+# Uses bash string length as a fast proxy for byte count.
 #
 # Arguments:
-#   $1 - script_path: Relative path to script from root (lib/ layout)
-#
-# Outputs:
-#   Writes resolved path to stdout
-#
-# Returns:
-#   0 if script found
-#   1 if script not found
-_resolve_block_script_path() {
-	local script_path="$1"
-	local root_dir
-	local full_path
-
-	if ! root_dir=$(_find_root_dir); then
-		return 1
-	fi
-
-	full_path="${root_dir}/${script_path}"
-	if [[ -f "$full_path" ]]; then
-		echo "$full_path"
-		return 0
-	fi
-
-	return 1
-}
-
-# Validate that a block script file exists
-#
-# Arguments:
-#   $1 - script_path: Relative path to script from root
+#   $1 - block_value: raw JSON string for the block
+#   $2 - block_type: block type name, used in error messages
+#   $3 - max_bytes: maximum allowed byte size, defaults to MAX_BLOCK_INPUT_BYTES
 #
 # Returns:
-#   0 if script exists and is executable
-#   1 if script is missing or not executable
-_validate_block_script() {
-	local script_path="$1"
-	local resolved_path
-
-	if ! resolved_path=$(_resolve_block_script_path "$script_path"); then
-		local root_dir
-		root_dir=$(_find_root_dir 2>/dev/null || echo "unknown")
-		echo "_validate_block_script:: block script not found: ${root_dir}/${script_path}" >&2
-		return 1
-	fi
-
-	return 0
-}
-
-create_block() {
-	local block_input="$1"
+#   0 if within limit
+#   1 if over limit or required arguments are missing
+_validate_block_input_size() {
+	local block_value="$1"
 	local block_type="$2"
+	local max_bytes="${3:-${MAX_BLOCK_INPUT_BYTES}}"
 
-	if [[ -z "$block_input" ]]; then
-		echo "create_block:: input is required" >&2
+	if [[ -z "$block_value" ]]; then
+		echo "_validate_block_input_size:: block_value is required" >&2
 		return 1
 	fi
 
-	if ! jq . >/dev/null 2>&1 <<<"$block_input"; then
-		echo "create_block:: block_input must be valid JSON" >&2
+	if [[ -z "$block_type" ]]; then
+		echo "_validate_block_input_size:: block_type is required" >&2
 		return 1
 	fi
 
-	local block
-	local script_path=""
-
-	case "$block_type" in
-	"rich-text") script_path="$RICH_TEXT_BLOCK_FILE" ;;
-	"table") script_path="$TABLE_BLOCK_FILE" ;;
-	"section") script_path="$SECTION_BLOCK_FILE" ;;
-	"header") script_path="$HEADER_BLOCK_FILE" ;;
-	"context") script_path="$CONTEXT_BLOCK_FILE" ;;
-	"divider") script_path="$DIVIDER_BLOCK_FILE" ;;
-	"markdown") script_path="$MARKDOWN_BLOCK_FILE" ;;
-	"actions") script_path="$ACTIONS_BLOCK_FILE" ;;
-	"image") script_path="$IMAGE_BLOCK_FILE" ;;
-	"video") script_path="$VIDEO_BLOCK_FILE" ;;
-	"file") script_path="$FILE_UPLOAD_SCRIPT" ;;
-	*)
-		echo "create_block:: unsupported block type: $block_type. Skipping." >&2
-		echo "create_block:: See supported block types: $DOC_URL_BLOCK_KIT_BLOCKS" >&2
-		return 0
-		;;
-	esac
-
-	if ! _validate_block_script "$script_path"; then
+	if [[ -z "$max_bytes" ]]; then
+		echo "_validate_block_input_size:: max_bytes is required" >&2
 		return 1
 	fi
 
-	local resolved_script_path
-	resolved_script_path=$(_resolve_block_script_path "$script_path")
+	local byte_count
+	byte_count=${#block_value}
 
-	echo "create_block:: invoking block script: ${block_type} (${resolved_script_path})" >&2
-
-	local script_exit_code=0
-	block=$("$resolved_script_path" <<<"$block_input") || script_exit_code=$?
-
-	if [[ "$script_exit_code" -ne 0 ]]; then
-		echo "create_block:: block script failed with exit code $script_exit_code" >&2
-		case "$block_type" in
-		"section")
-			echo "create_block:: See section block docs: $DOC_URL_BLOCK_KIT_SECTION" >&2
-			;;
-		"header")
-			echo "create_block:: See header block docs: $DOC_URL_BLOCK_KIT_HEADER" >&2
-			;;
-		"image")
-			echo "create_block:: See image block docs: $DOC_URL_BLOCK_KIT_IMAGE" >&2
-			;;
-		"context")
-			echo "create_block:: See context block docs: $DOC_URL_BLOCK_KIT_CONTEXT" >&2
-			;;
-		"markdown")
-			echo "create_block:: See markdown block docs: $DOC_URL_BLOCK_KIT_MARKDOWN" >&2
-			;;
-		"rich-text")
-			echo "create_block:: See rich text block docs: $DOC_URL_BLOCK_KIT_RICH_TEXT" >&2
-			;;
-		"actions")
-			echo "create_block:: See actions block docs: $DOC_URL_BLOCK_KIT_ACTIONS" >&2
-			;;
-		"video")
-			echo "create_block:: See video block docs: $DOC_URL_BLOCK_KIT_VIDEO" >&2
-			;;
-		esac
+	if ((byte_count > max_bytes)); then
+		echo "_validate_block_input_size:: '$block_type' block input" \
+			"(${byte_count} bytes) exceeds limit of ${max_bytes} bytes" >&2
 		return 1
 	fi
-
-	if [[ -z "$block" ]]; then
-		echo "create_block:: block script produced no output" >&2
-		return 1
-	fi
-
-	if ! jq . >/dev/null 2>&1 <<<"$block"; then
-		echo "create_block:: block script output is not valid JSON" >&2
-		echo "create_block:: output: $block" >&2
-		return 1
-	fi
-
-	# JSON-escape BUILD_PIPELINE_INSTANCE_VARS if it contains JSON to prevent breaking JSON structure
-	# Ref: https://concourse-ci.org/implementing-resource-types.html#resource-metadata
-	if [[ -n "${BUILD_PIPELINE_INSTANCE_VARS}" ]] && [[ "$BUILD_PIPELINE_INSTANCE_VARS" =~ ^\{.*\}$ ]]; then
-		local escaped_vars
-		escaped_vars=$(echo "$BUILD_PIPELINE_INSTANCE_VARS" | jq -Rs . | sed 's/^"//;s/"$//;s/\\n$//')
-		BUILD_PIPELINE_INSTANCE_VARS="$escaped_vars"
-		export BUILD_PIPELINE_INSTANCE_VARS
-	fi
-
-	# Interpolate environment variables using $VAR syntax
-	block=$(printf '%s' "$block" | envsubst | jq .)
-
-	local output_type
-	output_type=$(echo "$block" | jq -r 'if type == "array" then "array(\(length))" else .type // "unknown" end')
-	echo "create_block:: resolved ${block_type} -> ${output_type}" >&2
-
-	# Validate JSON after interpolation
-	if ! echo "$block" | jq . >/dev/null 2>&1; then
-		echo "create_block:: failed to parse block after variable interpolation" >&2
-		echo "create_block:: interpolated block:" >&2
-		echo "$block" >&2
-		return 1
-	fi
-
-	# Filter out empty values (strings, arrays, objects, and null, from all blocks
-	block=$(echo "$block" | jq 'walk(if . == null or . == "" or . == [] or . == {} or (type == "object" and .type == "text" and (.text == "" or .text == null)) then empty else . end)')
-
-	echo "$block"
 
 	return 0
 }
@@ -507,8 +336,12 @@ load_input_payload_params() {
 		local parsed_params
 		parsed_params=$(echo "$raw_params" | jq '.')
 
+		local parsed_params_file
+		parsed_params_file=$(mktemp "$_SLACK_WORKSPACE/load_payload_params.raw.XXXXXX")
+		echo "$parsed_params" >"$parsed_params_file"
+
 		local updated_payload
-		updated_payload=$(jq --argjson parsed_params "$parsed_params" '.params = $parsed_params' "$INPUT_PAYLOAD")
+		updated_payload=$(jq --slurpfile parsed_params "$parsed_params_file" '.params = $parsed_params[0]' "$INPUT_PAYLOAD")
 		echo "$updated_payload" >"$INPUT_PAYLOAD"
 		local param_keys
 		param_keys=$(echo "$parsed_params" | jq -r 'keys | join(", ")')
@@ -529,8 +362,13 @@ load_input_payload_params() {
 		# Read file content and use it directly as params
 		local file_params
 		file_params=$(jq '.' "$source_file_path")
+
+		local file_params_file
+		file_params_file=$(mktemp "$_SLACK_WORKSPACE/load_payload_params.from_file.XXXXXX")
+		echo "$file_params" >"$file_params_file"
+
 		local updated_payload
-		updated_payload=$(jq --argjson file_params "$file_params" '.params = $file_params' "$INPUT_PAYLOAD")
+		updated_payload=$(jq --slurpfile file_params "$file_params_file" '.params = $file_params[0]' "$INPUT_PAYLOAD")
 		echo "$updated_payload" >"$INPUT_PAYLOAD"
 		local param_keys
 		param_keys=$(jq -r '.params | keys | join(", ")' "$INPUT_PAYLOAD")
@@ -637,15 +475,29 @@ load_configuration() {
 #   0 on success
 #   1 if block processing fails
 process_blocks() {
+	unset BLOCKS_FILE ATTACHMENTS_FILE
+
 	local blocks_json
 	blocks_json=$(jq -r '.params.blocks // []' "$INPUT_PAYLOAD")
+	local blocks_file
+	blocks_file=$(mktemp "$_SLACK_WORKSPACE/process_blocks.blocks.XXXXXX")
+	echo '[]' >"$blocks_file"
+
+	local attachments_file
+	attachments_file=$(mktemp "$_SLACK_WORKSPACE/process_blocks.attachments.XXXXXX")
+	echo '[]' >"$attachments_file"
+
+	BLOCKS_FILE="$blocks_file"
+	ATTACHMENTS_FILE="$attachments_file"
+
+	export BLOCKS_FILE ATTACHMENTS_FILE
+
 	if [[ "$blocks_json" == "[]" ]]; then
-		echo "parse_payload:: params.blocks is required" >&2
-		return 1
+		echo "process_blocks:: no blocks to process, skipping" >&2
+
+		return 0
 	fi
 
-	local blocks="[]"
-	local attachments="[]"
 	local block_index=0
 
 	# Process each block in the blocks array
@@ -675,17 +527,14 @@ process_blocks() {
 
 	local block_count_debug
 	local attachment_count_debug
-	block_count_debug=$(jq '. | length' <<<"$blocks")
-	attachment_count_debug=0
-	if [[ "$attachments" != "[]" ]]; then
-		attachment_count_debug=$(jq '. | length' <<<"$attachments")
-	fi
+	block_count_debug=$(jq '. | length' "$BLOCKS_FILE")
+	attachment_count_debug=$(jq '. | length' "$ATTACHMENTS_FILE")
 	echo "process_blocks:: completed: ${block_count_debug} blocks, ${attachment_count_debug} attachments" >&2
 
 	# Validate block count against Slack's limit of 50 blocks per message
 	# Ref: https://docs.slack.dev/reference/block-kit/blocks
 	local block_count
-	block_count=$(jq '. | length' <<<"$blocks")
+	block_count=$(jq '. | length' "$BLOCKS_FILE")
 	if ((block_count > MAX_BLOCKS)); then
 		echo "parse_payload:: block count ($block_count) exceeds Slack's maximum of $MAX_BLOCKS blocks per message" >&2
 		echo "parse_payload:: See block limits: $DOC_URL_BLOCK_KIT_BLOCKS" >&2
@@ -695,10 +544,8 @@ process_blocks() {
 	# Validate attachment count against Slack's limit of 20 attachments per message
 	# Ref: https://api.slack.com/reference/messaging/payload#legacy
 	# Note: While not deprecated, legacy attachments may change in future Slack updates
-	local attachment_count=0
-	if [[ "$attachments" != "[]" ]]; then
-		attachment_count=$(jq '. | length' <<<"$attachments")
-	fi
+	local attachment_count
+	attachment_count=$(jq '. | length' "$ATTACHMENTS_FILE")
 	if ((attachment_count > MAX_ATTACHMENTS)); then
 		echo "parse_payload:: attachment count ($attachment_count) exceeds Slack's maximum of $MAX_ATTACHMENTS attachments per message" >&2
 		echo "parse_payload:: See attachment limits: $DOC_URL_LEGACY_ATTACHMENTS" >&2
@@ -707,8 +554,8 @@ process_blocks() {
 
 	# Count blocks in attachments (each attachment can contain blocks)
 	local attachment_block_count=0
-	if [[ "$attachments" != "[]" ]]; then
-		attachment_block_count=$(jq '[.[] | .blocks | length] | add' <<<"$attachments")
+	if ((attachment_count > 0)); then
+		attachment_block_count=$(jq '[.[] | .blocks | length] | add' "$ATTACHMENTS_FILE")
 	fi
 	local total_block_count=$((block_count + attachment_block_count))
 	if ((total_block_count > MAX_BLOCKS)); then
@@ -717,11 +564,9 @@ process_blocks() {
 		return 1
 	fi
 
-	# Read thread_ts and create_thread from params
+	# Read thread_ts from params
 	local thread_ts
-	local create_thread
 	thread_ts=$(jq -r '.params.thread_ts // ""' "$INPUT_PAYLOAD")
-	create_thread=$(jq -r '.params.create_thread // false' "$INPUT_PAYLOAD")
 
 	# Convert thread_ts if it's a permalink
 	if [[ -n "$thread_ts" && "$thread_ts" != "null" && "$thread_ts" != "empty" ]]; then
@@ -735,29 +580,51 @@ process_blocks() {
 		thread_ts="$converted_ts"
 	fi
 
-	# Validate mutually exclusive parameters
-	if [[ "$create_thread" == "true" ]] && [[ -n "$thread_ts" && "$thread_ts" != "null" && "$thread_ts" != "empty" ]]; then
-		echo "parse_payload:: create_thread and thread_ts cannot both be set. Use create_thread to create a new thread or thread_ts to reply to an existing thread." >&2
-		return 1
-	fi
-
-	# Handle create_thread logic
-	if [[ "$create_thread" == "true" ]]; then
-		if ((total_block_count <= 1)); then
-			echo "parse_payload:: create_thread is true but only one block provided, continuing as normal" >&2
+	# Validate thread.replies if present
+	local thread_replies_raw
+	thread_replies_raw=$(jq '.params.thread.replies // empty' "$INPUT_PAYLOAD")
+	if [[ -n "$thread_replies_raw" && "$thread_replies_raw" != "null" ]]; then
+		if ! echo "$thread_replies_raw" | jq -e 'type == "array"' >/dev/null 2>&1; then
+			echo "parse_payload:: thread.replies must be an array" >&2
+			return 1
 		fi
+
+		local reply_count
+		reply_count=$(echo "$thread_replies_raw" | jq 'length')
+		for ((ri = 0; ri < reply_count; ri++)); do
+			local reply_blocks
+			reply_blocks=$(echo "$thread_replies_raw" | jq ".[$ri].blocks // empty")
+			if [[ -z "$reply_blocks" || "$reply_blocks" == "null" ]]; then
+				echo "parse_payload:: thread.replies[$ri].blocks is required and must be non-empty" >&2
+				return 1
+			fi
+
+			if ! echo "$reply_blocks" | jq -e 'type == "array" and length > 0' >/dev/null 2>&1; then
+				echo "parse_payload:: thread.replies[$ri].blocks is required and must be non-empty" >&2
+				return 1
+			fi
+		done
 	fi
 
 	local payload
 	payload=$(jq -n \
 		--arg channel "$CHANNEL" \
-		--argjson blocks "$blocks" \
-		--argjson attachments "$attachments" \
-		'{ "channel": $channel, "blocks": $blocks, "attachments": $attachments }')
+		--slurpfile blocks "$BLOCKS_FILE" \
+		--slurpfile attachments "$ATTACHMENTS_FILE" \
+		'{ "channel": $channel, "blocks": $blocks[0], "attachments": $attachments[0] }')
 
 	# Add thread_ts to payload if provided and not empty
 	if [[ -n "$thread_ts" && "$thread_ts" != "null" && "$thread_ts" != "empty" ]]; then
 		payload=$(jq --arg thread_ts "$thread_ts" '. + {thread_ts: $thread_ts}' <<<"$payload")
+	fi
+
+	# Pass thread.replies through to parsed output for main to process
+	if [[ -n "$thread_replies_raw" && "$thread_replies_raw" != "null" ]]; then
+		local thread_replies_len
+		thread_replies_len=$(echo "$thread_replies_raw" | jq 'length')
+		if ((thread_replies_len > 0)); then
+			payload=$(jq --argjson replies "$thread_replies_raw" '. + {thread_replies: $replies}' <<<"$payload")
+		fi
 	fi
 
 	# Validate message text field if present, max 40,000 characters
@@ -807,11 +674,19 @@ _process_blocks_append_block() {
 	local block_type
 	local block_value
 	local block_color
-	local block
 	local dest
 
-	# Check if block uses the "type" field format (Slack API format)
-	# or the key-based format
+	# Allocate a per-block output file and set CREATE_BLOCK_OUTPUT_FILE for create_block
+	local create_block_out
+	create_block_out=$(mktemp "$_SLACK_WORKSPACE/process_blocks.block_out.XXXXXX")
+	CREATE_BLOCK_OUTPUT_FILE="$create_block_out"
+	export CREATE_BLOCK_OUTPUT_FILE
+
+	# Allocate a temp file for in-place jq updates to BLOCKS_FILE / ATTACHMENTS_FILE
+	local merge_tmp
+	merge_tmp=$(mktemp "$_SLACK_WORKSPACE/process_blocks.merge_tmp.XXXXXX")
+
+	# Check if block uses the "type" field format (Slack API format) or the key-based format
 	if jq -e '.type' <<<"$block_item" >/dev/null 2>&1; then
 		block_type=$(jq -r '.type' <<<"$block_item")
 		block_value=$(jq 'del(.type, .color)' <<<"$block_item")
@@ -834,9 +709,26 @@ _process_blocks_append_block() {
 		block_color=$(jq -r '.value.color // empty' <<<"$block_entry")
 	fi
 
-	if ! block=$(create_block "$block_value" "$block_type"); then
+	if ! _validate_block_input_size "$block_value" "$block_type"; then
+		echo "_process_blocks_append_block:: block input too large for type '$block_type'" >&2
+		return 1
+	fi
+
+	if ! create_block "$block_value" "$block_type"; then
 		echo "_process_blocks_append_block:: failed to create block type '$block_type': $block_item" >&2
 		return 1
+	fi
+
+	# A block script may return a JSON array when it needs to emit multiple blocks
+	# (e.g. table overflow produces a context block + file block array).
+	# Recurse into each element so they each go through the normal append path.
+	if jq -e 'type == "array"' "$CREATE_BLOCK_OUTPUT_FILE" >/dev/null 2>&1; then
+		local array_item
+		while IFS= read -r array_item; do
+			_process_blocks_append_block "$array_item" || return 1
+		done < <(jq -c '.[]' "$CREATE_BLOCK_OUTPUT_FILE")
+
+		return 0
 	fi
 
 	if [[ -n "$block_color" ]] || [[ "$block_type" == "table" ]]; then
@@ -855,12 +747,14 @@ _process_blocks_append_block() {
 			*) block_color="$DANGER_COLOR" ;;
 			esac
 		fi
-		attachments=$(jq \
-			--argjson block "$block" \
+		jq --slurpfile block "$CREATE_BLOCK_OUTPUT_FILE" \
 			--arg color "${block_color:-}" \
-			'. += [{ color: $color, blocks: [$block]}]' <<<"$attachments")
+			'. += [{ color: $color, blocks: [$block[0]]}]' \
+			"$ATTACHMENTS_FILE" >"$merge_tmp" && mv "$merge_tmp" "$ATTACHMENTS_FILE"
 	else
-		blocks=$(jq --argjson block "$block" '. += [$block]' <<<"$blocks")
+		jq --slurpfile block "$CREATE_BLOCK_OUTPUT_FILE" \
+			'. += [$block[0]]' \
+			"$BLOCKS_FILE" >"$merge_tmp" && mv "$merge_tmp" "$BLOCKS_FILE"
 	fi
 
 	block_index=$((block_index + 1))
@@ -885,6 +779,10 @@ _process_blocks_append_block() {
 #   1 if parsing fails
 parse_payload() {
 	local payload_file="$1"
+
+	local _create_blocks_script
+	_create_blocks_script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/create-blocks.sh"
+	source "${_create_blocks_script}"
 
 	INPUT_PAYLOAD="$payload_file"
 	export INPUT_PAYLOAD

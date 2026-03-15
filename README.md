@@ -216,6 +216,7 @@ The following environment variables control tool behavior:
 - `SHOW_METADATA` - Set to `false` to disable metadata output (default: `true`)
 - `SHOW_PAYLOAD` - Set to `false` to exclude payload from metadata (default: `true`)
 - `SKIP_SLACK_API_CHECK` - Set to `true` to skip API connectivity check in health check mode
+- `LOG_VERBOSE` - Set to `true` to log verbose request details (channel, ts, block count, sanitized payload) for each Slack API send
 
 ## Debug Mode
 
@@ -264,7 +265,8 @@ Debug mode redacts authentication tokens but still logs the payload structure.
 - Slack Block Kit with either native `type` blocks or keyed format
 - File upload support with automatic image or rich-text block creation
 - Crossposting with permalinks and optional custom text
-- Thread replies and thread creation for multi-block messages
+- Thread replies and thread creation for multi-block messages, plus `thread_replies` array for multiple replies in a thread
+- Retry with exponential backoff on Slack API calls for transient failures
 - Input flexibility: stdin, `-f|--file`, `params.raw`, or `params.from_file`
 - Dry-run mode, dependency health check, and rich validation output
 - Debug mode with sanitized payload logging for troubleshooting
@@ -318,6 +320,7 @@ See [Slack API Scopes](https://api.slack.com/scopes) for complete documentation.
     "debug": false,
     "thread_ts": "1763161862.880069",
     "create_thread": false,
+    "thread_replies": [],
     "crosspost": {
       "channel": ["#channel1", "#channel2"],
       "blocks": [...],
@@ -345,6 +348,7 @@ See [Slack API Scopes](https://api.slack.com/scopes) for complete documentation.
 - `params.dry_run` - Set to `true` to validate without sending (default: `false`)
 - `params.thread_ts` - Thread timestamp or Slack message permalink (see Threading)
 - `params.create_thread` - Set to `true` to create a new thread (see Threading)
+- `params.thread_replies` - Array of message configs; each entry is sent as a separate reply in the thread (see Threading)
 - `params.crosspost` - Crosspost configuration (see Crossposting)
 - `params.raw` - JSON string that replaces the `params` object
 - `params.from_file` - Path to JSON that replaces the `params` object
@@ -413,6 +417,49 @@ Set `create_thread: true` with multiple blocks. First block sent as regular mess
     "channel": "notifications",
     "create_thread": true,
     "blocks": [...]
+  }
+}
+```
+
+### Multiple Replies in a Thread
+
+Use `thread_replies` to send several messages as separate replies in the same thread. Each element is a message config (e.g. `blocks`, optional `text`). The thread is determined by `thread_ts` or, when using `create_thread: true`, by the initial message. See [examples/thread-replies.yaml](examples/thread-replies.yaml) for a full example.
+
+```json
+{
+  "params": {
+    "channel": "notifications",
+    "create_thread": true,
+    "blocks": [
+      {
+        "section": {
+          "type": "text",
+          "text": { "type": "mrkdwn", "text": "Parent" }
+        }
+      }
+    ],
+    "thread_replies": [
+      {
+        "blocks": [
+          {
+            "section": {
+              "type": "text",
+              "text": { "type": "mrkdwn", "text": "Reply 1" }
+            }
+          }
+        ]
+      },
+      {
+        "blocks": [
+          {
+            "section": {
+              "type": "text",
+              "text": { "type": "mrkdwn", "text": "Reply 2" }
+            }
+          }
+        ]
+      }
+    ]
   }
 }
 ```
@@ -532,9 +579,10 @@ make test-acceptance # Run acceptance tests only
 ### Local Concourse Development
 
 ```bash
-make concourse-up            # Start local Concourse server
-make concourse-down          # Stop local Concourse server
-make concourse-load-examples # Load example pipelines
+make concourse-up                  # Start local Concourse server
+make concourse-down                # Stop local Concourse server
+make concourse-load-examples       # Load example pipelines
+make concourse-run-all-examples    # Run all example pipelines end-to-end (CI)
 ```
 
 Required environment variables for `concourse-load-examples`:

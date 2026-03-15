@@ -3,14 +3,13 @@
 # Table Block implementation following Slack Block Kit guidelines
 # Ref: https://docs.slack.dev/reference/block-kit/blocks/table-block/
 #
-set -eo pipefail
-umask 077
 
 # Constants
 BLOCK_TYPE="table"
 MAX_ROWS=100
 MAX_COLS=20
 MAX_COLUMN_SETTINGS=20
+TABLE_MAX_CHAR_COUNT=10000
 SUPPORTED_CELL_TYPES=("raw_text" "rich_text")
 SUPPORTED_ALIGNMENTS=("left" "center" "right")
 
@@ -18,14 +17,23 @@ SUPPORTED_ALIGNMENTS=("left" "center" "right")
 #
 # Inputs:
 # - Reads JSON from stdin with table configuration
+# - TABLE_BLOCK_OUTPUT_FILE (required): path where block JSON will be written
 #
 # Side Effects:
-# - Outputs Slack Block Kit table block JSON to stdout
+# - Writes block JSON to the path in TABLE_BLOCK_OUTPUT_FILE (required)
+# - When total cell character count exceeds TABLE_MAX_CHAR_COUNT, writes a
+#   two-element JSON array instead: a context block and a file block pointing
+#   to a plain-text rendering of the table in _SLACK_WORKSPACE
 #
 # Returns:
 # - 0 on successful table block creation with valid rows and cells
-# - 1 if input is empty, invalid JSON, missing rows, or validation fails
+# - 1 if TABLE_BLOCK_OUTPUT_FILE unset, input empty, invalid JSON, missing rows, or validation fails
 create_table() {
+	if [[ -z "${TABLE_BLOCK_OUTPUT_FILE:-}" ]]; then
+		echo "create_table:: TABLE_BLOCK_OUTPUT_FILE is required" >&2
+		return 1
+	fi
+
 	local input
 	input=$(cat)
 
@@ -35,13 +43,7 @@ create_table() {
 	fi
 
 	local input_json
-	input_json=$(mktemp /tmp/table.sh.input-json.XXXXXX)
-	if ! chmod 0600 "$input_json"; then
-		echo "create_table:: failed to secure temp file ${input_json}" >&2
-		rm -f "$input_json"
-		return 1
-	fi
-	trap 'rm -f "$input_json"' RETURN EXIT ERR
+	input_json=$(mktemp "$_SLACK_WORKSPACE/table.input-json.XXXXXX")
 	echo "$input" >"$input_json"
 
 	if ! jq . "$input_json" >/dev/null 2>&1; then
@@ -146,35 +148,111 @@ create_table() {
 		done
 	fi
 
-	local block
-	local input_rows
+	# Check total character count across all cells; fall back to file attachment if over limit.
+	# For raw_text cells, count .text length.
+	# For rich_text cells, sum all nested .text leaf string lengths.
+	local total_chars
+	total_chars=$(jq '
+		[.rows[][] |
+			if .type == "raw_text" then (.text | length)
+			elif .type == "rich_text" then ([.. | .text? | strings | length] | add // 0)
+			else 0 end
+		] | add // 0
+	' "$input_json")
 
-	input_rows=$(jq '.rows' "$input_json")
+	if ((total_chars > TABLE_MAX_CHAR_COUNT)); then
+		if ! _table_overflow_to_file "$input_json" "$total_chars"; then
+			return 1
+		fi
 
-	block=$(jq -n \
+		return 0
+	fi
+
+	# Build block via temp files so large JSON is never on the command line (avoids ARG_MAX).
+	local block_file
+	local tmp_file
+	block_file=$(mktemp "$_SLACK_WORKSPACE/table.block.XXXXXX")
+	tmp_file=$(mktemp "$_SLACK_WORKSPACE/table.block.XXXXXX")
+
+	jq -n \
 		--arg block_type "$BLOCK_TYPE" \
-		--argjson input_rows "$input_rows" \
-		'{ type: $block_type, rows: $input_rows }')
+		--slurpfile input_rows <(jq '.rows' "$input_json") \
+		'{ type: $block_type, rows: $input_rows[0] }' \
+		>"$block_file"
 
 	# Add optional block_id if present
 	if jq -e '.block_id' "$input_json" >/dev/null 2>&1; then
 		local block_id
 		block_id=$(jq -r '.block_id' "$input_json")
-		block=$(jq --arg block_id "$block_id" '. + {block_id: $block_id}' <<<"$block")
+		jq --arg block_id "$block_id" '. + {block_id: $block_id}' "$block_file" >"$tmp_file" && mv "$tmp_file" "$block_file"
 	fi
 
 	# Add optional column_settings if present
 	if jq -e '.column_settings' "$input_json" >/dev/null 2>&1; then
-		local column_settings_json
-		column_settings_json=$(jq '.column_settings' "$input_json")
-		block=$(jq --argjson column_settings "$column_settings_json" '. + {column_settings: $column_settings}' <<<"$block")
+		jq --slurpfile column_settings <(jq '.column_settings' "$input_json") '. + {column_settings: $column_settings[0]}' "$block_file" >"$tmp_file" && mv "$tmp_file" "$block_file"
 	fi
 
-	echo "$block"
+	cp "$block_file" "$TABLE_BLOCK_OUTPUT_FILE"
+
+	return 0
+}
+
+# Handle table overflow by writing raw JSON to a file and emitting a two-element
+# JSON array containing a context block and a file block to TABLE_BLOCK_OUTPUT_FILE.
+#
+# Inputs:
+# - $1 - input_json_file: path to validated table input JSON file
+# - $2 - total_chars: total character count across all cells
+#
+# Side Effects:
+# - Writes a .json file to _SLACK_WORKSPACE
+# - Writes a JSON array to TABLE_BLOCK_OUTPUT_FILE
+#
+# Returns:
+# - 0 on success
+# - 1 on failure
+_table_overflow_to_file() {
+	local input_json_file="$1"
+	local total_chars="$2"
+
+	local row_count
+	local col_count
+	row_count=$(jq '.rows | length' "$input_json_file")
+	col_count=$(jq '.rows[0] | length' "$input_json_file")
+
+	echo "create_table:: table exceeds ${TABLE_MAX_CHAR_COUNT} char limit" \
+		"(${total_chars} chars, ${row_count}x${col_count} cells)," \
+		"falling back to file attachment" >&2
+
+	local json_file
+	json_file=$(mktemp "$_SLACK_WORKSPACE/table.overflow.XXXXXX.json")
+	cp "$input_json_file" "$json_file"
+
+	local context_block
+	context_block=$(jq -n \
+		--arg msg "Table too large for inline display (${total_chars} chars, limit ${TABLE_MAX_CHAR_COUNT}). Attached as JSON." \
+		'{
+			type: "context",
+			elements: [{ type: "plain_text", text: $msg }]
+		}')
+
+	local file_block
+	file_block=$(jq -n \
+		--arg path "$json_file" \
+		--arg title "table-${row_count}x${col_count}.json" \
+		'{ file: { path: $path, title: $title } }')
+
+	jq -n \
+		--argjson context "$context_block" \
+		--argjson file "$file_block" \
+		'[$context, $file]' >"$TABLE_BLOCK_OUTPUT_FILE"
 
 	return 0
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+	set -eo pipefail
+	umask 077
 	create_table "$@"
+	exit $?
 fi

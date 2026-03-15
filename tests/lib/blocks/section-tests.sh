@@ -6,21 +6,18 @@
 setup_file() {
 	GIT_ROOT="$(git rev-parse --show-toplevel || echo "")"
 	if [[ -z "$GIT_ROOT" ]]; then
-		echo "Failed to get git root" >&2
-		exit 1
+		fail "Failed to get git root"
 	fi
 
 	SCRIPT="$GIT_ROOT/lib/blocks/section.sh"
 	EXAMPLES_FILE="$GIT_ROOT/examples/section.yaml"
 
 	if [[ ! -f "$SCRIPT" ]]; then
-		echo "Script not found: $SCRIPT" >&2
-		exit 1
+		fail "Script not found: $SCRIPT"
 	fi
 
 	if [[ ! -f "$EXAMPLES_FILE" ]]; then
-		echo "Examples file not found: $EXAMPLES_FILE" >&2
-		exit 1
+		fail "Examples file not found: $EXAMPLES_FILE"
 	fi
 
 	export GIT_ROOT
@@ -45,20 +42,10 @@ teardown() {
 ########################################################
 
 mock_create_text_section() {
-	#shellcheck disable=SC2329
 	create_text_section() {
 		return 0
 	}
 	export -f create_text_section
-}
-
-mock_create_fields_section() {
-	#shellcheck disable=SC2329
-	create_fields_section() {
-		echo '[{"type":"plain_text","text":"Field 1"},{"type":"plain_text","text":"Field 2"}]'
-		return 0
-	}
-	export -f create_fields_section
 }
 
 ########################################################
