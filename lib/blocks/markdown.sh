@@ -3,7 +3,6 @@
 # Markdown Block implementation following Slack Block Kit guidelines
 # Ref: https://docs.slack.dev/reference/block-kit/blocks/markdown-block/
 #
-set -eo pipefail
 
 ########################################################
 # Constants
@@ -83,5 +82,8 @@ create_markdown() {
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+	set -eo pipefail
+	umask 077
 	create_markdown "$@"
+	exit $?
 fi

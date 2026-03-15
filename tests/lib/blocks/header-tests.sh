@@ -3,26 +3,23 @@
 # Test file for blocks/header.sh
 #
 
-SMOKE_TEST=${SMOKE_TEST:-false}
+RUN_SMOKE_TEST=${RUN_SMOKE_TEST:-false}
 
 setup_file() {
 	GIT_ROOT="$(git rev-parse --show-toplevel || echo "")"
 	if [[ -z "$GIT_ROOT" ]]; then
-		echo "Failed to get git root" >&2
-		exit 1
+		fail "Failed to get git root"
 	fi
 
 	SCRIPT="$GIT_ROOT/lib/blocks/header.sh"
 	EXAMPLES_FILE="$GIT_ROOT/examples/header.yaml"
 
 	if [[ ! -f "$SCRIPT" ]]; then
-		echo "Script not found: $SCRIPT" >&2
-		exit 1
+		fail "Script not found: $SCRIPT"
 	fi
 
 	if [[ ! -f "$EXAMPLES_FILE" ]]; then
-		echo "Examples file not found: $EXAMPLES_FILE" >&2
-		exit 1
+		fail "Examples file not found: $EXAMPLES_FILE"
 	fi
 
 	if [[ -n "$SLACK_BOT_USER_OAUTH_TOKEN" ]]; then
@@ -56,7 +53,7 @@ teardown() {
 ########################################################
 
 send_request_to_slack() {
-	[[ "$SMOKE_TEST" != "true" ]] && return 0
+	[[ "$RUN_SMOKE_TEST" != "true" ]] && return 0
 
 	if [[ -z "$REAL_TOKEN" ]]; then
 		skip "SLACK_BOT_USER_OAUTH_TOKEN not set"

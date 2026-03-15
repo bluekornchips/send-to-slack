@@ -6,26 +6,21 @@
 setup_file() {
 	GIT_ROOT="$(git rev-parse --show-toplevel || echo "")"
 	if [[ -z "$GIT_ROOT" ]]; then
-		echo "setup_file:: git root not found" >&2
-		exit 1
+		fail "setup_file:: git root not found"
 	fi
 
 	INSTALL_SCRIPT="${GIT_ROOT}/bin/install.sh"
 	UNINSTALL_SCRIPT="${GIT_ROOT}/bin/uninstall.sh"
 
 	if [[ ! -f "$INSTALL_SCRIPT" ]]; then
-		echo "setup_file:: install script missing: $INSTALL_SCRIPT" >&2
-		exit 1
+		fail "setup_file:: install script missing: $INSTALL_SCRIPT"
 	fi
 
 	if [[ ! -f "$UNINSTALL_SCRIPT" ]]; then
-		echo "setup_file:: uninstall script missing: $UNINSTALL_SCRIPT" >&2
-		exit 1
+		fail "setup_file:: uninstall script missing: $UNINSTALL_SCRIPT"
 	fi
 
-	# shellcheck source=/dev/null
 	source "$INSTALL_SCRIPT"
-	# shellcheck source=/dev/null
 	source "$UNINSTALL_SCRIPT"
 
 	INSTALL_SIGNATURE_VALUE="$INSTALL_SIGNATURE"
@@ -44,7 +39,7 @@ setup_file() {
 }
 
 setup() {
-	PREFIX_DIR="$(mktemp -d "${BATS_TEST_TMPDIR:-/tmp}/send-to-slack-uninstall.XXXXXX")"
+	PREFIX_DIR="$(mktemp -d "${BATS_TEST_TMPDIR}/send-to-slack-uninstall.XXXXXX")"
 	TARGET_PATH="${PREFIX_DIR}/${INSTALL_BASENAME_VALUE}"
 
 	export PREFIX_DIR
@@ -91,7 +86,7 @@ teardown() {
 	rm -rf "${HOME}/.local/share/send-to-slack"
 	rm -rf "/usr/local/send-to-slack"
 
-	other_prefix=$(mktemp -d "${BATS_TEST_TMPDIR:-/tmp}/send-to-slack-other.XXXXXX")
+	other_prefix=$(mktemp -d "${BATS_TEST_TMPDIR}/send-to-slack-other.XXXXXX")
 	other_target="${other_prefix}/${INSTALL_BASENAME_VALUE}"
 
 	# Install to a different location
@@ -123,7 +118,7 @@ teardown() {
 	rm -rf "${HOME}/.local/share/send-to-slack"
 	rm -rf "/usr/local/send-to-slack"
 
-	temp_dir=$(mktemp -d "${BATS_TEST_TMPDIR:-/tmp}/send-to-slack-source.XXXXXX")
+	temp_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/send-to-slack-source.XXXXXX")
 	source_dir="${temp_dir}/send-to-slack-main"
 
 	mkdir -p "${source_dir}/bin" "${source_dir}/lib/blocks"

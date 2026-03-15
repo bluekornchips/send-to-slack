@@ -3,7 +3,6 @@
 # Image Block implementation following Slack Block Kit guidelines
 # Ref: https://docs.slack.dev/reference/block-kit/blocks/image-block/
 #
-set -eo pipefail
 
 ########################################################
 # Constants
@@ -197,5 +196,8 @@ create_image() {
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+	set -eo pipefail
+	umask 077
 	create_image "$@"
+	exit $?
 fi

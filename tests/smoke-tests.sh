@@ -3,22 +3,18 @@
 # Consolidated smoke tests for send-to-slack
 #
 
-SMOKE_TEST=${SMOKE_TEST:-false}
+RUN_SMOKE_TEST=${RUN_SMOKE_TEST:-false}
 
 setup_file() {
+	[[ "$RUN_SMOKE_TEST" != "true" ]] && skip "RUN_SMOKE_TEST is not set"
+
 	GIT_ROOT="$(git rev-parse --show-toplevel || echo "")"
 	if [[ -z "$GIT_ROOT" ]]; then
-		echo "Failed to get git root" >&2
-		exit 1
-	fi
-
-	if [[ "$SMOKE_TEST" != "true" ]]; then
-		skip "SMOKE_TEST is not set"
+		skip "Failed to get git root"
 	fi
 
 	if [[ -z "$CHANNEL" ]]; then
-		echo "CHANNEL environment variable is not set" >&2
-		exit 1
+		fail "CHANNEL environment variable is not set"
 	fi
 
 	export CHANNEL
@@ -38,10 +34,14 @@ setup_file() {
 setup() {
 	source "$GIT_ROOT/lib/parse-payload.sh"
 	source "$SEND_TO_SLACK_SCRIPT"
+
+	_SLACK_WORKSPACE=$(mktemp -d "${BATS_TEST_TMPDIR}/smoke-tests.workspace.XXXXXX")
+	export _SLACK_WORKSPACE
 }
 
 teardown() {
-	[[ -n "$SMOKE_TEST_PAYLOAD_FILE" ]] && rm -f "$SMOKE_TEST_PAYLOAD_FILE"
+	rm -rf "$_SLACK_WORKSPACE"
+	rm -f "$SMOKE_TEST_PAYLOAD_FILE"
 	return 0
 }
 
@@ -59,7 +59,7 @@ smoke_test_setup() {
 	local dry_run="false"
 	local channel="$CHANNEL"
 
-	SMOKE_TEST_PAYLOAD_FILE=$(mktemp smoke-tests.smoke-payload.XXXXXX)
+	SMOKE_TEST_PAYLOAD_FILE=$(mktemp "${BATS_TEST_TMPDIR}/smoke-tests.smoke-payload.XXXXXX")
 
 	jq -n \
 		--argjson blocks "$blocks_json" \
@@ -84,7 +84,7 @@ smoke_test_setup() {
 # Table block smoke tests
 ########################################################
 
-@test "smoke test, table basic with raw_text cells" {
+@test "smoke_test:: table basic with raw_text cells" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/table.yaml"
 	local blocks_json
 	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "table-basic-with-raw-text-cells") | .plan[0].params.blocks' "$EXAMPLES_FILE")
@@ -105,7 +105,7 @@ smoke_test_setup() {
 	[[ "$status" -eq 0 ]]
 }
 
-@test "smoke test, table with all features column settings block_id and rich_text" {
+@test "smoke_test:: table with all features column settings block_id and rich_text" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/table.yaml"
 	local blocks_json
 	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "table-with-all-features-column-settings-block-id-and-rich-text") | .plan[0].params.blocks' "$EXAMPLES_FILE")
@@ -126,11 +126,113 @@ smoke_test_setup() {
 	[[ "$status" -eq 0 ]]
 }
 
+@test "smoke_test:: accepts 100x20 table without hitting ARG_MAX" {
+	source "$GIT_ROOT/lib/blocks/table.sh"
+
+	local table_output_file
+	table_output_file=$(mktemp "$_SLACK_WORKSPACE/table-argmax.XXXXXX")
+	TABLE_BLOCK_OUTPUT_FILE="$table_output_file"
+	export TABLE_BLOCK_OUTPUT_FILE
+
+	jq -n '[range(100) as $r | [range(20) as $c | {type: "raw_text", text: "r\($r)c\($c)"}]] | {rows: .}' |
+		run create_table
+	[[ "$status" -eq 0 ]]
+
+	local table_output
+	table_output=$(cat "$table_output_file")
+
+	# 100x20 with short cell text totals ~12,000 chars, exceeding the 10,000 limit,
+	# so the overflow path is expected: output is an array with a context and file block.
+	echo "$table_output" | jq -e 'type == "array"' >/dev/null
+	echo "$table_output" | jq -e '.[0].type == "context"' >/dev/null
+	echo "$table_output" | jq -e '.[1].file.path | test(".json$")' >/dev/null
+}
+
+@test "smoke_test:: 50x20 table overflow falls back to file attachment" {
+	if [[ -z "$REAL_TOKEN" ]]; then
+		skip "SLACK_BOT_USER_OAUTH_TOKEN not set"
+	fi
+
+	local rows_file
+	rows_file=$(mktemp "$_SLACK_WORKSPACE/smoke-overflow-rows.XXXXXX")
+	jq -n '[range(50) as $r | [range(20) as $c | {type: "raw_text", text: ("r\($r)c\($c)-" + ("x" * (10 + (($r * 20 + $c) % 91))))}]]' \
+		>"$rows_file"
+
+	SMOKE_TEST_PAYLOAD_FILE=$(mktemp "${BATS_TEST_TMPDIR}/smoke-tests.smoke-payload.XXXXXX")
+	jq -n \
+		--slurpfile rows "$rows_file" \
+		--arg channel "$CHANNEL" \
+		--arg token "$REAL_TOKEN" \
+		'{
+			source: { slack_bot_user_oauth_token: $token },
+			params: {
+				channel: $channel,
+				dry_run: "false",
+				blocks: [{ table: { rows: $rows[0] } }]
+			}
+		}' >"$SMOKE_TEST_PAYLOAD_FILE"
+	export SMOKE_TEST_PAYLOAD_FILE
+
+	local parsed_payload
+	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+		echo "parse_payload failed" >&2
+		return 1
+	fi
+
+	if [[ -z "$parsed_payload" ]]; then
+		echo "parsed_payload is empty" >&2
+		return 1
+	fi
+
+	run send_notification "$parsed_payload"
+	[[ "$status" -eq 0 ]]
+}
+
+@test "smoke_test:: 100x20 table overflow falls back to file attachment" {
+	if [[ -z "$REAL_TOKEN" ]]; then
+		skip "SLACK_BOT_USER_OAUTH_TOKEN not set"
+	fi
+
+	local rows_file
+	rows_file=$(mktemp "$_SLACK_WORKSPACE/smoke-overflow-rows.XXXXXX")
+	jq -n '[range(100) as $r | [range(20) as $c | {type: "raw_text", text: ("r\($r)c\($c)-" + ("x" * (10 + (($r * 20 + $c) % 91))))}]]' \
+		>"$rows_file"
+
+	SMOKE_TEST_PAYLOAD_FILE=$(mktemp "${BATS_TEST_TMPDIR}/smoke-tests.smoke-payload.XXXXXX")
+	jq -n \
+		--slurpfile rows "$rows_file" \
+		--arg channel "$CHANNEL" \
+		--arg token "$REAL_TOKEN" \
+		'{
+			source: { slack_bot_user_oauth_token: $token },
+			params: {
+				channel: $channel,
+				dry_run: "false",
+				blocks: [{ table: { rows: $rows[0] } }]
+			}
+		}' >"$SMOKE_TEST_PAYLOAD_FILE"
+	export SMOKE_TEST_PAYLOAD_FILE
+
+	local parsed_payload
+	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+		echo "parse_payload failed" >&2
+		return 1
+	fi
+
+	if [[ -z "$parsed_payload" ]]; then
+		echo "parsed_payload is empty" >&2
+		return 1
+	fi
+
+	run send_notification "$parsed_payload"
+	[[ "$status" -eq 0 ]]
+}
+
 ########################################################
 # Image block smoke tests
 ########################################################
 
-@test "smoke test, image block with url title and block_id" {
+@test "smoke_test:: image block with url title and block_id" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/image.yaml"
 	local blocks_json
 	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "image-with-url-title-and-block-id") | .plan[0].params.blocks' "$EXAMPLES_FILE")
@@ -151,7 +253,7 @@ smoke_test_setup() {
 	[[ "$status" -eq 0 ]]
 }
 
-@test "smoke test, image block with slack_file url" {
+@test "smoke_test:: image block with slack_file url" {
 	skip "Requires real Slack file URL from actual file upload"
 
 	local EXAMPLES_FILE="$GIT_ROOT/examples/image.yaml"
@@ -174,7 +276,7 @@ smoke_test_setup() {
 	[[ "$status" -eq 0 ]]
 }
 
-@test "smoke test, image block with slack_file id" {
+@test "smoke_test:: image block with slack_file id" {
 	skip "Requires real Slack file ID from actual file upload"
 
 	local EXAMPLES_FILE="$GIT_ROOT/examples/image.yaml"
@@ -201,7 +303,7 @@ smoke_test_setup() {
 # Markdown block smoke tests
 ########################################################
 
-@test "smoke test, markdown block" {
+@test "smoke_test:: markdown block" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/markdown.yaml"
 	local blocks_json
 	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "markdown-build-notification") | .plan[0].params.blocks' "$EXAMPLES_FILE")
@@ -226,7 +328,7 @@ smoke_test_setup() {
 # Header block smoke tests
 ########################################################
 
-@test "smoke test, header block with plain_text only" {
+@test "smoke_test:: header block with plain_text only" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/header.yaml"
 	local blocks_json
 	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "header-with-plain-text-only") | .plan[0].params.blocks' "$EXAMPLES_FILE")
@@ -247,7 +349,7 @@ smoke_test_setup() {
 	[[ "$status" -eq 0 ]]
 }
 
-@test "smoke test, header block with block_id and maximum text" {
+@test "smoke_test:: header block with block_id and maximum text" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/header.yaml"
 	local blocks_json
 	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "header-with-block-id-and-maximum-text") | .plan[0].params.blocks' "$EXAMPLES_FILE")
@@ -272,7 +374,7 @@ smoke_test_setup() {
 # Context block smoke tests
 ########################################################
 
-@test "smoke test, context block with image and text elements" {
+@test "smoke_test:: context block with image and text elements" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/context.yaml"
 	local blocks_json
 	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "context-with-image-and-text-elements") | .plan[0].params.blocks' "$EXAMPLES_FILE")
@@ -293,7 +395,7 @@ smoke_test_setup() {
 	[[ "$status" -eq 0 ]]
 }
 
-@test "smoke test, context block with multiple text elements and block_id" {
+@test "smoke_test:: context block with multiple text elements and block_id" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/context.yaml"
 	local blocks_json
 	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "context-with-multiple-text-elements-and-block-id") | .plan[0].params.blocks' "$EXAMPLES_FILE")
@@ -318,7 +420,7 @@ smoke_test_setup() {
 # Section block smoke tests
 ########################################################
 
-@test "smoke test, section block with mrkdwn text and button accessory" {
+@test "smoke_test:: section block with mrkdwn text and button accessory" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/section.yaml"
 	local blocks_json
 	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "section-with-mrkdwn-text-and-button-accessory") | .plan[0].params.blocks' "$EXAMPLES_FILE")
@@ -339,7 +441,7 @@ smoke_test_setup() {
 	[[ "$status" -eq 0 ]]
 }
 
-@test "smoke test, section block with fields array and block_id" {
+@test "smoke_test:: section block with fields array and block_id" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/section.yaml"
 	local blocks_json
 	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "section-with-fields-array-and-block-id") | .plan[0].params.blocks' "$EXAMPLES_FILE")
@@ -360,7 +462,7 @@ smoke_test_setup() {
 	[[ "$status" -eq 0 ]]
 }
 
-@test "smoke test, section block with plain_text expand and image accessory" {
+@test "smoke_test:: section block with plain_text expand and image accessory" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/section.yaml"
 	local blocks_json
 	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "section-with-plain-text-expand-and-image-accessory") | .plan[0].params.blocks' "$EXAMPLES_FILE")
@@ -385,7 +487,7 @@ smoke_test_setup() {
 # Divider block smoke tests
 ########################################################
 
-@test "smoke test, divider block basic separator" {
+@test "smoke_test:: divider block basic separator" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/divider.yaml"
 	local blocks_json
 	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "divider-basic-separator") | .plan[0].params.blocks' "$EXAMPLES_FILE")
@@ -406,7 +508,7 @@ smoke_test_setup() {
 	[[ "$status" -eq 0 ]]
 }
 
-@test "smoke test, divider block with block_id separating sections" {
+@test "smoke_test:: divider block with block_id separating sections" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/divider.yaml"
 	local blocks_json
 	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "divider-with-block-id-separating-sections") | .plan[0].params.blocks' "$EXAMPLES_FILE")
@@ -431,7 +533,7 @@ smoke_test_setup() {
 # Video block smoke tests
 ########################################################
 
-@test "smoke test, video block" {
+@test "smoke_test:: video block" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/video.yaml"
 	local blocks_json
 	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "basic-video") | .plan[0].params.blocks' "$EXAMPLES_FILE")
@@ -461,7 +563,7 @@ smoke_test_setup() {
 	[[ "$status" -eq 0 ]]
 }
 
-@test "smoke test, video-with-all-fields" {
+@test "smoke_test:: video-with-all-fields" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/video.yaml"
 	local blocks_json
 	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "video-with-all-fields") | .plan[0].params.blocks' "$EXAMPLES_FILE")
@@ -477,7 +579,7 @@ smoke_test_setup() {
 # Rich text block smoke tests
 ########################################################
 
-@test "smoke test, rich-text sends rich-text-section-with-all-elements" {
+@test "smoke_test:: rich-text sends rich-text-section-with-all-elements" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/rich-text.yaml"
 	local blocks_json
 	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "rich-text-section-with-all-elements") | .plan[0].params.blocks' "$EXAMPLES_FILE")
@@ -498,7 +600,7 @@ smoke_test_setup() {
 	[[ "$status" -eq 0 ]]
 }
 
-@test "smoke test, rich-text sends rich-text-attachment-with-color" {
+@test "smoke_test:: rich-text sends rich-text-attachment-with-color" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/rich-text.yaml"
 	local blocks_json
 	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "rich-text-attachment-with-color") | .plan[0].params.blocks' "$EXAMPLES_FILE")
@@ -519,7 +621,7 @@ smoke_test_setup() {
 	[[ "$status" -eq 0 ]]
 }
 
-@test "smoke test, rich-text sends rich-text-lists-with-all-options" {
+@test "smoke_test:: rich-text sends rich-text-lists-with-all-options" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/rich-text.yaml"
 	local blocks_json
 	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "rich-text-lists-with-all-options") | .plan[0].params.blocks' "$EXAMPLES_FILE")
@@ -540,7 +642,7 @@ smoke_test_setup() {
 	[[ "$status" -eq 0 ]]
 }
 
-@test "smoke test, rich-text sends multiple-rich-text-blocks" {
+@test "smoke_test:: rich-text sends multiple-rich-text-blocks" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/rich-text.yaml"
 	local blocks_json
 	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "multiple-rich-text-blocks") | .plan[0].params.blocks' "$EXAMPLES_FILE")
@@ -561,7 +663,7 @@ smoke_test_setup() {
 	[[ "$status" -eq 0 ]]
 }
 
-@test "smoke test, rich-text sends rich-text-preformatted-and-quote" {
+@test "smoke_test:: rich-text sends rich-text-preformatted-and-quote" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/rich-text.yaml"
 	local blocks_json
 	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "rich-text-preformatted-and-quote") | .plan[0].params.blocks' "$EXAMPLES_FILE")
@@ -582,7 +684,7 @@ smoke_test_setup() {
 	[[ "$status" -eq 0 ]]
 }
 
-@test "smoke test, rich-text sends oversize-rich-text" {
+@test "smoke_test:: rich-text sends oversize-rich-text" {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/rich-text.yaml"
 	local line_text="This is some test content that will exceed the 4000 character limit for rich text blocks."
 	local long_text_file
@@ -625,7 +727,7 @@ smoke_test_setup() {
 # File upload smoke tests
 ########################################################
 
-@test "smoke test, uploads hello world file" {
+@test "smoke_test:: uploads hello world file" {
 	local hello_world_file
 	hello_world_file=$(mktemp smoke-tests.hello-world.XXXXXX)
 	trap 'rm -f "$hello_world_file" 2>/dev/null || true' EXIT
@@ -658,7 +760,7 @@ smoke_test_setup() {
 	[[ "$test_result" -eq 0 ]]
 }
 
-@test "smoke test, downloads Slack logo PNG and uploads it" {
+@test "smoke_test:: downloads Slack logo PNG and uploads it" {
 	local slack_logo_file
 	slack_logo_file=$(mktemp smoke-tests.slack-logo.XXXXXX.png)
 	trap 'rm -f "$slack_logo_file" 2>/dev/null || true' EXIT
@@ -702,7 +804,7 @@ smoke_test_setup() {
 	[[ "$test_result" -eq 0 ]]
 }
 
-@test "smoke test, multiple file blocks in blocks array" {
+@test "smoke_test:: multiple file blocks in blocks array" {
 	local file1
 	local file2
 	file1=$(mktemp smoke-tests.file1.XXXXXX)
@@ -744,7 +846,7 @@ smoke_test_setup() {
 	[[ "$test_result" -eq 0 ]]
 }
 
-@test "smoke test, file block without title uses filename" {
+@test "smoke_test:: file block without title uses filename" {
 	local test_file
 	test_file=$(mktemp smoke-tests.test-file.XXXXXX.txt)
 	trap 'rm -f "$test_file" 2>/dev/null || true' EXIT
@@ -777,7 +879,7 @@ smoke_test_setup() {
 	[[ "$test_result" -eq 0 ]]
 }
 
-@test "smoke test, file block mixed with other blocks" {
+@test "smoke_test:: file block mixed with other blocks" {
 	local test_file
 	test_file=$(mktemp smoke-tests.test-file.XXXXXX)
 	trap 'rm -f "$test_file" 2>/dev/null || true' EXIT
@@ -817,7 +919,7 @@ smoke_test_setup() {
 	[[ "$test_result" -eq 0 ]]
 }
 
-@test "smoke test, file permissions debug after upload" {
+@test "smoke_test:: file permissions debug after upload" {
 	local test_file
 	test_file=$(mktemp smoke-tests.test-file.XXXXXX.txt)
 	trap 'rm -f "$test_file" 2>/dev/null || true' EXIT
@@ -882,14 +984,14 @@ smoke_test_setup() {
 # Parse payload smoke tests
 ########################################################
 
-@test "smoke test, params.raw" {
+@test "smoke_test:: params.raw" {
 	local raw_params
 	raw_params=$(jq -n --arg channel "$CHANNEL" '{"channel": $channel, "dry_run": "false", "blocks": [{"section": {"type": "text", "text": {"type": "plain_text", "text": "Smoke test for params.raw"}}}] }')
 
 	local params_json
 	params_json=$(jq -n --arg raw "$raw_params" '{ raw: $raw }')
 
-	SMOKE_TEST_PAYLOAD_FILE=$(mktemp smoke-tests.smoke-payload.XXXXXX)
+	SMOKE_TEST_PAYLOAD_FILE=$(mktemp "${BATS_TEST_TMPDIR}/smoke-tests.smoke-payload.XXXXXX")
 
 	jq -n \
 		--arg token "$REAL_TOKEN" \
@@ -918,7 +1020,7 @@ smoke_test_setup() {
 	echo "$payload_output" | jq -e '.blocks[0].text.text == "Smoke test for params.raw"' >/dev/null
 }
 
-@test "smoke test, params.from_file" {
+@test "smoke_test:: params.from_file" {
 	local payload_file
 	payload_file=$(mktemp smoke-tests.params-file.XXXXXX)
 	trap 'rm -f "$payload_file" 2>/dev/null || true' EXIT
@@ -941,7 +1043,7 @@ smoke_test_setup() {
 	local params_json
 	params_json=$(jq -n --arg file "$payload_file" '{ from_file: $file }')
 
-	SMOKE_TEST_PAYLOAD_FILE=$(mktemp smoke-tests.smoke-payload.XXXXXX)
+	SMOKE_TEST_PAYLOAD_FILE=$(mktemp "${BATS_TEST_TMPDIR}/smoke-tests.smoke-payload.XXXXXX")
 
 	jq -n \
 		--arg token "$REAL_TOKEN" \
@@ -975,7 +1077,7 @@ smoke_test_setup() {
 	trap - EXIT
 }
 
-@test "smoke test, blocks from_file" {
+@test "smoke_test:: blocks from_file" {
 	local block_file
 	block_file="$GIT_ROOT/examples/fixtures/blocks-from-file.json"
 
@@ -1001,7 +1103,7 @@ smoke_test_setup() {
 	echo "$payload_output" | jq -e '.blocks[0].text.text == "Blocks loaded from file"' >/dev/null
 }
 
-@test "smoke test, blocks from_file 2" {
+@test "smoke_test:: blocks from_file 2" {
 	local block_file
 	block_file="$GIT_ROOT/examples/fixtures/blocks-from-file-2.json"
 
@@ -1026,7 +1128,7 @@ smoke_test_setup() {
 	echo "$payload_output" | jq -e '.blocks[0].elements[0].text == "Additional block from second file"' >/dev/null
 }
 
-@test "smoke test, blocks from_file 3" {
+@test "smoke_test:: blocks from_file 3" {
 	local block_file
 	block_file="$GIT_ROOT/examples/fixtures/blocks-from-file-3.json"
 	mkdir -p output

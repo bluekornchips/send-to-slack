@@ -18,7 +18,6 @@ jobs:
   - name: image-with-url-title-and-block-id
     plan:
       - put: slack-notification
-        
         params:
           <<: *common_slack_params
           text: "Testing image block with image_url, title, and block_id"
@@ -29,38 +28,4 @@ jobs:
                   text: "Please enjoy this sunflower animation"
                 block_id: "image4"
                 image_url: "https://sunflowersoftware.ca/wp-content/uploads/2023/05/cropped-sunflower.gif"
-                alt_text: "Animated sunflower"
-
-  - name: image-with-slack-file-url
-    plan:
-      - put: slack-notification
-        
-        params:
-          <<: *common_slack_params
-          text: "Testing image block with slack_file using url"
-          blocks:
-            - image:
-                title:
-                  type: plain_text
-                  text: "Please enjoy this sunflower animation"
-                block_id: "image4"
-                slack_file:
-                  url: "https://files.slack.com/files-pri/T0123456-F0123456/xyz.png"
-                alt_text: "Animated sunflower"
-
-  - name: image-with-slack-file-id
-    plan:
-      - put: slack-notification
-        
-        params:
-          <<: *common_slack_params
-          text: "Testing image block with slack_file using id"
-          blocks:
-            - image:
-                title:
-                  type: plain_text
-                  text: "Please enjoy this sunflower animation"
-                block_id: "image4"
-                slack_file:
-                  id: "F012345678"
                 alt_text: "Animated sunflower"

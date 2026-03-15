@@ -3,7 +3,6 @@
 # Section Block implementation following Slack Block Kit guidelines
 # Ref: https://docs.slack.dev/reference/block-kit/blocks/section-block/
 #
-set -eo pipefail
 
 ########################################################
 # Constants
@@ -139,6 +138,8 @@ create_fields_section() {
 	# Validate each field is a valid text object
 	local validated_fields="[]"
 	local field_index=0
+	local fields_work_file
+	fields_work_file=$(mktemp "${_SLACK_WORKSPACE:-/tmp}/section.validated-fields.XXXXXX")
 
 	while read -r field_entry; do
 		# Validate field is valid JSON
@@ -168,11 +169,13 @@ create_fields_section() {
 			return 1
 		fi
 
-		# Add validated field to array
-		validated_fields=$(jq --argjson field "$validated_field" '. += [$field]' <<<"$validated_fields")
+		# Append validated field as a line to the work file for safe batch assembly
+		echo "$validated_field" >>"$fields_work_file"
 
 		field_index=$((field_index + 1))
 	done < <(jq -r -c '.[]' <<<"$fields_json")
+
+	validated_fields=$(jq -s '.' "$fields_work_file")
 
 	echo "$validated_fields"
 
@@ -305,5 +308,8 @@ create_section() {
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+	set -eo pipefail
+	umask 077
 	create_section "$@"
+	exit $?
 fi

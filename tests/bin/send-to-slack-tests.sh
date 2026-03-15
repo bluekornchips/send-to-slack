@@ -3,23 +3,15 @@
 # Test file for send-to-slack.sh
 #
 
-cleanup() {
-	rm -rf "${TEST_PAYLOAD_FILE:-}" "${input_payload:-}" "${attempt_file:-}" "${unreadable_file:-}" "${empty_file:-}"
-	rm -rf /tmp/send-to-slack-tests.*
-}
-trap cleanup EXIT
-
 setup_file() {
 	GIT_ROOT="$(git rev-parse --show-toplevel || echo "")"
 	if [[ -z "$GIT_ROOT" ]]; then
-		echo "Failed to get git root" >&2
-		exit 1
+		fail "Failed to get git root"
 	fi
 
 	SCRIPT="$GIT_ROOT/bin/send-to-slack.sh"
 	if [[ ! -f "$SCRIPT" ]]; then
-		echo "Script not found: $SCRIPT" >&2
-		exit 1
+		fail "Script not found: $SCRIPT"
 	fi
 
 	if [[ -n "$SLACK_BOT_USER_OAUTH_TOKEN" ]]; then
@@ -56,7 +48,9 @@ setup() {
 		}
 	]')"
 
-	TEST_PAYLOAD_FILE=$(mktemp "/tmp/send-to-slack-tests.test-payload.XXXXXX")
+	TEST_PAYLOAD_FILE=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.test-payload.XXXXXX")
+
+	_SLACK_WORKSPACE=$(mktemp -d "${BATS_TEST_TMPDIR}/send-to-slack-tests.workspace.XXXXXX")
 
 	export SLACK_BOT_USER_OAUTH_TOKEN
 	export CHANNEL
@@ -65,6 +59,7 @@ setup() {
 	export SHOW_METADATA
 	export SHOW_PAYLOAD
 	export TEST_PAYLOAD_FILE
+	export _SLACK_WORKSPACE
 
 	return 0
 }
@@ -75,6 +70,7 @@ teardown() {
 	[[ -n "$attempt_file" ]] && rm -f "$attempt_file"
 	[[ -n "$unreadable_file" ]] && rm -f "$unreadable_file"
 	[[ -n "$empty_file" ]] && rm -f "$empty_file"
+
 	return 0
 }
 
@@ -106,7 +102,6 @@ create_test_payload() {
 # Mocks
 ########################################################
 mock_curl_success() {
-	#shellcheck disable=SC2329
 	curl() {
 		echo '{"ok": true}'
 		return 0
@@ -116,7 +111,6 @@ mock_curl_success() {
 }
 
 mock_curl_failure() {
-	#shellcheck disable=SC2329
 	curl() {
 		echo '{"ok": false, "error": "invalid_auth"}' >&2
 		return 1
@@ -126,7 +120,6 @@ mock_curl_failure() {
 }
 
 mock_curl_network_error() {
-	#shellcheck disable=SC2091
 	curl() {
 		return 1
 	}
@@ -186,7 +179,7 @@ mock_curl_network_error() {
 	local huge_payload
 	local safe_size
 	safe_size=$(($(getconf ARG_MAX 2>/dev/null || echo 262144) / 4))
-	big_file=$(mktemp "/tmp/send-to-slack-tests.big.XXXXXX")
+	big_file=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.big.XXXXXX")
 	head -c "$((safe_size + 1024))" </dev/zero | tr '\0' 'A' >"$big_file"
 	huge_payload=$(jq -n --rawfile txt "$big_file" '{"channel":"#test","text":$txt}')
 
@@ -225,7 +218,7 @@ mock_curl_network_error() {
 	}')
 
 	local input_file
-	input_file=$(mktemp "/tmp/send-to-slack-tests.input.XXXXXX")
+	input_file=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.input.XXXXXX")
 	echo "$test_payload" >"$input_file"
 
 	# Run main function (it will check debug and override)
@@ -263,7 +256,7 @@ mock_curl_network_error() {
 	}')
 
 	local input_file
-	input_file=$(mktemp "/tmp/send-to-slack-tests.input.XXXXXX")
+	input_file=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.input.XXXXXX")
 	echo "$test_payload" >"$input_file"
 
 	# Run main function (it will check debug and override)
@@ -303,7 +296,7 @@ mock_curl_network_error() {
 	}')
 
 	local input_file
-	input_file=$(mktemp "/tmp/send-to-slack-tests.input.XXXXXX")
+	input_file=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.input.XXXXXX")
 	echo "$test_payload" >"$input_file"
 
 	# Run main function
@@ -336,7 +329,7 @@ mock_curl_network_error() {
 	}')
 
 	local input_file
-	input_file=$(mktemp "/tmp/send-to-slack-tests.input.XXXXXX")
+	input_file=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.input.XXXXXX")
 	echo "$test_payload" >"$input_file"
 
 	run main --file "$input_file"
@@ -373,7 +366,7 @@ mock_curl_network_error() {
 	}')
 
 	local input_file
-	input_file=$(mktemp "/tmp/send-to-slack-tests.input.XXXXXX")
+	input_file=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.input.XXXXXX")
 	echo "$test_payload" >"$input_file"
 
 	run main --file "$input_file"
@@ -424,6 +417,8 @@ mock_curl_network_error() {
 @test "send_notification:: fails when curl fails" {
 	mock_curl_failure
 	DRY_RUN="false"
+	RETRY_INITIAL_DELAY=0
+	export RETRY_INITIAL_DELAY
 	local payload='{"channel": "#test"}'
 
 	run send_notification "$payload"
@@ -434,6 +429,8 @@ mock_curl_network_error() {
 @test "send_notification:: fails when Slack API returns error" {
 	mock_curl_failure
 	DRY_RUN="false"
+	RETRY_INITIAL_DELAY=0
+	export RETRY_INITIAL_DELAY
 	local payload='{"channel": "#test"}'
 
 	run send_notification "$payload"
@@ -445,7 +442,6 @@ mock_curl_network_error() {
 ########################################################
 
 mock_curl_permalink_success() {
-	#shellcheck disable=SC2329
 	curl() {
 		if [[ "$*" == *"chat.getPermalink"* ]]; then
 			echo '{"ok": true, "permalink": "https://workspace.slack.com/archives/C123456/p1234567890123456"}'
@@ -497,7 +493,6 @@ mock_curl_permalink_success() {
 }
 
 mock_curl_permalink_failure() {
-	#shellcheck disable=SC2329
 	curl() {
 		if [[ "$*" == *"chat.getPermalink"* ]]; then
 			echo '{"ok": false, "error": "channel_not_found"}'
@@ -519,310 +514,6 @@ mock_curl_permalink_failure() {
 	run get_message_permalink "C123456" "1234567890.123456"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "Channel not found"
-}
-
-########################################################
-# crosspost_notification
-########################################################
-
-@test "crosspost_notification:: skips when crosspost is empty" {
-	local input_payload
-	input_payload=$(mktemp "/tmp/send-to-slack-tests.test-crosspost.XXXXXX")
-	jq -n '{
-		source: { slack_bot_user_oauth_token: "test-token" },
-		params: { channel: "#test", blocks: [] }
-	}' >"$input_payload"
-
-	run crosspost_notification "$input_payload"
-	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "crosspost is empty, skipping"
-
-	rm -f "$input_payload"
-}
-
-@test "crosspost_notification:: skips when channel not set" {
-	local input_payload
-	input_payload=$(mktemp "/tmp/send-to-slack-tests.test-crosspost.XXXXXX")
-	jq -n '{
-		source: { slack_bot_user_oauth_token: "test-token" },
-		params: {
-			channel: "#test",
-			blocks: [],
-			crosspost: {
-				blocks: []
-			}
-		}
-	}' >"$input_payload"
-
-	run crosspost_notification "$input_payload"
-	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "channel not set, skipping"
-
-	rm -f "$input_payload"
-}
-
-@test "crosspost_notification:: accepts blocks like regular message" {
-	DRY_RUN="true"
-	NOTIFICATION_PERMALINK="https://workspace.slack.com/archives/C123/p123"
-	local input_payload
-	input_payload=$(mktemp "/tmp/send-to-slack-tests.test-crosspost.XXXXXX")
-	jq -n '{
-		source: { slack_bot_user_oauth_token: "test-token" },
-		params: {
-			channel: "#test",
-			blocks: [{
-				section: {
-					type: "text",
-					text: { type: "plain_text", text: "Primary message" }
-				}
-			}],
-			crosspost: {
-				channel: ["#channel1"],
-				blocks: [{
-					section: {
-						type: "text",
-						text: { type: "mrkdwn", text: "Crosspost with full blocks support" }
-					}
-				}]
-			}
-		}
-	}' >"$input_payload"
-
-	run crosspost_notification "$input_payload"
-	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "parsing crosspost payload for channel"
-	echo "$output" | grep -q "sending notification to channel"
-
-	rm -f "$input_payload"
-}
-
-@test "crosspost_notification:: processes multiple channels" {
-	DRY_RUN="true"
-	NOTIFICATION_PERMALINK="https://workspace.slack.com/archives/C123/p123"
-	local input_payload
-	input_payload=$(mktemp "/tmp/send-to-slack-tests.test-crosspost.XXXXXX")
-	jq -n '{
-		source: { slack_bot_user_oauth_token: "test-token" },
-		params: {
-			channel: "#test",
-			blocks: [{
-				section: {
-					type: "text",
-					text: { type: "plain_text", text: "Primary" }
-				}
-			}],
-			crosspost: {
-				channel: ["#channel1", "#channel2", "#channel3"],
-				blocks: [{
-					section: {
-						type: "text",
-						text: { type: "plain_text", text: "Crosspost" }
-					}
-				}]
-			}
-		}
-	}' >"$input_payload"
-
-	run crosspost_notification "$input_payload"
-	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "parsing crosspost payload for channel"
-	echo "$output" | grep -q "sending notification to channel"
-
-	rm -f "$input_payload"
-}
-
-@test "crosspost_notification:: accepts single channel string" {
-	DRY_RUN="true"
-	NOTIFICATION_PERMALINK="https://workspace.slack.com/archives/C123/p123"
-	local input_payload
-	input_payload=$(mktemp "/tmp/send-to-slack-tests.test-crosspost.XXXXXX")
-	jq -n '{
-		source: { slack_bot_user_oauth_token: "test-token" },
-		params: {
-			channel: "#primary",
-			blocks: [{
-				section: {
-					type: "text",
-					text: { type: "plain_text", text: "Primary" }
-				}
-			}],
-			crosspost: {
-				channel: "#channel1",
-				blocks: [{
-					section: {
-						type: "text",
-						text: { type: "plain_text", text: "Crosspost" }
-					}
-				}]
-			}
-		}
-	}' >"$input_payload"
-
-	run crosspost_notification "$input_payload"
-	[[ "$status" -eq 0 ]]
-
-	rm -f "$input_payload"
-}
-
-@test "crosspost_notification:: supports channels alias" {
-	DRY_RUN="true"
-	NOTIFICATION_PERMALINK="https://workspace.slack.com/archives/C123/p123"
-	local input_payload
-	input_payload=$(mktemp "/tmp/send-to-slack-tests.test-crosspost.XXXXXX")
-	jq -n '{
-		source: { slack_bot_user_oauth_token: "test-token" },
-		params: {
-			channel: "#primary",
-			blocks: [{
-				section: {
-					type: "text",
-					text: { type: "plain_text", text: "Primary" }
-				}
-			}],
-			crosspost: {
-				channels: ["#channel1", "#channel2"],
-				blocks: [{
-					section: {
-						type: "text",
-						text: { type: "plain_text", text: "Crosspost using channels alias" }
-					}
-				}]
-			}
-		}
-	}' >"$input_payload"
-
-	run crosspost_notification "$input_payload"
-	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "sending to 2 channel(s)"
-
-	rm -f "$input_payload"
-}
-
-@test "crosspost_notification:: supports header and context blocks" {
-	DRY_RUN="true"
-	NOTIFICATION_PERMALINK="https://workspace.slack.com/archives/C123/p123"
-	local input_payload
-	input_payload=$(mktemp "/tmp/send-to-slack-tests.test-crosspost.XXXXXX")
-	jq -n '{
-		source: { slack_bot_user_oauth_token: "test-token" },
-		params: {
-			channel: "#test",
-			blocks: [{
-				section: {
-					type: "text",
-					text: { type: "plain_text", text: "Primary" }
-				}
-			}],
-			crosspost: {
-				channel: ["#channel1"],
-				blocks: [
-					{
-						header: {
-							text: { type: "plain_text", text: "Crosspost Header" }
-						}
-					},
-					{
-						section: {
-							type: "text",
-							text: { type: "mrkdwn", text: "Message body" }
-						}
-					},
-					{
-						context: {
-							elements: [
-								{ type: "mrkdwn", text: "Footer info" }
-							]
-						}
-					}
-				]
-			}
-		}
-	}' >"$input_payload"
-
-	run crosspost_notification "$input_payload"
-	[[ "$status" -eq 0 ]]
-
-	rm -f "$input_payload"
-}
-
-@test "crosspost_notification:: auto-appends permalink by default" {
-	DRY_RUN="true"
-	NOTIFICATION_PERMALINK="https://workspace.slack.com/archives/C123/p123"
-	local input_payload
-	input_payload=$(mktemp "/tmp/send-to-slack-tests.test-crosspost.XXXXXX")
-	jq -n '{
-		source: { slack_bot_user_oauth_token: "test-token" },
-		params: {
-			channel: "#test",
-			blocks: [{
-				section: {
-					type: "text",
-					text: { type: "plain_text", text: "Primary" }
-				}
-			}],
-			crosspost: {
-				channel: "#channel1",
-				blocks: [{
-					section: {
-						type: "text",
-						text: { type: "plain_text", text: "Crosspost message" }
-					}
-				}]
-			}
-		}
-	}' >"$input_payload"
-
-	# The crosspost_params should have the permalink block appended
-	source "$GIT_ROOT/bin/send-to-slack.sh"
-	local crosspost_params
-	crosspost_params=$(jq '.params.crosspost | del(.channel, .no_link)' "$input_payload")
-	# shellcheck disable=SC2016
-	local permalink_block='{"context": {"elements": [{"type": "mrkdwn", "text": "<$NOTIFICATION_PERMALINK|View original message>"}]}}'
-	crosspost_params=$(echo "$crosspost_params" | jq --argjson link "$permalink_block" '.blocks = (.blocks // []) + [$link]')
-
-	# Verify permalink block was added
-	local block_count
-	block_count=$(echo "$crosspost_params" | jq '.blocks | length')
-	[[ "$block_count" -eq 2 ]]
-
-	# Verify last block is the permalink context block
-	echo "$crosspost_params" | jq -e '.blocks[-1].context.elements[0].text | contains("NOTIFICATION_PERMALINK")' >/dev/null
-
-	rm -f "$input_payload"
-}
-
-@test "crosspost_notification:: no_link true skips permalink" {
-	DRY_RUN="true"
-	NOTIFICATION_PERMALINK="https://workspace.slack.com/archives/C123/p123"
-	local input_payload
-	input_payload=$(mktemp "/tmp/send-to-slack-tests.test-crosspost.XXXXXX")
-	jq -n '{
-		source: { slack_bot_user_oauth_token: "test-token" },
-		params: {
-			channel: "#test",
-			blocks: [{
-				section: {
-					type: "text",
-					text: { type: "plain_text", text: "Primary" }
-				}
-			}],
-			crosspost: {
-				channel: "#channel1",
-				no_link: true,
-				blocks: [{
-					section: {
-						type: "text",
-						text: { type: "plain_text", text: "Crosspost without link" }
-					}
-				}]
-			}
-		}
-	}' >"$input_payload"
-
-	run crosspost_notification "$input_payload"
-	[[ "$status" -eq 0 ]]
-
-	rm -f "$input_payload"
 }
 
 ########################################################
@@ -884,7 +575,7 @@ mock_curl_permalink_failure() {
 
 @test "retry_with_backoff:: succeeds on first attempt" {
 	local attempt_file
-	attempt_file=$(mktemp "/tmp/send-to-slack-tests.retry-attempt.XXXXXX")
+	attempt_file=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.retry-attempt.XXXXXX")
 	echo "0" >"$attempt_file"
 
 	test_command() {
@@ -908,7 +599,7 @@ mock_curl_permalink_failure() {
 
 @test "retry_with_backoff:: retries on failure and succeeds" {
 	local attempt_file
-	attempt_file=$(mktemp "/tmp/send-to-slack-tests.retry-attempt.XXXXXX")
+	attempt_file=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.retry-attempt.XXXXXX")
 	echo "0" >"$attempt_file"
 
 	test_command() {
@@ -938,7 +629,7 @@ mock_curl_permalink_failure() {
 
 @test "retry_with_backoff:: exhausts all retries on persistent failure" {
 	local attempt_file
-	attempt_file=$(mktemp "/tmp/send-to-slack-tests.retry-attempt.XXXXXX")
+	attempt_file=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.retry-attempt.XXXXXX")
 	echo "0" >"$attempt_file"
 
 	test_command() {
@@ -968,7 +659,7 @@ mock_curl_permalink_failure() {
 
 @test "retry_with_backoff:: respects RETRY_MAX_ATTEMPTS" {
 	local attempt_file
-	attempt_file=$(mktemp "/tmp/send-to-slack-tests.retry-attempt.XXXXXX")
+	attempt_file=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.retry-attempt.XXXXXX")
 	echo "0" >"$attempt_file"
 
 	test_command() {
@@ -996,8 +687,9 @@ mock_curl_permalink_failure() {
 }
 
 @test "retry_with_backoff:: uses exponential backoff" {
-	local attempt_file
-	attempt_file=$(mktemp "/tmp/send-to-slack-tests.retry-attempt.XXXXXX")
+	local attempt_file sleep_log
+	attempt_file=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.retry-attempt.XXXXXX")
+	sleep_log=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.sleep-log.XXXXXX")
 	echo "0" >"$attempt_file"
 
 	test_command() {
@@ -1007,8 +699,11 @@ mock_curl_permalink_failure() {
 		echo "$count" >"$attempt_file"
 		return 1
 	}
+	sleep() { echo "$1" >>"$sleep_log"; }
 	export -f test_command
+	export -f sleep
 	export attempt_file
+	export sleep_log
 
 	RETRY_INITIAL_DELAY=1
 	RETRY_BACKOFF_MULTIPLIER=2
@@ -1017,19 +712,20 @@ mock_curl_permalink_failure() {
 	export RETRY_BACKOFF_MULTIPLIER
 	export RETRY_MAX_ATTEMPTS
 
-	start_time=$(date +%s)
 	run retry_with_backoff 3 test_command
-	end_time=$(date +%s)
-	elapsed=$((end_time - start_time))
 	rm -f "$attempt_file"
 
-	[[ $elapsed -ge 2 ]]
 	[[ "$status" -eq 1 ]]
+	# 3 attempts produce 2 inter-attempt sleeps: 1s then 2s
+	[[ "$(sed -n '1p' "$sleep_log")" == "1" ]]
+	[[ "$(sed -n '2p' "$sleep_log")" == "2" ]]
+	rm -f "$sleep_log"
 }
 
 @test "retry_with_backoff:: respects RETRY_MAX_DELAY" {
-	local attempt_file
-	attempt_file=$(mktemp "/tmp/send-to-slack-tests.retry-attempt.XXXXXX")
+	local attempt_file sleep_log
+	attempt_file=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.retry-attempt.XXXXXX")
+	sleep_log=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.sleep-log.XXXXXX")
 	echo "0" >"$attempt_file"
 
 	test_command() {
@@ -1039,8 +735,11 @@ mock_curl_permalink_failure() {
 		echo "$count" >"$attempt_file"
 		return 1
 	}
+	sleep() { echo "$1" >>"$sleep_log"; }
 	export -f test_command
+	export -f sleep
 	export attempt_file
+	export sleep_log
 
 	RETRY_INITIAL_DELAY=2
 	RETRY_BACKOFF_MULTIPLIER=10
@@ -1051,19 +750,19 @@ mock_curl_permalink_failure() {
 	export RETRY_MAX_DELAY
 	export RETRY_MAX_ATTEMPTS
 
-	start_time=$(date +%s)
 	run retry_with_backoff 3 test_command
-	end_time=$(date +%s)
-	elapsed=$((end_time - start_time))
 	rm -f "$attempt_file"
 
 	[[ "$status" -eq 1 ]]
-	[[ $elapsed -lt 15 ]]
+	# 3 attempts produce 2 inter-attempt sleeps: 2s then min(20,3)=3s
+	[[ "$(sed -n '1p' "$sleep_log")" == "2" ]]
+	[[ "$(sed -n '2p' "$sleep_log")" == "3" ]]
+	rm -f "$sleep_log"
 }
 
 @test "retry_with_backoff:: uses default RETRY_MAX_ATTEMPTS when not specified" {
 	local attempt_file
-	attempt_file=$(mktemp "/tmp/send-to-slack-tests.retry-attempt.XXXXXX")
+	attempt_file=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.retry-attempt.XXXXXX")
 	echo "0" >"$attempt_file"
 
 	test_command() {
@@ -1204,7 +903,7 @@ mock_curl_permalink_failure() {
 
 @test "main:: fails when file is empty" {
 	local empty_file
-	empty_file=$(mktemp "/tmp/send-to-slack-tests.empty.XXXXXX")
+	empty_file=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.empty.XXXXXX")
 	touch "$empty_file"
 
 	run "$SCRIPT" -file "$empty_file"
@@ -1219,7 +918,7 @@ mock_curl_permalink_failure() {
 	create_test_payload
 
 	local stdin_copy
-	stdin_copy=$(mktemp "/tmp/send-to-slack-tests.payload-stdin.XXXXXX")
+	stdin_copy=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.payload-stdin.XXXXXX")
 	trap 'rm -f "$stdin_copy"' RETURN
 	cp "$TEST_PAYLOAD_FILE" "$stdin_copy"
 

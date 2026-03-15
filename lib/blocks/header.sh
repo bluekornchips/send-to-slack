@@ -3,7 +3,6 @@
 # Header Block implementation following Slack Block Kit guidelines
 # Ref: https://docs.slack.dev/reference/block-kit/blocks/header-block
 #
-set -eo pipefail
 
 ########################################################
 # Constants
@@ -105,5 +104,8 @@ create_header() {
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+	set -eo pipefail
+	umask 077
 	create_header "$@"
+	exit $?
 fi

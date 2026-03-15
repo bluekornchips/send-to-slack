@@ -3,22 +3,23 @@
 # Consolidated acceptance tests for send-to-slack
 #
 
+RUN_ACCEPTANCE_TEST=${RUN_ACCEPTANCE_TEST:-false}
+
 setup_file() {
+	[[ "$RUN_ACCEPTANCE_TEST" != "true" ]] && skip "RUN_ACCEPTANCE_TEST is not set"
+
 	GIT_ROOT="$(git rev-parse --show-toplevel || echo "")"
 	if [[ -z "$GIT_ROOT" ]]; then
-		echo "Failed to get git root" >&2
-		exit 1
+		fail "Failed to get git root"
 	fi
 
 	SCRIPT="$GIT_ROOT/bin/send-to-slack.sh"
 	if [[ ! -f "$SCRIPT" ]]; then
-		echo "Script not found: $SCRIPT" >&2
-		exit 1
+		fail "Script not found: $SCRIPT"
 	fi
 
-	if [[ "$ACCEPTANCE_TEST" == "true" ]] && [[ -z "$CHANNEL" ]]; then
-		echo "CHANNEL environment variable is not set" >&2
-		exit 1
+	if [[ -z "$CHANNEL" ]]; then
+		fail "CHANNEL environment variable is not set"
 	fi
 
 	if [[ -n "$SLACK_BOT_USER_OAUTH_TOKEN" ]]; then
@@ -36,8 +37,10 @@ setup_file() {
 
 setup() {
 	source "$SCRIPT"
-
 	source "$GIT_ROOT/lib/parse-payload.sh"
+
+	_SLACK_WORKSPACE=$(mktemp -d "${BATS_TEST_TMPDIR}/acceptance-tests.workspace.XXXXXX")
+	export _SLACK_WORKSPACE
 
 	SLACK_BOT_USER_OAUTH_TOKEN="test-token"
 	MESSAGE="test message"
@@ -68,10 +71,8 @@ setup() {
 }
 
 teardown() {
-	rm -f "${TEST_PAYLOAD_FILE}"
-	[[ -n "$ACCEPTANCE_TEST_FILE" ]] && rm -f "$ACCEPTANCE_TEST_FILE"
-	[[ -n "$ACCEPTANCE_PAYLOAD_FILE" ]] && rm -f "$ACCEPTANCE_PAYLOAD_FILE"
-	[[ -n "$parsed_payload_file" ]] && rm -f "$parsed_payload_file"
+	rm -rf "$_SLACK_WORKSPACE"
+	rm -f "$TEST_PAYLOAD_FILE"
 	return 0
 }
 
@@ -80,10 +81,6 @@ teardown() {
 ########################################################
 
 @test "acceptance:: comprehensive message with all block types" {
-	if [[ "$ACCEPTANCE_TEST" != "true" ]]; then
-		skip "ACCEPTANCE_TEST is not set"
-	fi
-
 	if [[ -z "$REAL_TOKEN" ]]; then
 		skip "REAL_TOKEN is required for acceptance tests"
 	fi
@@ -148,10 +145,6 @@ teardown() {
 }
 
 @test "acceptance:: params.raw" {
-	if [[ "$ACCEPTANCE_TEST" != "true" ]]; then
-		skip "ACCEPTANCE_TEST is not set"
-	fi
-
 	if [[ -z "$REAL_TOKEN" ]]; then
 		skip "REAL_TOKEN is required for acceptance tests"
 	fi
@@ -236,10 +229,6 @@ teardown() {
 }
 
 @test "acceptance:: params.from_file" {
-	if [[ "$ACCEPTANCE_TEST" != "true" ]]; then
-		skip "ACCEPTANCE_TEST is not set"
-	fi
-
 	if [[ -z "$REAL_TOKEN" ]]; then
 		skip "REAL_TOKEN is required for acceptance tests"
 	fi
@@ -317,10 +306,6 @@ teardown() {
 }
 
 @test "acceptance:: blocks from_file" {
-	if [[ "$ACCEPTANCE_TEST" != "true" ]]; then
-		skip "ACCEPTANCE_TEST is not set"
-	fi
-
 	if [[ -z "$REAL_TOKEN" ]]; then
 		skip "REAL_TOKEN is required for acceptance tests"
 	fi
@@ -388,10 +373,6 @@ teardown() {
 }
 
 @test "acceptance:: file block from prior job with 644 perms" {
-	if [[ "$ACCEPTANCE_TEST" != "true" ]]; then
-		skip "ACCEPTANCE_TEST is not set"
-	fi
-
 	if [[ -z "$REAL_TOKEN" ]]; then
 		skip "REAL_TOKEN is required for acceptance tests"
 	fi
@@ -409,7 +390,7 @@ teardown() {
 	fi
 
 	# Simulate artifact created by a prior Concourse job under a different user with 0644 perms
-	ACCEPTANCE_TEST_FILE=$(mktemp acceptance-tests.test-upload-644.XXXXXX)
+	ACCEPTANCE_TEST_FILE=$(mktemp "${BATS_TEST_TMPDIR}/acceptance-tests.test-upload-644.XXXXXX")
 	echo "Artifact created in prior step" >"$ACCEPTANCE_TEST_FILE"
 	chmod 644 "$ACCEPTANCE_TEST_FILE"
 	local mode
@@ -458,10 +439,6 @@ teardown() {
 }
 
 @test "acceptance:: crosspost" {
-	if [[ "$ACCEPTANCE_TEST" != "true" ]]; then
-		skip "ACCEPTANCE_TEST is not set"
-	fi
-
 	if [[ -z "$REAL_TOKEN" ]]; then
 		skip "REAL_TOKEN is required for acceptance tests"
 	fi
@@ -519,10 +496,6 @@ teardown() {
 }
 
 @test "acceptance:: thread reply with thread_ts" {
-	if [[ "$ACCEPTANCE_TEST" != "true" ]]; then
-		skip "ACCEPTANCE_TEST is not set"
-	fi
-
 	if [[ -z "$REAL_TOKEN" ]]; then
 		skip "REAL_TOKEN is required for acceptance tests"
 	fi
@@ -628,11 +601,7 @@ teardown() {
 	[[ -f "$ACCEPTANCE_TEST_FILE" ]] && rm -f "$ACCEPTANCE_TEST_FILE"
 }
 
-@test "acceptance:: create_thread" {
-	if [[ "$ACCEPTANCE_TEST" != "true" ]]; then
-		skip "ACCEPTANCE_TEST is not set"
-	fi
-
+@test "acceptance:: thread.replies without create_thread" {
 	if [[ -z "$REAL_TOKEN" ]]; then
 		skip "REAL_TOKEN is required for acceptance tests"
 	fi
@@ -640,31 +609,8 @@ teardown() {
 	local token="$REAL_TOKEN"
 	DRY_RUN="false"
 
-	local blocks_json
-	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "acceptance") | .plan[0].params.blocks' "$GIT_ROOT/examples/acceptance.yaml")
-
-	if ! echo "$blocks_json" | jq . >/dev/null 2>&1; then
-		echo "Invalid blocks_json from acceptance.yaml" >&2
-		echo "$blocks_json" >&2
-		return 1
-	fi
-
-	ACCEPTANCE_TEST_FILE=$(mktemp acceptance-tests.test-upload.XXXXXX)
-	echo "Test file content for upload testing" >"$ACCEPTANCE_TEST_FILE"
-
-	local file_block
-	file_block=$(jq -n --arg path "$ACCEPTANCE_TEST_FILE" '{ "file": { "path": $path } }')
-	blocks_json=$(echo "$blocks_json" | jq --argjson file_block "$file_block" '. + [$file_block]')
-
-	if ! echo "$blocks_json" | jq . >/dev/null 2>&1; then
-		echo "Invalid blocks_json after adding file block" >&2
-		echo "$blocks_json" >&2
-		return 1
-	fi
-
 	jq -n \
 		--arg token "$token" \
-		--argjson blocks "$blocks_json" \
 		--arg channel "$CHANNEL" \
 		--arg dry_run "$DRY_RUN" \
 		'{
@@ -674,8 +620,46 @@ teardown() {
 			params: {
 				channel: $channel,
 				dry_run: $dry_run,
-				create_thread: true,
-				blocks: $blocks
+				blocks: [
+					{
+						header: {
+							text: {
+								type: "plain_text",
+								text: "Thread parent"
+							}
+						}
+					}
+				],
+				thread: {
+					replies: [
+						{
+							blocks: [
+								{
+									section: {
+										type: "text",
+										text: {
+											type: "mrkdwn",
+											text: "Thread reply 1 via thread.replies"
+										}
+									}
+								}
+							]
+						},
+						{
+							blocks: [
+								{
+									section: {
+										type: "text",
+										text: {
+											type: "mrkdwn",
+											text: "Thread reply 2 via thread.replies"
+										}
+									}
+								}
+							]
+						}
+					]
+				}
 			}
 		}' >"$TEST_PAYLOAD_FILE"
 
@@ -687,21 +671,129 @@ teardown() {
 
 	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "version"
-	echo "$output" | grep -q "timestamp"
 	echo "$output" | grep -q "main:: parsing payload"
-	echo "$output" | grep -q "main:: creating Concourse metadata"
 	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "send_thread_replies:: sending 2 thread reply(s)"
+	echo "$output" | grep -q "reply 1 of 2 sent"
+	echo "$output" | grep -q "reply 2 of 2 sent"
 	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
 
-	[[ -f "$ACCEPTANCE_TEST_FILE" ]] && rm -f "$ACCEPTANCE_TEST_FILE"
+	local send_count
+	send_count=$(echo "$output" | grep -c "send_notification:: message delivered to Slack successfully" || echo "0")
+	[[ "$send_count" -ge 3 ]]
+}
+
+@test "acceptance:: thread.replies with thread_ts" {
+	if [[ -z "$REAL_TOKEN" ]]; then
+		skip "REAL_TOKEN is required for acceptance tests"
+	fi
+
+	local token="$REAL_TOKEN"
+	DRY_RUN="false"
+
+	local parent_response
+	parent_response=$(curl -s -X POST \
+		-H "Authorization: Bearer ${token}" \
+		-H "Content-Type: application/json; charset=utf-8" \
+		-d "$(jq -n \
+			--arg channel "$CHANNEL" \
+			'{
+				channel: $channel,
+				text: "Parent message for thread.replies test"
+			}')" \
+		"https://slack.com/api/chat.postMessage")
+
+	if ! echo "$parent_response" | jq -e '.ok == true' >/dev/null 2>&1; then
+		echo "Failed to send parent message: $(echo "$parent_response" | jq -r '.error // "unknown"')" >&2
+		skip "Could not send parent message"
+	fi
+
+	local thread_ts
+	thread_ts=$(echo "$parent_response" | jq -r '.ts')
+
+	if [[ -z "$thread_ts" ]]; then
+		echo "No timestamp in parent message response" >&2
+		skip "Could not get parent message timestamp"
+	fi
+
+	jq -n \
+		--arg token "$token" \
+		--arg channel "$CHANNEL" \
+		--arg dry_run "$DRY_RUN" \
+		--arg thread_ts "$thread_ts" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: $token
+			},
+			params: {
+				channel: $channel,
+				dry_run: $dry_run,
+				thread_ts: $thread_ts,
+				blocks: [
+					{
+						section: {
+							type: "text",
+							text: {
+								type: "mrkdwn",
+								text: "Message sent into existing thread via thread_ts"
+							}
+						}
+					}
+				],
+				thread: {
+					replies: [
+						{
+							blocks: [
+								{
+									section: {
+										type: "text",
+										text: {
+											type: "mrkdwn",
+											text: "Thread reply 1 via thread.replies"
+										}
+									}
+								}
+							]
+						},
+						{
+							blocks: [
+								{
+									section: {
+										type: "text",
+										text: {
+											type: "mrkdwn",
+											text: "Thread reply 2 via thread.replies"
+										}
+									}
+								}
+							]
+						}
+					]
+				}
+			}
+		}' >"$TEST_PAYLOAD_FILE"
+
+	if ! jq . "$TEST_PAYLOAD_FILE" >/dev/null 2>&1; then
+		echo "Invalid JSON in test payload file" >&2
+		cat "$TEST_PAYLOAD_FILE" >&2
+		return 1
+	fi
+
+	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "main:: parsing payload"
+	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "send_thread_replies:: sending 2 thread reply(s)"
+	echo "$output" | grep -q "reply 1 of 2 sent"
+	echo "$output" | grep -q "reply 2 of 2 sent"
+	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
+
+	local send_count
+	send_count=$(echo "$output" | grep -c "send_notification:: message delivered to Slack successfully" || echo "0")
+	[[ "$send_count" -ge 3 ]]
 }
 
 @test "acceptance:: actions block button sends hello world to channel" {
-	if [[ "$ACCEPTANCE_TEST" != "true" ]]; then
-		skip "ACCEPTANCE_TEST is not set"
-	fi
-
 	if [[ -z "$REAL_TOKEN" ]]; then
 		skip "REAL_TOKEN is required for acceptance tests"
 	fi
@@ -751,7 +843,7 @@ teardown() {
 
 	echo ""
 	echo "=========================================="
-	echo "Acceptance Test: Channel Message Button"
+	echo "acceptance_test:: Channel Message Button"
 	echo "=========================================="
 	echo "1. Check Slack channel: ${CHANNEL}"
 	echo "2. Click the 'Send to Channel' button"
@@ -760,10 +852,6 @@ teardown() {
 }
 
 @test "acceptance:: actions block button sends hello world to user" {
-	if [[ "$ACCEPTANCE_TEST" != "true" ]]; then
-		skip "ACCEPTANCE_TEST is not set"
-	fi
-
 	if [[ -z "$REAL_TOKEN" ]]; then
 		skip "REAL_TOKEN is required for acceptance tests"
 	fi
@@ -813,7 +901,7 @@ teardown() {
 
 	echo ""
 	echo "=========================================="
-	echo "Acceptance Test: User DM Button"
+	echo "acceptance_test:: User DM Button"
 	echo "=========================================="
 	echo "1. Check Slack channel: ${CHANNEL}"
 	echo "2. Click the 'Send to Me' button"
@@ -822,10 +910,6 @@ teardown() {
 }
 
 @test "acceptance:: slack-native format with all block types" {
-	if [[ "$ACCEPTANCE_TEST" != "true" ]]; then
-		skip "ACCEPTANCE_TEST is not set"
-	fi
-
 	if [[ -z "$REAL_TOKEN" ]]; then
 		skip "REAL_TOKEN is required for acceptance tests"
 	fi
@@ -875,7 +959,7 @@ teardown() {
 
 	echo ""
 	echo "=========================================="
-	echo "Acceptance Test: Slack Native Format"
+	echo "acceptance_test:: Slack Native Format"
 	echo "=========================================="
 	echo "1. Check Slack channel: ${CHANNEL}"
 	echo "2. Verify all block types are displayed correctly:"

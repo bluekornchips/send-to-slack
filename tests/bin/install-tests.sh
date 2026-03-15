@@ -6,18 +6,15 @@
 setup_file() {
 	GIT_ROOT="$(git rev-parse --show-toplevel || echo "")"
 	if [[ -z "$GIT_ROOT" ]]; then
-		echo "setup_file:: git root not found" >&2
-		exit 1
+		fail "setup_file:: git root not found"
 	fi
 
 	INSTALL_SCRIPT="${GIT_ROOT}/bin/install.sh"
 
 	if [[ ! -f "$INSTALL_SCRIPT" ]]; then
-		echo "setup_file:: install script missing: $INSTALL_SCRIPT" >&2
-		exit 1
+		fail "setup_file:: install script missing: $INSTALL_SCRIPT"
 	fi
 
-	# shellcheck source=/dev/null
 	source "$INSTALL_SCRIPT"
 
 	INSTALL_SIGNATURE_VALUE="$INSTALL_SIGNATURE"
@@ -35,7 +32,7 @@ setup_file() {
 }
 
 setup() {
-	PREFIX_DIR="$(mktemp -d "${BATS_TEST_TMPDIR:-/tmp}/send-to-slack-install.XXXXXX")"
+	PREFIX_DIR="$(mktemp -d "${BATS_TEST_TMPDIR}/send-to-slack-install.XXXXXX")"
 	TARGET_PATH="${PREFIX_DIR}/${INSTALL_BASENAME_VALUE}"
 
 	export PREFIX_DIR
@@ -80,7 +77,7 @@ teardown() {
 	local container_prefix
 	local container_target
 
-	container_prefix="${BATS_TEST_TMPDIR:-/tmp}/container/user/bin"
+	container_prefix="${BATS_TEST_TMPDIR}/container/user/bin"
 	container_target="${container_prefix}/${INSTALL_BASENAME_VALUE}"
 
 	run "$INSTALL_SCRIPT" --version local --prefix "$container_prefix"
@@ -102,7 +99,7 @@ teardown() {
 	local source_dir
 	local install_root
 
-	temp_dir=$(mktemp -d "${BATS_TEST_TMPDIR:-/tmp}/send-to-slack-source.XXXXXX")
+	temp_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/send-to-slack-source.XXXXXX")
 	source_dir="${temp_dir}/send-to-slack-main"
 
 	mkdir -p "${source_dir}/bin" "${source_dir}/lib/blocks"
@@ -150,7 +147,7 @@ teardown() {
 	local extract_dir
 	local source_dir
 
-	temp_dir=$(mktemp -d "${BATS_TEST_TMPDIR:-/tmp}/extract-test.XXXXXX")
+	temp_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/extract-test.XXXXXX")
 	archive_path="${temp_dir}/test.tar.gz"
 	extract_dir="${temp_dir}/extract"
 	source_dir="${temp_dir}/source"
@@ -186,7 +183,7 @@ teardown() {
 
 	local temp_dir
 
-	temp_dir=$(mktemp -d "${BATS_TEST_TMPDIR:-/tmp}/clone-test.XXXXXX")
+	temp_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/clone-test.XXXXXX")
 
 	if ! clone_repository "main" "$temp_dir"; then
 		skip "clone_repository failed, may be network issue"
@@ -206,7 +203,7 @@ teardown() {
 
 	local temp_dir
 
-	temp_dir=$(mktemp -d "${BATS_TEST_TMPDIR:-/tmp}/clone-test.XXXXXX")
+	temp_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/clone-test.XXXXXX")
 
 	run clone_repository "nonexistent-branch-xyz123" "$temp_dir"
 	[[ "$status" -eq 1 ]]
@@ -218,7 +215,7 @@ teardown() {
 	local temp_prefix
 	local temp_binary
 
-	temp_prefix=$(mktemp -d "${BATS_TEST_TMPDIR:-/tmp}/verify-test.XXXXXX")
+	temp_prefix=$(mktemp -d "${BATS_TEST_TMPDIR}/verify-test.XXXXXX")
 	temp_binary="${temp_prefix}/${INSTALL_BASENAME_VALUE}"
 
 	mkdir -p "$temp_prefix"
@@ -242,7 +239,7 @@ teardown() {
 	local temp_prefix
 	local temp_binary
 
-	temp_prefix=$(mktemp -d "${BATS_TEST_TMPDIR:-/tmp}/verify-test.XXXXXX")
+	temp_prefix=$(mktemp -d "${BATS_TEST_TMPDIR}/verify-test.XXXXXX")
 	temp_binary="${temp_prefix}/${INSTALL_BASENAME_VALUE}"
 
 	# Ensure the binary doesn't exist

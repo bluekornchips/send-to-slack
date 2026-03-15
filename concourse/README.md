@@ -41,6 +41,7 @@ See the [examples/](../examples/) directory for complete Concourse pipeline exam
 - Basic message sending
 - Block Kit formatting
 - File uploads
+- Thread replies (multiple messages in a thread)
 - Interactive components
 
 ## Local Development
@@ -68,7 +69,7 @@ export SLACK_BOT_USER_OAUTH_TOKEN="xoxb-your-token"
 make concourse-load-examples
 ```
 
-This will load all YAML files from the `examples/` directory as pipelines.
+This will load all YAML files from the `examples/` directory as pipelines. To run every example pipeline end-to-end in one go (start Concourse, load pipelines, trigger all jobs), use `make concourse-run-all-examples`; see [ci/README.md](ci/README.md) for run-all-examples.sh details.
 
 ## Resource Type Implementation
 

@@ -26,7 +26,6 @@ teardown() {
 ########################################################
 # Create version input for testing
 # Optional argument: timestamp, defaults to test_timestamp from setup
-#shellcheck disable=SC2120
 create_version_input() {
 	local timestamp="${1:-${test_timestamp}}"
 	jq -n --arg timestamp "${timestamp}" '{"version": {"timestamp": $timestamp}}' >"${TEST_PAYLOAD_FILE}"

@@ -22,11 +22,9 @@ jobs:
   - name: acceptance
     plan:
       - put: slack-notification
-
         params:
           channel: ((channel))
           text: "Test of all Slack block types"
-          create_thread: true
           blocks:
             - header:
                 color: success
@@ -423,9 +421,7 @@ jobs:
           # Crosspost accepts the same params as a regular message
           # Use $NOTIFICATION_PERMALINK to reference the original message
           crosspost:
-            channel:
-              - side-channel
-              - side-channel
+            channel: ((side_channel))
             blocks:
               - section:
                   type: text

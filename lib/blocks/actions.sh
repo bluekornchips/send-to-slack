@@ -3,7 +3,6 @@
 # Actions Block implementation following Slack Block Kit guidelines
 # Ref: https://docs.slack.dev/reference/block-kit/blocks/actions-block/
 #
-set -eo pipefail
 
 ########################################################
 # Constants
@@ -203,5 +202,8 @@ create_actions() {
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+	set -eo pipefail
+	umask 077
 	create_actions "$@"
+	exit $?
 fi

@@ -3,7 +3,6 @@
 # Context Block implementation following Slack Block Kit guidelines
 # Ref: https://docs.slack.dev/reference/block-kit/blocks/context-block
 #
-set -eo pipefail
 
 ########################################################
 # Constants
@@ -120,5 +119,8 @@ create_context() {
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+	set -eo pipefail
+	umask 077
 	create_context "$@"
+	exit $?
 fi

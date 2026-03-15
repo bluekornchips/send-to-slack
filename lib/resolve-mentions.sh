@@ -10,7 +10,8 @@
 #   https://docs.slack.dev/methods/conversations/conversations.list
 #   https://docs.slack.dev/methods/conversations/conversations.open
 #
-set -eo pipefail
+
+RESOLVE_MAX_PAGES=50
 
 # Resolve a user mention or name to a user ID.
 #
@@ -53,7 +54,13 @@ resolve_user_id() {
 
 	# Look up user by name via users.list API with pagination
 	local cursor=""
+	local pages=0
 	while true; do
+		if ((pages >= RESOLVE_MAX_PAGES)); then
+			echo "resolve_user_id:: exceeded max pages (${RESOLVE_MAX_PAGES}), aborting" >&2
+			return 1
+		fi
+		pages=$((pages + 1))
 		echo "resolve_user_id:: fetching users.list page (cursor=${cursor:-initial})" >&2
 
 		if ! api_response=$(curl -s -X GET \
@@ -152,7 +159,13 @@ resolve_channel_id() {
 
 	# Look up channel/group by name via conversations.list API
 	local cursor=""
+	local pages=0
 	while true; do
+		if ((pages >= RESOLVE_MAX_PAGES)); then
+			echo "resolve_channel_id:: exceeded max pages (${RESOLVE_MAX_PAGES}), aborting" >&2
+			return 1
+		fi
+		pages=$((pages + 1))
 		echo "resolve_channel_id:: fetching conversations.list page (cursor=${cursor:-initial})" >&2
 
 		if ! api_response=$(curl -s -X GET \
@@ -246,7 +259,7 @@ resolve_dm_id() {
 
 	# Resolve user name/mention to user ID first
 	local user_id
-	if ! user_id=$(resolve_user_id "$dm_ref" 2>&1); then
+	if ! user_id=$(resolve_user_id "$dm_ref"); then
 		echo "resolve_dm_id:: could not resolve user: $dm_ref" >&2
 		return 1
 	fi

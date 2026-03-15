@@ -6,16 +6,14 @@
 setup_file() {
 	GIT_ROOT="$(git rev-parse --show-toplevel || echo "")"
 	if [[ -z "$GIT_ROOT" ]]; then
-		echo "Failed to get git root" >&2
-		exit 1
+		fail "Failed to get git root"
 	fi
 
 	SCRIPT="$GIT_ROOT/lib/file-upload.sh"
 	SEND_TO_SLACK_SCRIPT="$GIT_ROOT/bin/send-to-slack.sh"
 
 	if [[ ! -f "$SCRIPT" ]]; then
-		echo "Script not found: $SCRIPT" >&2
-		exit 1
+		fail "Script not found: $SCRIPT"
 	fi
 
 	if [[ -n "$SLACK_BOT_USER_OAUTH_TOKEN" ]]; then
@@ -31,7 +29,10 @@ setup_file() {
 setup() {
 	source "$SCRIPT"
 
-	TEST_FILE="$GIT_ROOT/test.txt"
+	_SLACK_WORKSPACE=$(mktemp -d "${BATS_TEST_TMPDIR}/file-upload-tests.workspace.XXXXXX")
+	export _SLACK_WORKSPACE
+
+	TEST_FILE="${BATS_TEST_TMPDIR}/file-upload-tests.test.txt"
 	CHANNEL="test-channel"
 	COMMENT="test comment"
 	TITLE="test title"
@@ -247,9 +248,9 @@ mock_complete_upload_success() {
 
 	run file_upload <<<"$json_input"
 	[[ "$status" -eq 0 ]]
-	# Should output rich_text block with file link
+	# Should output rich_text block with file link using the file basename as text
 	echo "$output" | grep -q '"type": "rich_text"'
-	echo "$output" | grep -q '"text": "test.txt"'
+	echo "$output" | grep -q "\"text\": \"$(basename "$TEST_FILE")\""
 	echo "$output" | grep -q '"url": "https://test.slack.com/files/test123"'
 }
 
@@ -294,7 +295,7 @@ mock_complete_upload_success() {
 @test "file_upload:: file size exceeds 1 GB limit" {
 	# Create a mock file that reports a size exceeding 1 GB
 	local large_file
-	large_file=$(mktemp file-upload-tests.large-file.XXXXXX)
+	large_file=$(mktemp "${BATS_TEST_TMPDIR}/file-upload-tests.large-file.XXXXXX")
 	trap 'rm -f "$large_file" 2>/dev/null || true' EXIT
 	echo "test content" >"$large_file"
 
@@ -324,7 +325,7 @@ mock_complete_upload_success() {
 @test "file_upload:: file size exactly at 1 GB limit succeeds" {
 	# Create a mock file that reports exactly 1 GB
 	local test_file
-	test_file=$(mktemp file-upload-tests.test-file.XXXXXX)
+	test_file=$(mktemp "${BATS_TEST_TMPDIR}/file-upload-tests.test-file.XXXXXX")
 	trap 'rm -f "$test_file" 2>/dev/null || true' EXIT
 	echo "test content" >"$test_file"
 
@@ -382,9 +383,55 @@ mock_complete_upload_success() {
 	echo "$output" | grep -q "_post_file_contents:: failed to post file contents:"
 }
 
+# validate_file_path glob expansion
+@test "validate_file_path:: resolves a glob pattern to a single matching file" {
+	local glob_dir
+	local glob_file
+
+	glob_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/glob-test.XXXXXX")
+	glob_file="${glob_dir}/report_20260314_120000.txt"
+	echo "timestamped content" >"${glob_file}"
+
+	FILE_PATH="${glob_dir}/report_*.txt"
+	export FILE_PATH
+
+	validate_file_path
+
+	[[ "$FILE_PATH" == "${glob_file}" ]]
+}
+
+@test "validate_file_path:: fails when glob matches no files" {
+	local glob_dir
+
+	glob_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/glob-test.XXXXXX")
+
+	FILE_PATH="${glob_dir}/report_*.txt"
+	export FILE_PATH
+
+	run validate_file_path
+
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "file not found"
+}
+
+@test "validate_file_path:: fails when glob matches multiple files" {
+	local glob_dir
+
+	glob_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/glob-test.XXXXXX")
+	echo "a" >"${glob_dir}/report_001.txt"
+	echo "b" >"${glob_dir}/report_002.txt"
+
+	FILE_PATH="${glob_dir}/report_*.txt"
+	export FILE_PATH
+
+	run validate_file_path
+
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "glob matched"
+}
+
 teardown() {
+	rm -rf "$_SLACK_WORKSPACE"
 	[[ -n "$TEST_FILE" ]] && rm -f "$TEST_FILE"
-	[[ -n "$large_file" ]] && rm -f "$large_file"
-	[[ -n "$test_file" ]] && rm -f "$test_file"
 	return 0
 }

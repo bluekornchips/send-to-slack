@@ -21,7 +21,7 @@ setup_file() {
 }
 
 setup() {
-	OUTPUT_DIR="$(mktemp -d "${BATS_TEST_TMPDIR:-/tmp}/send-to-slack-build.XXXXXX")"
+	OUTPUT_DIR="$(mktemp -d "${BATS_TEST_TMPDIR}/send-to-slack-build.XXXXXX")"
 	GIT_ROOT="$ORIGINAL_GIT_ROOT"
 
 	export OUTPUT_DIR

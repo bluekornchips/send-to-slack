@@ -4,11 +4,9 @@
 #
 
 setup_file() {
-
 	GIT_ROOT="$(git rev-parse --show-toplevel || echo "")"
 	if [[ -z "$GIT_ROOT" ]]; then
-		echo "Failed to get git root" >&2
-		exit 1
+		fail "Failed to get git root"
 	fi
 
 	SCRIPT="$GIT_ROOT/lib/blocks/rich-text.sh"
@@ -16,13 +14,11 @@ setup_file() {
 	SEND_TO_SLACK_SCRIPT="$GIT_ROOT/bin/send-to-slack.sh"
 
 	if [[ ! -f "$SCRIPT" ]]; then
-		echo "Script not found: $SCRIPT" >&2
-		exit 1
+		fail "Script not found: $SCRIPT"
 	fi
 
 	if [[ ! -f "$EXAMPLES_FILE" ]]; then
-		echo "Examples file not found: $EXAMPLES_FILE" >&2
-		exit 1
+		fail "Examples file not found: $EXAMPLES_FILE"
 	fi
 
 	export GIT_ROOT
@@ -34,10 +30,14 @@ setup_file() {
 setup() {
 	source "$SCRIPT"
 
+	_SLACK_WORKSPACE=$(mktemp -d "${BATS_TEST_TMPDIR}/rich-text-tests.workspace.XXXXXX")
+	export _SLACK_WORKSPACE
+
 	return 0
 }
 
 teardown() {
+	rm -rf "$_SLACK_WORKSPACE"
 	[[ -n "$mock_script" ]] && rm -f "$mock_script"
 	[[ -n "$stderr_file" ]] && rm -f "$stderr_file"
 	return 0
@@ -90,7 +90,7 @@ teardown() {
 
 	# Mock the file upload script to avoid actual API calls
 	local mock_script
-	mock_script=$(mktemp rich-text-tests.mock_file_upload.XXXXXX)
+	mock_script=$(mktemp "${BATS_TEST_TMPDIR}/rich-text-tests.mock_file_upload.XXXXXX")
 	cat >"$mock_script" <<'EOF'
 #!/bin/bash
 echo '{"type": "section", "text": {"type": "mrkdwn", "text": "<http://example.com/file.txt|oversized-rich-text.txt>"}}'
@@ -103,7 +103,7 @@ EOF
 
 	local json_output
 	local stderr_file
-	stderr_file=$(mktemp rich-text-tests.stderr.XXXXXX)
+	stderr_file=$(mktemp "${BATS_TEST_TMPDIR}/rich-text-tests.stderr.XXXXXX")
 	json_output=$(create_rich_text <<<"$block_value" 2>"$stderr_file")
 	local status=$?
 

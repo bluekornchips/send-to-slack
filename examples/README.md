@@ -19,6 +19,7 @@ This directory contains complete configuration examples for all supported Slack 
 - [section.yaml](section.yaml) - Section block examples
 - [slack-native.yaml](slack-native.yaml) - Using Slack's native `type` format end to end
 - [table.yaml](table.yaml) - Table block examples
+- [thread-replies.yaml](thread-replies.yaml) - Multiple replies in a thread via `thread_replies` array
 - [video.yaml](video.yaml) - Video block examples
 
 ## Formats
@@ -192,7 +193,7 @@ The program enforces Slack's message composition limits:
 
 ## Threading
 
-Reply to existing threads with `thread_ts`. Create new threads with `create_thread: true` with the first block as the parent message, remaining blocks as the thread reply. See [acceptance.yaml](acceptance.yaml) for examples. If you only have one block, it will be sent as a regular message.
+Reply to existing threads with `thread_ts`. Create new threads with `create_thread: true` with the first block as the parent message, remaining blocks as the thread reply. Use the `thread_replies` array to send multiple separate messages as replies in the same thread; each element is a message config (e.g. `blocks`). See [acceptance.yaml](acceptance.yaml) and [thread-replies.yaml](thread-replies.yaml) for examples. If you only have one block, it will be sent as a regular message.
 
 ## Alternative Input Methods
 

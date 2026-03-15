@@ -606,7 +606,6 @@ main() {
 	fi
 
 	temp_dir=$(mktemp -d)
-	umask 077
 
 	# Try git clone first if git is available, otherwise use archive downloads
 	if command -v "git" >/dev/null 2>&1; then
@@ -689,5 +688,6 @@ if [[ "${BASH_SOURCE[0]}" != "$0" ]] && [[ -f "${BASH_SOURCE[0]}" ]]; then
 	return 0
 fi
 
+umask 077
 main "$@"
 exit $?
