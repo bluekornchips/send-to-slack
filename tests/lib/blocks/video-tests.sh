@@ -219,6 +219,14 @@ teardown() {
 	echo "$output" | grep -q "description type must be plain_text"
 }
 
+@test "create_video:: description present but empty text" {
+	local test_input
+	test_input='{"video_url": "https://example.com/video.mp4", "thumbnail_url": "https://example.com/thumb.jpg", "alt_text": "Test video", "title": {"type": "plain_text", "text": "Video"}, "description": {"type": "plain_text", "text": ""}}'
+	run create_video <<<"$test_input"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "description.text field is required when description is present"
+}
+
 @test "create_video:: basic video block" {
 	local test_input
 	test_input='{"video_url": "https://example.com/video.mp4", "thumbnail_url": "https://example.com/thumb.jpg", "alt_text": "Test video", "title": {"type": "plain_text", "text": "Video Title"}}'
@@ -289,6 +297,99 @@ teardown() {
 	echo "$output" | jq -e '.provider_name' >/dev/null
 	echo "$output" | jq -e '.provider_icon_url' >/dev/null
 	echo "$output" | jq -e '.block_id' >/dev/null
+}
+
+########################################################
+# _video_optional_string
+########################################################
+
+@test "_video_optional_string:: field absent outputs empty and returns 0" {
+	local input
+	input='{"foo": "bar"}'
+	run _video_optional_string "$input" '.title_url' 'title_url'
+	[[ "$status" -eq 0 ]]
+	[[ "$output" == "" ]]
+}
+
+@test "_video_optional_string:: field null outputs empty and returns 0" {
+	local input
+	input='{"title_url": null}'
+	run _video_optional_string "$input" '.title_url' 'title_url'
+	[[ "$status" -eq 0 ]]
+	[[ "$output" == "" ]]
+}
+
+@test "_video_optional_string:: field present outputs value and returns 0" {
+	local input
+	input='{"title_url": "https://example.com/video"}'
+	run _video_optional_string "$input" '.title_url' 'title_url'
+	[[ "$status" -eq 0 ]]
+	[[ "$output" == "https://example.com/video" ]]
+}
+
+@test "_video_optional_string:: field over max length returns 1" {
+	local input
+	local long_val
+	long_val=$(printf 'x%.0s' {1..2001})
+	input=$(jq -n --arg val "$long_val" '{author_name: $val}')
+	run _video_optional_string "$input" '.author_name' 'author_name' '2000'
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "author_name must be 2000 characters or less"
+}
+
+@test "_video_optional_string:: invalid JSON returns 1" {
+	run _video_optional_string 'not json' '.x' 'x'
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "invalid JSON format"
+}
+
+########################################################
+# _video_optional_description
+########################################################
+
+@test "_video_optional_description:: description absent returns 0 and outputs nothing" {
+	local input
+	input='{"video_url": "x", "title": {"type": "plain_text", "text": "T"}}'
+	run _video_optional_description "$input"
+	[[ "$status" -eq 0 ]]
+	[[ "$output" == "" ]]
+}
+
+@test "_video_optional_description:: description valid outputs JSON and returns 0" {
+	local input
+	input='{"description": {"type": "plain_text", "text": "A description"}}'
+	run _video_optional_description "$input"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.type == "plain_text"' >/dev/null
+	echo "$output" | jq -e '.text == "A description"' >/dev/null
+}
+
+@test "_video_optional_description:: description wrong type returns 1" {
+	local input
+	input='{"description": {"type": "mrkdwn", "text": "Desc"}}'
+	run _video_optional_description "$input"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "description type must be plain_text"
+}
+
+@test "_video_optional_description:: description text too long returns 1" {
+	local long_text
+	long_text=$(printf 'x%.0s' {1..2001})
+	local input
+	input=$(jq -n \
+		--arg text "$long_text" \
+		'{description: {type: "plain_text", text: $text}}')
+	run _video_optional_description "$input"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "description text must be 2000 characters or less"
+}
+
+@test "_video_optional_description:: description present but empty text returns 1" {
+	local input
+	input='{"description": {"type": "plain_text", "text": ""}}'
+	run _video_optional_description "$input"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "description.text field is required when description is present"
 }
 
 @test "create_video:: from example" {
