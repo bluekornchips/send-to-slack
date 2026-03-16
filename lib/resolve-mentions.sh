@@ -53,6 +53,7 @@ resolve_user_id() {
 	echo "resolve_user_id:: resolving @${user_name}" >&2
 
 	# Look up user by name via users.list API with pagination
+	local api_response
 	local cursor=""
 	local pages=0
 	while true; do
@@ -158,6 +159,7 @@ resolve_channel_id() {
 	echo "resolve_channel_id:: resolving #${channel_name}" >&2
 
 	# Look up channel/group by name via conversations.list API
+	local api_response
 	local cursor=""
 	local pages=0
 	while true; do

@@ -374,6 +374,40 @@ print_next_steps() {
 	return 0
 }
 
+# Print install metadata from a cloned or extracted source directory
+#
+# Inputs:
+# - $1 - source directory path, may be a git repo or plain directory
+# - $2 - git ref used for the install, branch or tag
+# Returns:
+# - 0 always
+print_install_info() {
+	local source_dir="$1"
+	local git_ref="$2"
+	local commit
+	local describe
+
+	if [[ -z "$source_dir" ]] || [[ ! -d "$source_dir" ]]; then
+		return 0
+	fi
+
+	if command -v "git" >/dev/null 2>&1 && [[ -d "${source_dir}/.git" ]]; then
+		commit=$(git -C "$source_dir" rev-parse HEAD 2>/dev/null || echo "unknown")
+		describe=$(git -C "$source_dir" describe --tags --always 2>/dev/null || echo "$git_ref")
+	else
+		commit="unknown"
+		describe="$git_ref"
+	fi
+
+	cat <<EOF
+install:: ref:     $git_ref
+install:: version: $describe
+install:: commit:  $commit
+EOF
+
+	return 0
+}
+
 # Clone repository using git
 #
 # Inputs:
@@ -620,6 +654,8 @@ main() {
 				return 1
 			fi
 
+			print_install_info "$source_dir" "$git_ref"
+
 			if ! install_from_source "$source_dir" "$prefix" "$force"; then
 				rm -rf "$temp_dir"
 				return 1
@@ -666,6 +702,8 @@ main() {
 		rm -rf "$temp_dir"
 		return 1
 	fi
+
+	print_install_info "$source_dir" "$git_ref"
 
 	if ! install_from_source "$source_dir" "$prefix" "$force"; then
 		rm -rf "$temp_dir"

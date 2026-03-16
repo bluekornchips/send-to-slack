@@ -253,7 +253,7 @@ create_metadata() {
 
 		if [[ ${#payload_for_metadata} -gt "$safe_size" ]]; then
 			local stripped
-			if stripped=$(echo "$payload_for_metadata" | jq 'del(.blocks, .attachments)' 2>/dev/null) && \
+			if stripped=$(echo "$payload_for_metadata" | jq 'del(.blocks, .attachments)' 2>/dev/null) &&
 				[[ ${#stripped} -le "$safe_size" ]]; then
 				if ! METADATA=$(echo "$METADATA" | jq \
 					--arg payload "$stripped" \

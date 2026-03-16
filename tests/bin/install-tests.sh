@@ -21,7 +21,7 @@ setup_file() {
 	INSTALL_BASENAME_VALUE="$INSTALL_BASENAME"
 
 	# Export functions so they're available in test subshells
-	export -f install_from_source normalize_prefix file_has_signature extract_archive build_source_archive_url clone_repository verify_installation
+	export -f install_from_source normalize_prefix file_has_signature extract_archive build_source_archive_url clone_repository verify_installation print_install_info
 
 	export GIT_ROOT
 	export INSTALL_SCRIPT
@@ -253,4 +253,44 @@ teardown() {
 	[[ ! -f "$temp_binary" ]]
 
 	rm -rf "$temp_prefix"
+}
+
+# print_install_info
+@test "print_install_info:: returns 0 for empty source dir" {
+	run print_install_info "" "main"
+	[[ "$status" -eq 0 ]]
+}
+
+@test "print_install_info:: outputs ref, version, commit for a git repo" {
+	if ! command -v "git" >/dev/null 2>&1; then
+		skip "git not available"
+	fi
+
+	local worktree_dir
+	worktree_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/print-info-worktree.XXXXXX")
+
+	git -C "$GIT_ROOT" worktree add "$worktree_dir" HEAD
+
+	run print_install_info "$worktree_dir" "main"
+	[[ "$status" -eq 0 ]]
+
+	echo "$output" | grep -q "install:: ref:     main"
+	echo "$output" | grep -q "install:: version:"
+	echo "$output" | grep -q "install:: commit:"
+
+	git -C "$GIT_ROOT" worktree remove --force "$worktree_dir"
+}
+
+@test "print_install_info:: outputs unknown commit and version for non-git directory" {
+	local plain_dir
+	plain_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/print-info-plain.XXXXXX")
+
+	run print_install_info "$plain_dir" "v1.2.3"
+	[[ "$status" -eq 0 ]]
+
+	echo "$output" | grep -q "install:: ref:     v1.2.3"
+	echo "$output" | grep -q "install:: version: v1.2.3"
+	echo "$output" | grep -q "install:: commit:  unknown"
+
+	rm -rf "$plain_dir"
 }
