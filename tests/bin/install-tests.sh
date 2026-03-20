@@ -42,7 +42,7 @@ setup() {
 }
 
 teardown() {
-	if [[ -n "$TARGET_PATH" && -f "$TARGET_PATH" ]]; then
+	if [[ -n "$TARGET_PATH" ]] && { [[ -f "$TARGET_PATH" ]] || [[ -L "$TARGET_PATH" ]]; }; then
 		rm -f "$TARGET_PATH"
 	fi
 
@@ -54,37 +54,63 @@ teardown() {
 }
 
 @test "install.sh:: installs binary with signature and mode (local)" {
+	local symlink_target
+	local actual_install_root
+
 	run "$INSTALL_SCRIPT" --version local --prefix "$PREFIX_DIR"
 	[[ "$status" -eq 0 ]]
 
-	[[ -f "$TARGET_PATH" ]]
+	[[ -L "$TARGET_PATH" ]]
 	[[ -x "$TARGET_PATH" ]]
 	grep -Fq "$INSTALL_SIGNATURE_VALUE" "$TARGET_PATH"
+
+	symlink_target=$(readlink "$TARGET_PATH")
+	actual_install_root=$(dirname "$symlink_target")
+
+	[[ -d "${actual_install_root}/lib" ]]
+	[[ -f "${actual_install_root}/lib/parse-payload.sh" ]]
+	[[ -f "${actual_install_root}/bin/crosspost.sh" ]]
+	[[ -f "${actual_install_root}/bin/replies.sh" ]]
+
+	rm -rf "${actual_install_root}"
 }
 
 @test "install.sh:: reinstall is idempotent (local)" {
-	run "$INSTALL_SCRIPT" --version local --prefix "$PREFIX_DIR"
-	[[ "$status" -eq 0 ]]
+	local symlink_target
+	local actual_install_root
 
 	run "$INSTALL_SCRIPT" --version local --prefix "$PREFIX_DIR"
 	[[ "$status" -eq 0 ]]
 
+	run "$INSTALL_SCRIPT" --version local --prefix "$PREFIX_DIR"
+	[[ "$status" -eq 0 ]]
+
+	[[ -L "$TARGET_PATH" ]]
 	sig_count=$(grep -c "$INSTALL_SIGNATURE_VALUE" "$TARGET_PATH")
 	[[ "$sig_count" -eq 1 ]]
+
+	symlink_target=$(readlink "$TARGET_PATH")
+	actual_install_root=$(dirname "$symlink_target")
+	rm -rf "${actual_install_root}"
 }
 
 @test "install.sh:: supports container-style prefix (local)" {
 	local container_prefix
 	local container_target
+	local symlink_target
+	local actual_install_root
 
 	container_prefix="${BATS_TEST_TMPDIR}/container/user/bin"
 	container_target="${container_prefix}/${INSTALL_BASENAME_VALUE}"
 
 	run "$INSTALL_SCRIPT" --version local --prefix "$container_prefix"
 	[[ "$status" -eq 0 ]]
-	[[ -f "$container_target" ]]
+	[[ -L "$container_target" ]]
 	grep -Fq "$INSTALL_SIGNATURE_VALUE" "$container_target"
 
+	symlink_target=$(readlink "$container_target")
+	actual_install_root=$(dirname "$symlink_target")
+	rm -rf "${actual_install_root}"
 	rm -rf "$container_prefix"
 }
 
@@ -105,8 +131,12 @@ teardown() {
 	mkdir -p "${source_dir}/bin" "${source_dir}/lib/blocks"
 
 	cp "${GIT_ROOT}/bin/send-to-slack.sh" "${source_dir}/bin/send-to-slack.sh"
+	cp "${GIT_ROOT}/bin/crosspost.sh" "${GIT_ROOT}/bin/replies.sh" "${source_dir}/bin/"
 	cp "${GIT_ROOT}/lib"/*.sh "${source_dir}/lib/"
 	cp "${GIT_ROOT}/lib/blocks"/*.sh "${source_dir}/lib/blocks/"
+	if [[ -f "${GIT_ROOT}/VERSION" ]]; then
+		cp "${GIT_ROOT}/VERSION" "${source_dir}/VERSION"
+	fi
 
 	# Determine install root based on user. Root uses /usr/local, non-root uses ~/.local/share.
 	if [[ "$(id -u)" -eq 0 ]]; then
@@ -132,6 +162,11 @@ teardown() {
 	file_has_signature "${actual_install_root}/send-to-slack"
 	[[ -d "${actual_install_root}/lib" ]]
 	[[ -f "${actual_install_root}/lib/parse-payload.sh" ]]
+	[[ -f "${actual_install_root}/bin/crosspost.sh" ]]
+	[[ -f "${actual_install_root}/bin/replies.sh" ]]
+	if [[ -f "${source_dir}/VERSION" ]]; then
+		[[ -f "${actual_install_root}/VERSION" ]]
+	fi
 
 	rm -rf "${temp_dir}"
 	rm -rf "${actual_install_root}"

@@ -49,7 +49,7 @@ setup() {
 }
 
 teardown() {
-	if [[ -n "$TARGET_PATH" && -f "$TARGET_PATH" ]]; then
+	if [[ -n "$TARGET_PATH" ]] && { [[ -f "$TARGET_PATH" ]] || [[ -L "$TARGET_PATH" ]]; }; then
 		rm -f "$TARGET_PATH"
 	fi
 
@@ -124,8 +124,12 @@ teardown() {
 	mkdir -p "${source_dir}/bin" "${source_dir}/lib/blocks"
 
 	cp "${GIT_ROOT}/bin/send-to-slack.sh" "${source_dir}/bin/send-to-slack.sh"
+	cp "${GIT_ROOT}/bin/crosspost.sh" "${GIT_ROOT}/bin/replies.sh" "${source_dir}/bin/"
 	cp "${GIT_ROOT}/lib"/*.sh "${source_dir}/lib/"
 	cp "${GIT_ROOT}/lib/blocks"/*.sh "${source_dir}/lib/blocks/"
+	if [[ -f "${GIT_ROOT}/VERSION" ]]; then
+		cp "${GIT_ROOT}/VERSION" "${source_dir}/VERSION"
+	fi
 
 	# Install using install_from_source
 	run install_from_source "${source_dir}" "${PREFIX_DIR}" 0

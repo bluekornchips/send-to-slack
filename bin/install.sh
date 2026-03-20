@@ -41,10 +41,11 @@ Options:
   -h, --help       Show this help message
 
 Behavior:
-  - Copies bin/send-to-slack.sh to the target directory as "send-to-slack"
+  - Installs lib/, bin helpers, and send-to-slack under a fixed install root, then symlinks the prefix to that tree
+  - With --version local, installs from the repository containing this script
   - Appends a signature comment for safe uninstall validation
   - Refuses system prefixes like /usr or /etc; choose a writable user path
-  - Creates the prefix if missing and sets mode 0755 on the installed file
+  - Creates the prefix if missing and sets mode 0755 on the installed script
 EOF
 	return 0
 }
@@ -263,6 +264,16 @@ install_from_source() {
 		return 1
 	fi
 
+	if [[ ! -f "${source_dir}/bin/crosspost.sh" ]]; then
+		echo "install_from_source:: missing bin/crosspost.sh" >&2
+		return 1
+	fi
+
+	if [[ ! -f "${source_dir}/bin/replies.sh" ]]; then
+		echo "install_from_source:: missing bin/replies.sh" >&2
+		return 1
+	fi
+
 	# Determine install root based on prefix location
 	# Use system location only if prefix is system-wide or running as root
 	if [[ "$(id -u)" -eq 0 ]] || [[ "$normalized_prefix" == /usr/local/* ]] || [[ "$normalized_prefix" == /usr/* ]]; then
@@ -280,7 +291,7 @@ install_from_source() {
 		fi
 	fi
 
-	if ! install -d -m 755 "${install_root}/lib/blocks" "$(dirname "$target_binary")"; then
+	if ! install -d -m 755 "${install_root}/lib/blocks" "${install_root}/bin" "$(dirname "$target_binary")"; then
 		echo "install_from_source:: failed to create installation directories" >&2
 		return 1
 	fi
@@ -303,6 +314,18 @@ install_from_source() {
 	if ! cp "${source_dir}/lib/blocks"/*.sh "${install_root}/lib/blocks/"; then
 		echo "install_from_source:: failed to copy lib/blocks files" >&2
 		return 1
+	fi
+
+	if ! cp "${source_dir}/bin/crosspost.sh" "${source_dir}/bin/replies.sh" "${install_root}/bin/"; then
+		echo "install_from_source:: failed to copy bin helper scripts" >&2
+		return 1
+	fi
+
+	if [[ -f "${source_dir}/VERSION" ]]; then
+		if ! cp "${source_dir}/VERSION" "${install_root}/VERSION"; then
+			echo "install_from_source:: failed to copy VERSION" >&2
+			return 1
+		fi
 	fi
 
 	if [[ -L "$target_binary" ]] || [[ -f "$target_binary" ]]; then
@@ -611,13 +634,10 @@ main() {
 			if ! check_dependencies; then
 				return 1
 			fi
-			if ! ensure_source; then
-				return 1
-			fi
 			if ! ensure_prefix "$prefix"; then
 				return 1
 			fi
-			if ! install_binary "$prefix" "$force"; then
+			if ! install_from_source "${SCRIPT_DIR}/.." "$prefix" "$force"; then
 				return 1
 			fi
 			print_next_steps "$prefix"
