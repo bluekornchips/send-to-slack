@@ -114,10 +114,103 @@ teardown() {
 	rm -rf "$container_prefix"
 }
 
+@test "install.sh:: accepts --prefix equals form, local" {
+	local symlink_target
+	local actual_install_root
+
+	run "$INSTALL_SCRIPT" --version local --prefix="${PREFIX_DIR}"
+	[[ "$status" -eq 0 ]]
+
+	[[ -L "$TARGET_PATH" ]]
+	[[ -x "$TARGET_PATH" ]]
+	grep -Fq "$INSTALL_SIGNATURE_VALUE" "$TARGET_PATH"
+
+	symlink_target=$(readlink "$TARGET_PATH")
+	actual_install_root=$(dirname "$symlink_target")
+
+	[[ -d "${actual_install_root}/lib" ]]
+	[[ -f "${actual_install_root}/lib/parse-payload.sh" ]]
+
+	rm -rf "${actual_install_root}"
+}
+
 @test "install.sh:: usage displays help" {
 	run "$INSTALL_SCRIPT" --help
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "Usage:"
+}
+
+# check_dependencies: stubs are minimal executables, not symlinks to the host toolchain.
+# PATH is narrowed inside bash -c so bats still finds bash from the outer PATH.
+_install_test_stub() {
+	local stub_dir="$1"
+	local stub_name="$2"
+
+	printf '#!/bin/sh\nexit 0\n' >"${stub_dir}/${stub_name}"
+	chmod +x "${stub_dir}/${stub_name}"
+
+	return 0
+}
+
+_run_check_dependencies_isolated() {
+	local stub_dir="$1"
+
+	run bash -c 'export PATH="$1" && source "$2" && check_dependencies' _ "$stub_dir" "$INSTALL_SCRIPT"
+
+	return 0
+}
+
+@test "check_dependencies:: fails when stub dir has no git curl or tar" {
+	local stub_dir
+
+	stub_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/check-deps-stubs.XXXXXX")
+	_run_check_dependencies_isolated "$stub_dir"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "check_dependencies::"
+	rm -rf "$stub_dir"
+}
+
+@test "check_dependencies:: succeeds when stub git exists" {
+	local stub_dir
+
+	stub_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/check-deps-stubs.XXXXXX")
+	_install_test_stub "$stub_dir" "git"
+	_run_check_dependencies_isolated "$stub_dir"
+	[[ "$status" -eq 0 ]]
+	rm -rf "$stub_dir"
+}
+
+@test "check_dependencies:: succeeds when stub curl and tar exist without git" {
+	local stub_dir
+
+	stub_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/check-deps-stubs.XXXXXX")
+	_install_test_stub "$stub_dir" "curl"
+	_install_test_stub "$stub_dir" "tar"
+	_run_check_dependencies_isolated "$stub_dir"
+	[[ "$status" -eq 0 ]]
+	rm -rf "$stub_dir"
+}
+
+@test "check_dependencies:: fails when only stub curl exists" {
+	local stub_dir
+
+	stub_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/check-deps-stubs.XXXXXX")
+	_install_test_stub "$stub_dir" "curl"
+	_run_check_dependencies_isolated "$stub_dir"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "check_dependencies::"
+	rm -rf "$stub_dir"
+}
+
+@test "check_dependencies:: fails when only stub tar exists" {
+	local stub_dir
+
+	stub_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/check-deps-stubs.XXXXXX")
+	_install_test_stub "$stub_dir" "tar"
+	_run_check_dependencies_isolated "$stub_dir"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "check_dependencies::"
+	rm -rf "$stub_dir"
 }
 
 @test "install.sh:: installs from source directory" {

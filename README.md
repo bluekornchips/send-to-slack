@@ -32,7 +32,7 @@ echo 'alias send-to-slack="path/to/send-to-slack/bin/send-to-slack.sh"' >> ~/.ba
 
 ## Remote Install (curl | bash)
 
-Install directly from GitHub Releases with a single command:
+Install with a single command. The script is fetched from the repository default branch on GitHub, then the installer clones that repository with `git` or, if `git` is missing, downloads a source tarball with `curl` and extracts it with `tar`.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/bin/install.sh | bash
@@ -40,16 +40,18 @@ curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/bi
 
 The installer:
 
-- Downloads artifacts from GitHub Releases
-- Installs to `${HOME}/.local/bin` by default; when run as root installs to `/usr/local/bin` (override with `--prefix`)
+- Needs `git`, or both `curl` and `tar`, to obtain the project tree after the install script itself is downloaded
+- Installs `lib/`, helper scripts under `bin/`, and the main CLI under a fixed install root, then symlinks `send-to-slack` into your chosen prefix
+- Installs to `${HOME}/.local/bin` by default; when run as root installs to `/usr/local/bin` (override with `--prefix` or `--prefix=<dir>`)
 - Refuses system paths under `/usr` or `/etc` except `/usr/local` (no sudo required)
-- Only supports amd64 on Linux and macOS
+
+Set `GITHUB_REPO` to `owner/repo` to install from a fork.
 
 Options:
 
-- `--version <tag>` - Version to install (default: latest stable)
-- `--prefix <dir>` - Target directory (default: `${HOME}/.local/bin`, or `/usr/local/bin` when run as root)
-- `--local` - Install from local repo (use only when running the script from a clone)
+- `--version <ref>` - Branch or tag to install (default: `main`). Use `local` when running `bin/install.sh` from a checkout to install that tree; `local` is not supported when the script is piped from `curl`, so the installer falls back to a remote ref.
+- `--prefix <dir>` or `--prefix=<dir>` - Target directory (default: `${HOME}/.local/bin`, or `/usr/local/bin` when run as root)
+- `--force` - Overwrite an existing `send-to-slack` in the prefix when it lacks the install signature
 
 Example with custom prefix (useful in containers):
 
@@ -57,6 +59,14 @@ Example with custom prefix (useful in containers):
 curl --proto "=https" --tlsv1.2 --fail --show-error --location \
   https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/bin/install.sh | \
   bash -s -- --prefix /tmp/send-to-slack/bin
+```
+
+Same with equals form:
+
+```bash
+curl --proto "=https" --tlsv1.2 --fail --show-error --location \
+  https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/bin/install.sh | \
+  bash -s -- --prefix=/tmp/send-to-slack/bin
 ```
 
 After installation, add the prefix to your PATH if needed (when run as root the default `/usr/local/bin` is already on PATH):
@@ -73,9 +83,15 @@ Run from the cloned repository:
 ./bin/install.sh
 ```
 
-- Default prefix is ${HOME}/.local/bin (or /usr/local/bin when run as root); override with --prefix when the default is not writable (for example --prefix /tmp/send-to-slack/bin inside containers).
-- If the prefix is not on PATH, add it: `export PATH="${HOME}/.local/bin:${PATH}"` (or the prefix you chose; root installs to /usr/local/bin which is on PATH).
-- Install copies bin/send-to-slack.sh to the prefix as send-to-slack, marks it executable, and adds a small signature comment used by uninstall.
+Install from the working tree without hitting GitHub:
+
+```bash
+./bin/install.sh --version local
+```
+
+- Default prefix is `${HOME}/.local/bin` (or `/usr/local/bin` when run as root); override with `--prefix <dir>` or `--prefix=<dir>` when the default is not writable, for example `--prefix /tmp/send-to-slack/bin` inside containers.
+- If the prefix is not on PATH, add it: `export PATH="${HOME}/.local/bin:${PATH}"` (or the prefix you chose; root installs to `/usr/local/bin` which is on PATH).
+- The installer copies `bin/send-to-slack.sh`, `lib/`, and `bin` helpers into an install root, symlinks `send-to-slack` into the prefix, marks the main script executable, and appends a small signature comment used by `uninstall.sh`.
 
 ## Uninstall
 
