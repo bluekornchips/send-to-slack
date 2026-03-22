@@ -175,14 +175,19 @@ teardown() {
 
 @test "uninstall.sh:: allows /usr/local/* prefix" {
 	local usr_local_prefix
+	local usr_local_parent
 	local usr_local_target
 
 	usr_local_prefix="/usr/local/bin"
+	usr_local_parent="/usr/local"
 	usr_local_target="${usr_local_prefix}/${INSTALL_BASENAME_VALUE}"
 
-	# Only test if we can write to /usr/local/bin
-	if [[ ! -w "$usr_local_prefix" ]] && [[ "$(id -u)" -ne 0 ]]; then
-		skip "cannot write to /usr/local/bin"
+	# install_from_source uses install_root under /usr/local for this prefix, so non-root
+	# needs write on /usr/local and on the bin directory. Writable bin alone is not enough.
+	if [[ "$(id -u)" -ne 0 ]]; then
+		if [[ ! -w "$usr_local_parent" ]] || [[ ! -w "$usr_local_prefix" ]]; then
+			skip "cannot write to ${usr_local_parent} and ${usr_local_prefix}"
+		fi
 	fi
 
 	# Install to /usr/local/bin
