@@ -6,11 +6,9 @@
 # Detect if script is being piped (BASH_SOURCE[0] will be /dev/stdin or similar)
 if [[ "${BASH_SOURCE[0]}" == "/dev/stdin" ]] || [[ "${BASH_SOURCE[0]}" == "-" ]] || [[ ! -f "${BASH_SOURCE[0]}" ]]; then
 	SCRIPT_DIR=""
-	SOURCE_SCRIPT=""
 	IS_PIPED=1
 else
 	SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-	SOURCE_SCRIPT="${SCRIPT_DIR}/send-to-slack.sh"
 	IS_PIPED=0
 fi
 UPSTREAM_REPO="bluekornchips/send-to-slack"
@@ -22,6 +20,23 @@ fi
 INSTALL_BASENAME="send-to-slack"
 INSTALL_SIGNATURE="# send-to-slack install signature: v1"
 GITHUB_REPO="${GITHUB_REPO:-${UPSTREAM_REPO}}"
+# Set only during remote install so EXIT trap can remove the directory after main returns
+_INSTALL_TMPDIR=""
+
+# Remove long-lived temp directory created for clone or archive install
+#
+# Side Effects:
+# - Removes directory at _INSTALL_TMPDIR when set and present
+#
+# Returns:
+# - 0 always
+cleanup_install_tmpdir() {
+	if [[ -n "${_INSTALL_TMPDIR}" ]] && [[ -d "${_INSTALL_TMPDIR}" ]]; then
+		rm -rf "${_INSTALL_TMPDIR}"
+	fi
+
+	return 0
+}
 
 # Display usage information
 #
@@ -41,10 +56,11 @@ Options:
   -h, --help       Show this help message
 
 Behavior:
-  - Copies bin/send-to-slack.sh to the target directory as "send-to-slack"
+  - Installs lib/, bin helpers, and send-to-slack under a fixed install root, then symlinks the prefix to that tree
+  - With --version local, installs from the repository containing this script
   - Appends a signature comment for safe uninstall validation
   - Refuses system prefixes like /usr or /etc; choose a writable user path
-  - Creates the prefix if missing and sets mode 0755 on the installed file
+  - Creates the prefix if missing and sets mode 0755 on the installed script
 EOF
 	return 0
 }
@@ -54,16 +70,16 @@ EOF
 # Returns:
 # - 0 on success, 1 if no tools available
 check_dependencies() {
-	# Git takes priority, then need tar for tar.gz archive
+	# Git takes priority, archive path needs curl and tar
 	if command -v "git" >/dev/null 2>&1; then
 		return 0
 	fi
 
-	if command -v "tar" >/dev/null 2>&1; then
+	if command -v "curl" >/dev/null 2>&1 && command -v "tar" >/dev/null 2>&1; then
 		return 0
 	fi
 
-	echo "check_dependencies:: missing required commands: need 'git' or 'tar'" >&2
+	echo "check_dependencies:: missing required commands: need 'git', or 'curl' and 'tar'" >&2
 	return 1
 }
 
@@ -89,23 +105,6 @@ normalize_prefix() {
 	fi
 
 	echo "${path%/}"
-	return 0
-}
-
-# Verify source script exists and is readable
-# Returns:
-# - 0 on success, 1 on failure
-ensure_source() {
-	if [[ ! -f "$SOURCE_SCRIPT" ]]; then
-		echo "ensure_source:: source missing: $SOURCE_SCRIPT" >&2
-		return 1
-	fi
-
-	if [[ ! -r "$SOURCE_SCRIPT" ]]; then
-		echo "ensure_source:: source not readable: $SOURCE_SCRIPT" >&2
-		return 1
-	fi
-
 	return 0
 }
 
@@ -166,61 +165,6 @@ file_has_signature() {
 	return 1
 }
 
-# Install binary to prefix with signature and mode
-#
-# Inputs:
-# - $1 - prefix
-# - $2 - force flag, 1 enables overwrite without signature
-# Returns:
-# - 0 on success, 1 on failure
-install_binary() {
-	local prefix="$1"
-	local force="$2"
-	local normalized_prefix
-	local target
-
-	if ! normalized_prefix=$(normalize_prefix "$prefix"); then
-		return 1
-	fi
-
-	target="${normalized_prefix}/${INSTALL_BASENAME}"
-
-	if [[ -d "$target" ]]; then
-		echo "install_binary:: target is a directory: $target" >&2
-		return 1
-	fi
-
-	if [[ -f "$target" ]] && ((force != 1)); then
-		if ! file_has_signature "$target"; then
-			echo "install_binary:: existing file lacks signature, use --force to overwrite: $target" >&2
-			return 1
-		fi
-	fi
-
-	if ! cp "$SOURCE_SCRIPT" "$target"; then
-		echo "install_binary:: copy failed to $target" >&2
-		return 1
-	fi
-
-	if ! chmod 0755 "$target"; then
-		echo "install_binary:: chmod failed on $target" >&2
-		return 1
-	fi
-
-	if ! printf '\n%s\n' "$INSTALL_SIGNATURE" >>"$target"; then
-		echo "install_binary:: failed to append signature to $target" >&2
-		return 1
-	fi
-
-	if ! file_has_signature "$target"; then
-		echo "install_binary:: signature verification failed for $target" >&2
-		return 1
-	fi
-
-	echo "install_binary:: installed $target"
-	return 0
-}
-
 # Install from extracted source directory
 # Inputs:
 # - $1 - source directory path
@@ -263,6 +207,16 @@ install_from_source() {
 		return 1
 	fi
 
+	if [[ ! -f "${source_dir}/bin/crosspost.sh" ]]; then
+		echo "install_from_source:: missing bin/crosspost.sh" >&2
+		return 1
+	fi
+
+	if [[ ! -f "${source_dir}/bin/replies.sh" ]]; then
+		echo "install_from_source:: missing bin/replies.sh" >&2
+		return 1
+	fi
+
 	# Determine install root based on prefix location
 	# Use system location only if prefix is system-wide or running as root
 	if [[ "$(id -u)" -eq 0 ]] || [[ "$normalized_prefix" == /usr/local/* ]] || [[ "$normalized_prefix" == /usr/* ]]; then
@@ -280,7 +234,7 @@ install_from_source() {
 		fi
 	fi
 
-	if ! install -d -m 755 "${install_root}/lib/blocks" "$(dirname "$target_binary")"; then
+	if ! install -d -m 755 "${install_root}/lib/blocks" "${install_root}/bin" "$(dirname "$target_binary")"; then
 		echo "install_from_source:: failed to create installation directories" >&2
 		return 1
 	fi
@@ -303,6 +257,18 @@ install_from_source() {
 	if ! cp "${source_dir}/lib/blocks"/*.sh "${install_root}/lib/blocks/"; then
 		echo "install_from_source:: failed to copy lib/blocks files" >&2
 		return 1
+	fi
+
+	if ! cp "${source_dir}/bin/crosspost.sh" "${source_dir}/bin/replies.sh" "${install_root}/bin/"; then
+		echo "install_from_source:: failed to copy bin helper scripts" >&2
+		return 1
+	fi
+
+	if [[ -f "${source_dir}/VERSION" ]]; then
+		if ! cp "${source_dir}/VERSION" "${install_root}/VERSION"; then
+			echo "install_from_source:: failed to copy VERSION" >&2
+			return 1
+		fi
 	fi
 
 	if [[ -L "$target_binary" ]] || [[ -f "$target_binary" ]]; then
@@ -454,14 +420,11 @@ clone_repository() {
 			rm -rf "$temp_clone_dir"
 			return 1
 		fi
-		cd "$temp_clone_dir" || return 1
-		if ! clone_output=$(git checkout "$ref" 2>&1); then
+		if ! clone_output=$(git -C "$temp_clone_dir" checkout "$ref" 2>&1); then
 			echo "clone_repository:: failed to checkout ref $ref: $clone_output" >&2
-			cd - >/dev/null || true
 			rm -rf "$temp_clone_dir"
 			return 1
 		fi
-		cd - >/dev/null || true
 	fi
 
 	CLONE_DIR="$temp_clone_dir"
@@ -559,10 +522,10 @@ main() {
 	local version
 	local artifact_url
 	local artifact_ext
-	local temp_dir
 	local archive_path
 	local extract_dir
 	local source_dir
+	local cand
 
 	prefix="$DEFAULT_PREFIX"
 	force=0
@@ -579,6 +542,9 @@ main() {
 				return 1
 			fi
 			prefix="$1"
+			;;
+		--prefix=*)
+			prefix="${1#*=}"
 			;;
 		--force)
 			force=1
@@ -611,13 +577,10 @@ main() {
 			if ! check_dependencies; then
 				return 1
 			fi
-			if ! ensure_source; then
-				return 1
-			fi
 			if ! ensure_prefix "$prefix"; then
 				return 1
 			fi
-			if ! install_binary "$prefix" "$force"; then
+			if ! install_from_source "${SCRIPT_DIR}/.." "$prefix" "$force"; then
 				return 1
 			fi
 			print_next_steps "$prefix"
@@ -639,29 +602,27 @@ main() {
 		return 1
 	fi
 
-	temp_dir=$(mktemp -d)
+	_INSTALL_TMPDIR=$(mktemp -d)
+	trap cleanup_install_tmpdir EXIT
 
 	# Try git clone first if git is available, otherwise use archive downloads
 	if command -v "git" >/dev/null 2>&1; then
-		if ! clone_repository "$git_ref" "$temp_dir"; then
+		if ! clone_repository "$git_ref" "$_INSTALL_TMPDIR"; then
 			echo "main:: failed to clone repository, falling back to archive download" >&2
 			# Fall through to archive download
 		else
 			source_dir="$CLONE_DIR"
 			if [[ -z "$source_dir" ]] || [[ ! -d "$source_dir" ]]; then
 				echo "main:: failed to find cloned source directory" >&2
-				rm -rf "$temp_dir"
 				return 1
 			fi
 
 			print_install_info "$source_dir" "$git_ref"
 
 			if ! install_from_source "$source_dir" "$prefix" "$force"; then
-				rm -rf "$temp_dir"
 				return 1
 			fi
 
-			rm -rf "$temp_dir"
 			print_next_steps "$prefix"
 			if ! verify_installation "$prefix"; then
 				echo "main:: installation verification failed: command not found" >&2
@@ -675,42 +636,42 @@ main() {
 	build_source_archive_url "$git_ref"
 	artifact_url="$ARTIFACT_URL"
 	artifact_ext="$ARTIFACT_EXT"
-	archive_path="${temp_dir}/source${artifact_ext}"
+	archive_path="${_INSTALL_TMPDIR}/source${artifact_ext}"
 
 	if ! download_file "$artifact_url" "$archive_path"; then
 		echo "main:: failed to download source archive" >&2
-		rm -rf "$temp_dir"
 		return 1
 	fi
 
-	extract_dir="${temp_dir}/extract"
+	extract_dir="${_INSTALL_TMPDIR}/extract"
 	if ! mkdir -p "$extract_dir"; then
 		echo "main:: failed to create extract directory" >&2
-		rm -rf "$temp_dir"
 		return 1
 	fi
 
 	if ! extract_archive "$archive_path" "$extract_dir"; then
 		echo "main:: failed to extract source archive" >&2
-		rm -rf "$temp_dir"
 		return 1
 	fi
 
-	source_dir=$(find "$extract_dir" -maxdepth 1 -type d -name "send-to-slack-*" | head -1)
+	source_dir=""
+	for cand in "${extract_dir}"/send-to-slack-*; do
+		if [[ -d "$cand" ]]; then
+			source_dir="$cand"
+			break
+		fi
+	done
 	if [[ -z "$source_dir" ]]; then
 		echo "main:: failed to find extracted source directory" >&2
-		rm -rf "$temp_dir"
 		return 1
 	fi
 
 	print_install_info "$source_dir" "$git_ref"
 
 	if ! install_from_source "$source_dir" "$prefix" "$force"; then
-		rm -rf "$temp_dir"
 		return 1
 	fi
 
-	rm -rf "$temp_dir"
 	print_next_steps "$prefix"
 	if ! verify_installation "$prefix"; then
 		echo "main:: installation verification failed: command not found" >&2
@@ -726,6 +687,7 @@ if [[ "${BASH_SOURCE[0]}" != "$0" ]] && [[ -f "${BASH_SOURCE[0]}" ]]; then
 	return 0
 fi
 
+set -eo pipefail
 umask 077
 main "$@"
 exit $?
