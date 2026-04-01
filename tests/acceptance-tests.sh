@@ -27,10 +27,16 @@ setup_file() {
 		export REAL_TOKEN
 	fi
 
+	if [[ -n "$SLACK_WEBHOOK_URL" ]]; then
+		REAL_WEBHOOK_URL="$SLACK_WEBHOOK_URL"
+		export REAL_WEBHOOK_URL
+	fi
+
 	export GIT_ROOT
 	export SCRIPT
 	export CHANNEL
 	export REAL_TOKEN
+	export REAL_WEBHOOK_URL
 
 	return 0
 }
@@ -491,7 +497,7 @@ teardown() {
 	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
 
 	local send_count
-	send_count=$(echo "$output" | grep -c "send_notification:: message delivered to Slack successfully" || echo "0")
+	send_count=$(echo "$output" | grep -c "send_notification:: message delivered successfully via api")
 	[[ "$send_count" -ge 2 ]]
 }
 
@@ -679,7 +685,7 @@ teardown() {
 	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
 
 	local send_count
-	send_count=$(echo "$output" | grep -c "send_notification:: message delivered to Slack successfully" || echo "0")
+	send_count=$(echo "$output" | grep -c "send_notification:: message delivered successfully via api")
 	[[ "$send_count" -ge 3 ]]
 }
 
@@ -789,7 +795,7 @@ teardown() {
 	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
 
 	local send_count
-	send_count=$(echo "$output" | grep -c "send_notification:: message delivered to Slack successfully" || echo "0")
+	send_count=$(echo "$output" | grep -c "send_notification:: message delivered successfully via api")
 	[[ "$send_count" -ge 3 ]]
 }
 
@@ -975,4 +981,123 @@ teardown() {
 	echo "   - Table block (in attachment)"
 	echo "   - Colored blocks (in attachments)"
 	echo "=========================================="
+}
+
+@test "acceptance:: webhook posts message end to end" {
+	if [[ -z "${REAL_WEBHOOK_URL:-}" ]]; then
+		skip "SLACK_WEBHOOK_URL is required for webhook acceptance tests"
+	fi
+
+	local webhook_url="$REAL_WEBHOOK_URL"
+	DRY_RUN="false"
+
+	jq -n \
+		--arg url "$webhook_url" \
+		--arg dry_run "$DRY_RUN" \
+		'{
+			source: {
+				webhook_url: $url
+			},
+			params: {
+				dry_run: $dry_run,
+				blocks: [
+					{
+						section: {
+							type: "text",
+							text: {
+								type: "mrkdwn",
+								text: "acceptance test Incoming Webhook end to end"
+							}
+						}
+					}
+				]
+			}
+		}' >"$TEST_PAYLOAD_FILE"
+
+	if ! jq . "$TEST_PAYLOAD_FILE" >/dev/null 2>&1; then
+		echo "Invalid JSON in test payload file" >&2
+		cat "$TEST_PAYLOAD_FILE" >&2
+		return 1
+	fi
+
+	run env -u SLACK_BOT_USER_OAUTH_TOKEN "$SCRIPT" <"$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "version"
+	echo "$output" | grep -q "timestamp"
+	echo "$output" | grep -q "main:: parsing payload"
+	echo "$output" | grep -q "load_configuration:: method=webhook"
+	echo "$output" | grep -q "main:: creating Concourse metadata"
+	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "send_notification:: message delivered successfully via webhook"
+	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
+}
+
+@test "acceptance:: webhook skips thread replies and crosspost" {
+	if [[ -z "${REAL_WEBHOOK_URL:-}" ]]; then
+		skip "SLACK_WEBHOOK_URL is required for webhook acceptance tests"
+	fi
+
+	local webhook_url="$REAL_WEBHOOK_URL"
+	DRY_RUN="false"
+
+	jq -n \
+		--arg url "$webhook_url" \
+		--arg dry_run "$DRY_RUN" \
+		--arg ch "$CHANNEL" \
+		'{
+			source: {
+				webhook_url: $url
+			},
+			params: {
+				dry_run: $dry_run,
+				blocks: [
+					{
+						section: {
+							type: "text",
+							text: {
+								type: "plain_text",
+								text: "Webhook parent with skipped thread and crosspost"
+							}
+						}
+					}
+				],
+				thread: {
+					replies: [
+						{
+							blocks: [
+								{
+									section: {
+										type: "text",
+										text: {
+											type: "plain_text",
+											text: "Thread reply must not send via webhook"
+										}
+									}
+								}
+							]
+						}
+					]
+				},
+				crosspost: {
+					channels: [$ch],
+					text: "Crosspost must not run via webhook"
+				}
+			}
+		}' >"$TEST_PAYLOAD_FILE"
+
+	if ! jq . "$TEST_PAYLOAD_FILE" >/dev/null 2>&1; then
+		echo "Invalid JSON in test payload file" >&2
+		cat "$TEST_PAYLOAD_FILE" >&2
+		return 1
+	fi
+
+	run env -u SLACK_BOT_USER_OAUTH_TOKEN "$SCRIPT" <"$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "delivery method webhook does not support thread replies, skipping send_thread_replies"
+	echo "$output" | grep -q "delivery method webhook does not support crosspost, skipping crosspost_notification"
+	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
+
+	local send_count
+	send_count=$(echo "$output" | grep -c "send_notification:: message delivered successfully via webhook")
+	[[ "$send_count" -eq 1 ]]
 }

@@ -29,7 +29,7 @@ test-smoke:
 	clear && RUN_SMOKE_TEST=true $(BATS_COMMAND) $(TEST_FILES) -f "smoke_test::"
 
 test-acceptance:
-	clear && RUN_ACCEPTANCE_TEST=true $(BATS_COMMAND) $(TEST_FILES) -f "acceptance_test::"
+	clear && RUN_ACCEPTANCE_TEST=true $(BATS_COMMAND) $(TEST_FILES) -f "acceptance::"
 
 test-all:
 	clear && RUN_SMOKE_TEST=true RUN_ACCEPTANCE_TEST=true $(BATS_COMMAND) $(TEST_FILES)
