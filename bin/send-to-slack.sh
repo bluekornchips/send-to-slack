@@ -571,19 +571,114 @@ health_check() {
 	fi
 }
 
-# Send notification to Slack API
+# Send payload using Slack Web API
 #
 # Arguments:
-#   $1 - payload: JSON payload to send to Slack API
+#   $1 - payload_file: file path with JSON payload body
+#   $2 - payload: payload JSON string for error logging
 #
 # Side Effects:
-# - Sends HTTP POST request to Slack API
-# - Outputs success or error messages to stdout/stderr
-# - Exports NOTIFICATION_PERMALINK if successful
+# - Sets SEND_NOTIFICATION_RESPONSE with API response body
+# - Logs API errors to stderr
 #
 # Returns:
-# - 0 on successful message delivery
-# - 1 if dry run is enabled, token/payload missing, or API call fails
+# - 0 on success
+# - 1 on retryable failure
+# - 2 on permanent failure
+_send_by_api() {
+	local payload_file="$1"
+	local payload="$2"
+
+	local curl_output
+	curl_output=$(curl -X POST "${SLACK_API_URL}" \
+		-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
+		-H "Content-type: application/json; charset=utf-8" \
+		-d "@${payload_file}" \
+		--silent --show-error \
+		--max-time 30 \
+		--connect-timeout 10 \
+		-w "\n%{http_code}" 2>&1)
+
+	local http_code
+	http_code=$(echo "$curl_output" | sed -n '$p')
+	SEND_NOTIFICATION_RESPONSE=$(echo "$curl_output" | sed '$d')
+	export SEND_NOTIFICATION_RESPONSE
+
+	if [[ "$http_code" != "200" ]]; then
+		echo "send_notification:: HTTP error code: $http_code" >&2
+		return 1
+	fi
+
+	if ! echo "$SEND_NOTIFICATION_RESPONSE" | jq . >/dev/null 2>&1; then
+		echo "send_notification:: Invalid JSON response from Slack API" >&2
+		return 1
+	fi
+
+	if ! echo "$SEND_NOTIFICATION_RESPONSE" | jq -e '.ok == true' >/dev/null 2>&1; then
+		local error_code
+		error_code=$(echo "$SEND_NOTIFICATION_RESPONSE" | jq -r '.error // "unknown"' 2>/dev/null)
+		if _is_error_in_list "$error_code" "${ERROR_CODES_TRUE_FAILURES[@]}"; then
+			handle_slack_api_error "$SEND_NOTIFICATION_RESPONSE" "send_notification"
+			echo "send_notification:: Full request payload:" >&2
+			jq . <<<"$payload" >&2
+			return 2
+		fi
+		return 1
+	fi
+
+	return 0
+}
+
+# Send payload using Slack Incoming Webhook URL
+#
+# Arguments:
+#   $1 - payload_file: file path with JSON payload body
+#
+# Side Effects:
+# - Sets SEND_NOTIFICATION_RESPONSE with webhook response body
+# - Logs webhook HTTP errors to stderr
+#
+# Returns:
+# - 0 on success
+# - 1 on failure
+_send_by_webhook() {
+	local payload_file="$1"
+
+	local webhook_output
+	webhook_output=$(curl -X POST "${WEBHOOK_URL}" \
+		-H "Content-type: application/json; charset=utf-8" \
+		-d "@${payload_file}" \
+		--silent --show-error \
+		--max-time 30 \
+		--connect-timeout 10 \
+		-w "\n%{http_code}" 2>&1)
+
+	local webhook_http_code
+	webhook_http_code=$(echo "$webhook_output" | sed -n '$p')
+	SEND_NOTIFICATION_RESPONSE=$(echo "$webhook_output" | sed '$d')
+	export SEND_NOTIFICATION_RESPONSE
+
+	if [[ "$webhook_http_code" =~ ^2[0-9]{2}$ ]]; then
+		return 0
+	fi
+
+	echo "send_notification:: webhook HTTP error code: $webhook_http_code" >&2
+	return 1
+}
+
+# Send notification via Slack API token or Incoming Webhook URL
+#
+# Arguments:
+#   $1 - payload: JSON payload to send
+#
+# Side Effects:
+# - Sends HTTP POST request to Slack API or webhook URL
+# - Outputs success or error messages to stdout/stderr
+# - Updates RESPONSE and optional NOTIFICATION_PERMALINK globals
+#
+# Returns:
+# - 0 on successful message delivery or dry run
+# - 1 on configuration or delivery failures
 send_notification() {
 	local payload="$1"
 
@@ -592,8 +687,8 @@ send_notification() {
 		return 0
 	fi
 
-	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
-		echo "send_notification:: SLACK_BOT_USER_OAUTH_TOKEN is required" >&2
+	if [[ -z "${DELIVERY_METHOD:-}" ]]; then
+		echo "send_notification:: DELIVERY_METHOD is required, parse_payload must run before send_notification" >&2
 		return 1
 	fi
 
@@ -602,69 +697,47 @@ send_notification() {
 		return 1
 	fi
 
-	# Use retry logic for the API call
+	if [[ "$DELIVERY_METHOD" == "api" ]] && [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN:-}" ]]; then
+		echo "send_notification:: SLACK_BOT_USER_OAUTH_TOKEN is required for API delivery" >&2
+		return 1
+	fi
+
+	if [[ "$DELIVERY_METHOD" == "webhook" ]] && [[ -z "${WEBHOOK_URL:-}" ]]; then
+		echo "send_notification:: WEBHOOK_URL is required for webhook delivery" >&2
+		return 1
+	fi
+
 	local response=""
 	local attempt=1
 	local delay="$RETRY_INITIAL_DELAY"
-	local last_exit_code=0
+	local last_exit_code=1
 
 	local payload_file
 	payload_file=$(mktemp "$_SLACK_WORKSPACE/send_notification.payload.XXXXXX")
 	printf '%s' "$payload" >"$payload_file"
 
 	while [[ "$attempt" -le "$RETRY_MAX_ATTEMPTS" ]]; do
-		echo "send_notification:: posting message to Slack API (attempt ${attempt}/${RETRY_MAX_ATTEMPTS})" >&2
+		echo "send_notification:: delivering message using method ${DELIVERY_METHOD} (attempt ${attempt}/${RETRY_MAX_ATTEMPTS})" >&2
 
-		# Make the API call
-		local curl_output
-		curl_output=$(curl -X POST "${SLACK_API_URL}" \
-			-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
-			-H "Content-type: application/json; charset=utf-8" \
-			-d "@${payload_file}" \
-			--silent --show-error \
-			--max-time 30 \
-			--connect-timeout 10 \
-			-w "\n%{http_code}" 2>&1)
-
-		local http_code
-		http_code=$(echo "$curl_output" | tail -n1)
-		response=$(echo "$curl_output" | sed '$d')
-
-		# Check for HTTP errors
-		if [[ "$http_code" != "200" ]]; then
-			echo "send_notification:: HTTP error code: $http_code" >&2
-			if [[ -n "$response" ]]; then
-				echo "send_notification:: HTTP response body:" >&2
-				echo "$response" | jq . >&2 2>/dev/null || echo "$response" >&2
+		if [[ "$DELIVERY_METHOD" == "api" ]]; then
+			local api_status=0
+			_send_by_api "$payload_file" "$payload" || api_status=$?
+			response="${SEND_NOTIFICATION_RESPONSE:-}"
+			if [[ "$api_status" -eq 0 ]]; then
+				break
 			fi
-			last_exit_code=1
-		# response is valid JSON
-		elif ! echo "$response" | jq . >/dev/null 2>&1; then
-			echo "send_notification:: Invalid JSON response from Slack API" >&2
-			echo "send_notification:: Raw response:" >&2
-			echo "$response" >&2
-			last_exit_code=1
-		# Slack API returned success
-		elif ! echo "$response" | jq -e '.ok == true' >/dev/null 2>&1; then
-			local error_code
-			error_code=$(echo "$response" | jq -r '.error // "unknown"' 2>/dev/null)
-
-			if _is_error_in_list "$error_code" "${ERROR_CODES_TRUE_FAILURES[@]}"; then
-				handle_slack_api_error "$response" "send_notification"
-				echo "send_notification:: Full request payload:" >&2
-				jq . <<<"$payload" >&2
+			if [[ "$api_status" -eq 2 ]]; then
 				return 1
-			elif _is_error_in_list "$error_code" "${ERROR_CODES_RETRYABLE[@]}"; then
-				echo "send_notification:: Rate limited, will retry" >&2
-				last_exit_code=1
-			else
-				echo "send_notification:: Slack API error: $error_code, will retry" >&2
-				echo "send_notification:: Error response:" >&2
-				echo "$response" | jq . >&2 2>/dev/null || echo "$response" >&2
-				last_exit_code=1
 			fi
+			last_exit_code=1
 		else
-			break
+			local webhook_status=0
+			_send_by_webhook "$payload_file" || webhook_status=$?
+			response="${SEND_NOTIFICATION_RESPONSE:-}"
+			if [[ "$webhook_status" -eq 0 ]]; then
+				break
+			fi
+			last_exit_code=1
 		fi
 
 		if [[ "$attempt" -lt "$RETRY_MAX_ATTEMPTS" ]] && [[ "$last_exit_code" -ne 0 ]]; then
@@ -678,33 +751,29 @@ send_notification() {
 
 			attempt=$((attempt + 1))
 		else
-			if [[ -n "$response" ]]; then
-				handle_slack_api_error "$response" "send_notification"
-			else
-				echo "send_notification:: Failed to send notification after $RETRY_MAX_ATTEMPTS attempts" >&2
-				echo "send_notification:: No response received from Slack API" >&2
-			fi
+			echo "send_notification:: Failed to send notification after $RETRY_MAX_ATTEMPTS attempts" >&2
 			echo "send_notification:: Full request payload:" >&2
 			jq . <<<"$payload" >&2
 			return 1
 		fi
 	done
 
-	# Extract channel and timestamp from response to get permalink
-	local channel
-	local message_ts
-	channel=$(echo "${response}" | jq -r '.channel // empty')
-	message_ts=$(echo "${response}" | jq -r '.ts // empty')
-
-	if [[ -n "$channel" ]] && [[ -n "$message_ts" ]] && [[ "$channel" != "null" ]] && [[ "$message_ts" != "null" ]]; then
-		get_message_permalink "${channel}" "${message_ts}"
+	# Extract channel and timestamp from API response for permalink support
+	local channel=""
+	local message_ts=""
+	if [[ "$DELIVERY_METHOD" == "api" ]] && [[ -n "$response" ]] && jq . >/dev/null 2>&1 <<<"$response"; then
+		channel=$(echo "${response}" | jq -r '.channel // empty')
+		message_ts=$(echo "${response}" | jq -r '.ts // empty')
+		if [[ -n "$channel" ]] && [[ -n "$message_ts" ]] && [[ "$channel" != "null" ]] && [[ "$message_ts" != "null" ]]; then
+			get_message_permalink "${channel}" "${message_ts}"
+		fi
 	fi
 
-	echo "send_notification:: message delivered to Slack successfully"
+	echo "send_notification:: message delivered successfully via ${DELIVERY_METHOD}"
 
 	if [[ "${LOG_VERBOSE:-}" == "true" ]]; then
 		local block_count
-		block_count=$(echo "$payload" | jq '.blocks | length // 0')
+		block_count=$(echo "$payload" | jq '.blocks | length // 0' 2>/dev/null || echo "0")
 		cat <<EOF >&2
 send_notification:: channel: ${channel}
 send_notification:: ts: ${message_ts}
@@ -1076,25 +1145,33 @@ main() {
 		return 1
 	fi
 
-	# Capture ts from primary message for use as thread anchor in replies
-	local primary_ts
-	primary_ts=$(echo "$RESPONSE" | jq -r '.ts // empty')
+	if [[ "${DELIVERY_METHOD:-api}" == "api" ]]; then
+		# Capture ts from primary message for use as thread anchor in replies
+		local primary_ts
+		if [[ -n "${RESPONSE:-}" ]] && jq . >/dev/null 2>&1 <<<"$RESPONSE"; then
+			primary_ts=$(echo "$RESPONSE" | jq -r '.ts // empty')
+		else
+			primary_ts=""
+		fi
 
-	# Resolve thread_ts for replies: prefer the one in parsed_payload (thread_ts path),
-	# fall back to primary message ts
-	local reply_thread_ts
-	reply_thread_ts=$(echo "$parsed_payload" | jq -r '.thread_ts // empty')
-	if [[ -z "$reply_thread_ts" || "$reply_thread_ts" == "null" ]]; then
-		reply_thread_ts="${primary_ts:-}"
-	fi
+		# Resolve thread_ts for replies, prefer parsed_payload.thread_ts, then primary ts
+		local reply_thread_ts
+		reply_thread_ts=$(echo "$parsed_payload" | jq -r '.thread_ts // empty')
+		if [[ -z "$reply_thread_ts" || "$reply_thread_ts" == "null" ]]; then
+			reply_thread_ts="${primary_ts:-}"
+		fi
 
-	if ! send_thread_replies "${input_payload}" "$reply_thread_ts" "$parsed_payload"; then
-		echo "main:: send_thread_replies encountered failures, continuing" >&2
-	fi
+		if ! send_thread_replies "${input_payload}" "$reply_thread_ts" "$parsed_payload"; then
+			echo "main:: send_thread_replies encountered failures, continuing" >&2
+		fi
 
-	if ! crosspost_notification "${input_payload}"; then
-		echo "main:: failed to crosspost notification" >&2
-		return 1
+		if ! crosspost_notification "${input_payload}"; then
+			echo "main:: failed to crosspost notification" >&2
+			return 1
+		fi
+	else
+		echo "main:: delivery method webhook does not support thread replies, skipping send_thread_replies" >&2
+		echo "main:: delivery method webhook does not support crosspost, skipping crosspost_notification" >&2
 	fi
 
 	echo "main:: creating Concourse metadata"

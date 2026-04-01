@@ -1,0 +1,24 @@
+resource_types:
+  - name: slack-notification
+    type: registry-image
+    source:
+      repository: sunflowersoftware/send-to-slack
+      tag: ((TAG))
+
+resources:
+  - name: slack-webhook-notification
+    type: slack-notification
+    source:
+      webhook_url: ((SLACK_WEBHOOK_URL))
+
+jobs:
+  - name: notify-via-slack-webhook
+    plan:
+      - put: slack-webhook-notification
+        params:
+          blocks:
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: ":satellite: Sent with Slack Incoming Webhook"

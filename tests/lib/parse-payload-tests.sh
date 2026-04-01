@@ -158,17 +158,102 @@ block_output_json() { cat "$CREATE_BLOCK_OUTPUT_FILE"; }
 	rm -f "$invalid_file"
 }
 
+@test "parse_payload:: webhook_url mode succeeds without token and channel" {
+	unset SLACK_BOT_USER_OAUTH_TOKEN
+	unset CHANNEL
+
+	local test_payload
+	test_payload=$(jq -n '{
+		source: {
+			webhook_url: "https://hooks.slack.com/services/test"
+		},
+		params: {
+			blocks: [{
+				section: {
+					type: "text",
+					text: { type: "plain_text", text: "Webhook only" }
+				}
+			}]
+		}
+	}')
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "method=webhook"
+}
+
+@test "parse_payload:: fails when neither token nor webhook_url is provided" {
+	unset SLACK_BOT_USER_OAUTH_TOKEN
+	unset WEBHOOK_URL
+
+	local test_payload
+	test_payload=$(jq -n '{
+		source: {},
+		params: {
+			blocks: [{
+				section: {
+					type: "text",
+					text: { type: "plain_text", text: "No delivery source" }
+				}
+			}]
+		}
+	}')
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "either source.slack_bot_user_oauth_token or source.webhook_url is required"
+}
+
+@test "parse_payload:: file blocks fail in webhook mode" {
+	unset SLACK_BOT_USER_OAUTH_TOKEN
+	unset CHANNEL
+
+	local tmp_file
+	tmp_file=$(mktemp "${BATS_TEST_TMPDIR}/parse-payload-tests.file-upload.XXXXXX")
+	echo "hello" >"$tmp_file"
+
+	local test_payload
+	test_payload=$(jq -n \
+		--arg file "$tmp_file" \
+		'{
+			source: {
+				webhook_url: "https://hooks.slack.com/services/test"
+			},
+			params: {
+				blocks: [{
+					file: {
+						path: $file
+					}
+				}]
+			}
+		}')
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "file uploads are not supported for webhook delivery"
+
+	rm -f "$tmp_file"
+}
+
 @test "parse_payload:: missing slack_bot_user_oauth_token" {
+	unset SLACK_BOT_USER_OAUTH_TOKEN
+	unset WEBHOOK_URL
+
 	local test_payload
 	test_payload=$(jq 'del(.source.slack_bot_user_oauth_token)' "$TEST_PAYLOAD_FILE")
 	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
 
 	run parse_payload "$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "slack_bot_user_oauth_token is required"
+	echo "$output" | grep -q "either source.slack_bot_user_oauth_token or source.webhook_url is required"
 }
 
 @test "parse_payload:: missing channel" {
+	unset CHANNEL
+
 	local test_payload
 	test_payload=$(jq 'del(.params.channel)' "$TEST_PAYLOAD_FILE")
 	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
@@ -189,7 +274,6 @@ block_output_json() { cat "$CREATE_BLOCK_OUTPUT_FILE"; }
 
 	run parse_payload "$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "Source key not found in payload. Using SLACK_BOT_USER_OAUTH_TOKEN from environment variable"
 	[[ "$SLACK_BOT_USER_OAUTH_TOKEN" == "env-token-value" ]]
 
 	unset SLACK_BOT_USER_OAUTH_TOKEN
@@ -208,8 +292,6 @@ block_output_json() { cat "$CREATE_BLOCK_OUTPUT_FILE"; }
 
 	run parse_payload "$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "Source key not found in payload. Using SLACK_BOT_USER_OAUTH_TOKEN from environment variable"
-	echo "$output" | grep -q "Source key not found in payload. Using CHANNEL from environment variable"
 	[[ "$CHANNEL" == "env-channel-value" ]]
 
 	unset SLACK_BOT_USER_OAUTH_TOKEN
@@ -228,8 +310,6 @@ block_output_json() { cat "$CREATE_BLOCK_OUTPUT_FILE"; }
 
 	run parse_payload "$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "Source key not found in payload. Using SLACK_BOT_USER_OAUTH_TOKEN from environment variable"
-	echo "$output" | grep -q "Source key not found in payload. Using DRY_RUN from environment variable"
 	[[ "$DRY_RUN" == "true" ]]
 
 	unset SLACK_BOT_USER_OAUTH_TOKEN
@@ -248,9 +328,6 @@ block_output_json() { cat "$CREATE_BLOCK_OUTPUT_FILE"; }
 
 	run parse_payload "$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "Source key not found in payload. Using SLACK_BOT_USER_OAUTH_TOKEN from environment variable"
-	echo "$output" | grep -q "Source key not found in payload. Using CHANNEL from environment variable"
-	echo "$output" | grep -q "Source key not found in payload. Using DRY_RUN from environment variable"
 	[[ "$SLACK_BOT_USER_OAUTH_TOKEN" == "env-token-value" ]]
 	[[ "$CHANNEL" == "env-channel-value" ]]
 	[[ "$DRY_RUN" == "true" ]]
@@ -271,7 +348,7 @@ block_output_json() { cat "$CREATE_BLOCK_OUTPUT_FILE"; }
 
 	run parse_payload "$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "SLACK_BOT_USER_OAUTH_TOKEN is required. Not found in payload source or environment"
+	echo "$output" | grep -q "either source.slack_bot_user_oauth_token or source.webhook_url is required"
 
 	unset CHANNEL
 	unset DRY_RUN
@@ -288,8 +365,7 @@ block_output_json() { cat "$CREATE_BLOCK_OUTPUT_FILE"; }
 
 	run parse_payload "$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "Source key not found in payload. Using SLACK_BOT_USER_OAUTH_TOKEN from environment variable"
-	echo "$output" | grep -q "params.channel is required. Not found in payload or environment"
+	echo "$output" | grep -q "params.channel is required and missing from payload and environment"
 
 	unset SLACK_BOT_USER_OAUTH_TOKEN
 	unset DRY_RUN

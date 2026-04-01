@@ -383,83 +383,82 @@ load_input_payload_params() {
 # Uses global variable: INPUT_PAYLOAD
 #
 # Side Effects:
-#   Exports SLACK_BOT_USER_OAUTH_TOKEN, CHANNEL, DRY_RUN
+#   Exports SLACK_BOT_USER_OAUTH_TOKEN, WEBHOOK_URL, CHANNEL, DRY_RUN, DELIVERY_METHOD
 #
 # Returns:
 #   0 on success
 #   1 if required fields are missing
 load_configuration() {
-	# Check if 'source' key exists in payload
 	local source_exists="false"
 	if jq -e '.source' "$INPUT_PAYLOAD" >/dev/null 2>&1; then
 		source_exists="true"
 	fi
 
-	if [[ "$source_exists" == "true" ]]; then
-		SLACK_BOT_USER_OAUTH_TOKEN=$(jq -r '.source.slack_bot_user_oauth_token // empty' "$INPUT_PAYLOAD")
-		if [[ -z "$SLACK_BOT_USER_OAUTH_TOKEN" ]]; then
-			echo "parse_payload:: slack_bot_user_oauth_token is required in source" >&2
-			return 1
-		fi
+	local token_from_payload
+	local webhook_from_payload
+	token_from_payload=$(jq -r '.source.slack_bot_user_oauth_token // empty' "$INPUT_PAYLOAD")
+	webhook_from_payload=$(jq -r '.source.webhook_url // empty' "$INPUT_PAYLOAD")
+
+	if [[ -n "$token_from_payload" ]]; then
+		SLACK_BOT_USER_OAUTH_TOKEN="$token_from_payload"
+	fi
+
+	if [[ -n "$webhook_from_payload" ]]; then
+		WEBHOOK_URL="$webhook_from_payload"
+	fi
+
+	if [[ -n "${SLACK_BOT_USER_OAUTH_TOKEN:-}" ]]; then
+		DELIVERY_METHOD="api"
+	elif [[ -n "${WEBHOOK_URL:-}" ]]; then
+		DELIVERY_METHOD="webhook"
 	else
-		# Fallback to environment variable if source key doesn't exist
-		if [[ -n "${SLACK_BOT_USER_OAUTH_TOKEN:-}" ]]; then
-			echo "parse_payload:: Source key not found in payload. Using SLACK_BOT_USER_OAUTH_TOKEN from environment variable."
-		else
-			echo "parse_payload:: SLACK_BOT_USER_OAUTH_TOKEN is required. Not found in payload source or environment." >&2
-			return 1
-		fi
+		echo "load_configuration:: either source.slack_bot_user_oauth_token or source.webhook_url is required" >&2
+		return 1
 	fi
 
 	local env_channel_value="${CHANNEL:-}"
 	CHANNEL=$(jq -r '.params.channel // empty' "$INPUT_PAYLOAD")
-	if [[ -z "$CHANNEL" ]]; then
-		if [[ "$source_exists" == "true" ]]; then
-			echo "parse_payload:: params.channel is required" >&2
-			return 1
-		else
-			# Use environment variable if available
+	if [[ "$DELIVERY_METHOD" == "api" ]]; then
+		if [[ -z "$CHANNEL" ]]; then
 			if [[ -n "$env_channel_value" ]]; then
 				CHANNEL="$env_channel_value"
-				echo "parse_payload:: Source key not found in payload. Using CHANNEL from environment variable."
+				echo "load_configuration:: params.channel not set, using CHANNEL from environment" >&2
 			else
-				echo "parse_payload:: params.channel is required. Not found in payload or environment." >&2
+				if [[ "$source_exists" == "true" ]]; then
+					echo "load_configuration:: params.channel is required for API delivery" >&2
+				else
+					echo "load_configuration:: params.channel is required and missing from payload and environment" >&2
+				fi
 				return 1
 			fi
 		fi
+	else
+		if [[ -z "$CHANNEL" ]] && [[ -n "$env_channel_value" ]]; then
+			CHANNEL="$env_channel_value"
+		fi
 	fi
 
-	if [[ "$source_exists" == "true" ]]; then
-		DRY_RUN=$(jq -r \
-			--arg default "$DEFAULT_DRY_RUN" \
-			'.params.dry_run // $default' \
-			"$INPUT_PAYLOAD")
-	else
-		# Check params.dry_run first, then fall back to env var
-		local params_dry_run
-		params_dry_run=$(jq -r '.params.dry_run // empty' "$INPUT_PAYLOAD")
-		if [[ -n "$params_dry_run" ]]; then
-			DRY_RUN="$params_dry_run"
-		else
-			# Save env var value before potential assignment
-			local env_dry_run_value="${DRY_RUN:-}"
-			if [[ -n "$env_dry_run_value" ]]; then
-				DRY_RUN="$env_dry_run_value"
-				echo "parse_payload:: Source key not found in payload. Using DRY_RUN from environment variable."
-			else
-				DRY_RUN="$DEFAULT_DRY_RUN"
-			fi
-		fi
+	local params_dry_run
+	params_dry_run=$(jq -r '.params.dry_run // empty' "$INPUT_PAYLOAD")
+	if [[ -n "$params_dry_run" ]]; then
+		DRY_RUN="$params_dry_run"
+	elif [[ -z "${DRY_RUN:-}" ]]; then
+		DRY_RUN="$DEFAULT_DRY_RUN"
 	fi
 
 	export DRY_RUN
 	export SLACK_BOT_USER_OAUTH_TOKEN
 	export CHANNEL
+	export WEBHOOK_URL
+	export DELIVERY_METHOD
 
 	local token_preview
+	local webhook_preview
 	token_preview="set"
+	webhook_preview="set"
 	[[ -z "${SLACK_BOT_USER_OAUTH_TOKEN:-}" ]] && token_preview="empty"
-	echo "load_configuration:: channel=${CHANNEL} dry_run=${DRY_RUN} token=${token_preview}" >&2
+	[[ -z "${WEBHOOK_URL:-}" ]] && webhook_preview="empty"
+	echo "load_configuration:: method=${DELIVERY_METHOD} channel=${CHANNEL:-none} dry_run=${DRY_RUN} token=${token_preview} webhook=${webhook_preview}" >&2
 
 	return 0
 }
@@ -711,6 +710,11 @@ _process_blocks_append_block() {
 
 	if ! _validate_block_input_size "$block_value" "$block_type"; then
 		echo "_process_blocks_append_block:: block input too large for type '$block_type'" >&2
+		return 1
+	fi
+
+	if [[ "$block_type" == "file" ]] && [[ "${DELIVERY_METHOD:-api}" == "webhook" ]]; then
+		echo "_process_blocks_append_block:: file uploads are not supported for webhook delivery" >&2
 		return 1
 	fi
 
