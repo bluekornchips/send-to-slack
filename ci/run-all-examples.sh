@@ -8,8 +8,9 @@
 #   CHANNEL                     Primary Slack channel for pipeline variables
 #
 # Optional environment variables:
-#   SIDE_CHANNEL  Secondary Slack channel, defaults to empty
-#   TAG           Image tag to use, defaults to contents of VERSION file
+#   SIDE_CHANNEL       Secondary Slack channel, defaults to empty
+#   SLACK_WEBHOOK_URL  Incoming Webhook URL for examples/webhook-slack.yaml, defaults to empty
+#   TAG                Image tag to use, defaults to contents of VERSION file
 #
 
 GIT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "")"
@@ -27,6 +28,10 @@ CONCOURSE_READY_WAIT=2
 # Format: "pipeline/job-name"
 SKIPPED_JOBS=(
 	"thread-replies/thread-replies-with-thread-ts"
+	# These jobs fetch the send-to-slack git resource from GitHub to read local fixture
+	# files. They require outbound network access to github.com from the Concourse worker.
+	"blocks-from-file/blocks-from-file-3"
+	"blocks-from-file/concourse-metadata"
 	# Video blocks require the youtube.com unfurl domain and links.embed:write scope
 	# to be configured in the Slack app. These cannot be run without that setup.
 	"video/basic-video"
@@ -51,6 +56,7 @@ Environment Variables:
   SLACK_BOT_USER_OAUTH_TOKEN  Required. Slack bot OAuth token.
   CHANNEL                     Required. Primary Slack channel name.
   SIDE_CHANNEL                Optional. Secondary Slack channel name.
+  SLACK_WEBHOOK_URL           Optional. Webhook URL for webhook-slack example pipeline.
   TAG                         Optional. Image tag. Defaults to VERSION file contents.
 
 EOF
@@ -117,14 +123,14 @@ validate_env() {
 start_concourse() {
 	local i
 
-	echo "start_concourse:: starting Concourse..."
+	echo "start_concourse:: starting Concourse"
 	if ! docker-compose -f "${GIT_ROOT}/concourse/server.yaml" up -d; then
 		echo "start_concourse:: docker-compose failed to start" >&2
 
 		return 1
 	fi
 
-	echo "start_concourse:: waiting for Concourse to become ready..."
+	echo "start_concourse:: waiting for Concourse to become ready"
 	i=0
 	while ((i < CONCOURSE_READY_RETRIES)); do
 		if curl -sf "${CONCOURSE_URL}/api/v1/info" >/dev/null 2>&1; then
@@ -150,7 +156,7 @@ start_concourse() {
 # - 0 on success
 # - 1 on failure
 login_concourse() {
-	echo "login_concourse:: logging in to ${CONCOURSE_URL}..."
+	echo "login_concourse:: logging in to ${CONCOURSE_URL}"
 	if ! fly -t "${CONCOURSE_TARGET}" login \
 		-c "${CONCOURSE_URL}" \
 		-u "${CONCOURSE_USER}" \
@@ -170,6 +176,7 @@ login_concourse() {
 #
 # Side Effects:
 # - Calls fly set-pipeline and fly unpause-pipeline for each yaml file
+# - Passes SLACK_WEBHOOK_URL into fly set-pipeline for webhook example pipelines
 #
 # Returns:
 # - 0 if all pipelines load successfully
@@ -198,6 +205,7 @@ load_pipelines() {
 			-v SLACK_BOT_USER_OAUTH_TOKEN="${SLACK_BOT_USER_OAUTH_TOKEN}" \
 			-v channel="${CHANNEL}" \
 			-v side_channel="${SIDE_CHANNEL:-}" \
+			-v SLACK_WEBHOOK_URL="${SLACK_WEBHOOK_URL:-}" \
 			-v TAG="${tag}"; then
 			echo "load_pipelines:: failed to load pipeline: ${pipeline}" >&2
 
@@ -222,6 +230,7 @@ load_pipelines() {
 # Side Effects:
 # - Calls fly trigger-job -w for each job in each pipeline, in yaml order
 # - Skips any job listed in SKIPPED_JOBS
+# - Skips webhook-slack notify job when SLACK_WEBHOOK_URL is unset
 # - Exits as soon as any job fails
 #
 # Returns:
@@ -239,10 +248,16 @@ run_all_jobs() {
 	local current
 	local skip
 	local skipped
+	local effective_skipped
 
 	start_from="${1:-}"
 	skipping="false"
 	job_keys=()
+	effective_skipped=("${SKIPPED_JOBS[@]}")
+	if [[ -z "${SLACK_WEBHOOK_URL:-}" ]]; then
+		effective_skipped+=("webhook-slack/notify-via-slack-webhook")
+		echo "run_all_jobs:: SLACK_WEBHOOK_URL unset, skipping webhook-slack/notify-via-slack-webhook"
+	fi
 
 	if [[ -n "${start_from}" ]]; then
 		skipping="true"
@@ -266,7 +281,7 @@ run_all_jobs() {
 			fi
 
 			skip="false"
-			for skipped in "${SKIPPED_JOBS[@]}"; do
+			for skipped in "${effective_skipped[@]}"; do
 				if [[ "${job_key}" == "${skipped}" ]]; then
 					skip="true"
 					break
@@ -274,7 +289,7 @@ run_all_jobs() {
 			done
 
 			if [[ "${skip}" == "true" ]]; then
-				echo "run_all_jobs:: skipping ${job_key} (in SKIPPED_JOBS)"
+				echo "run_all_jobs:: skipping ${job_key}, skip list match"
 				continue
 			fi
 

@@ -1,6 +1,6 @@
 # Send to Slack
 
-A bash program designed to send [block kit content](https://docs.slack.dev/reference/block-kit) to Slack via the Slack Web API.
+A bash program designed to send [Block Kit](https://docs.slack.dev/reference/block-kit) messages to Slack using either the [Slack Web API](https://api.slack.com/web) with a bot token or a Slack [Incoming Webhook](https://api.slack.com/messaging/webhooks) URL.
 
 ## Why bash?
 
@@ -219,14 +219,15 @@ When running directly from the repository, use `./bin/send-to-slack.sh` instead 
 
 ## Health Check
 
-Use `--health-check` to validate dependencies (`jq`, `curl`) and optionally test Slack API connectivity if `SLACK_BOT_USER_OAUTH_TOKEN` is set. Returns exit code 0 on success, 1 on failure. Skips API check if `DRY_RUN` or `SKIP_SLACK_API_CHECK` is set.
+Use `--health-check` to validate dependencies `jq` and `curl` and optionally test Slack Web API connectivity if `SLACK_BOT_USER_OAUTH_TOKEN` is set. There is no separate probe for Incoming Webhook URLs. Returns exit code 0 on success, 1 on failure. Skips the API check if `DRY_RUN` or `SKIP_SLACK_API_CHECK` is set.
 
 ## Environment Variables
 
 The following environment variables control tool behavior:
 
-- `SLACK_BOT_USER_OAUTH_TOKEN` - Slack bot OAuth token (fallback if not in `source`)
-- `CHANNEL` - Target Slack channel (fallback if not in `params.channel`)
+- `SLACK_BOT_USER_OAUTH_TOKEN` - Slack bot OAuth token when missing from `source`. After payload merge, a non-empty token selects Web API delivery.
+- `WEBHOOK_URL` - Incoming Webhook URL when `source.webhook_url` is empty. Used only when no bot token is in effect, matching `source.webhook_url` semantics.
+- `CHANNEL` - Target Slack channel when `params.channel` is empty. Required for Web API delivery. For webhooks, optional when the hook URL already targets a channel.
 - `DRY_RUN` - Set to `true` to validate without sending messages
 - `SEND_TO_SLACK_OUTPUT` - File path to write JSON output instead of stdout
 - `SHOW_METADATA` - Set to `false` to disable metadata output (default: `true`)
@@ -279,11 +280,12 @@ Debug mode redacts authentication tokens but still logs the payload structure.
 ## Features
 
 - Slack Block Kit with either native `type` blocks or keyed format
-- File upload support with automatic image or rich-text block creation
-- Crossposting with permalinks and optional custom text
-- Thread replies and thread creation for multi-block messages, plus `thread_replies` array for multiple replies in a thread
-- Retry with exponential backoff on Slack API calls for transient failures
-- Input flexibility: stdin, `-f|--file`, `params.raw`, or `params.from_file`
+- Delivery via bot token, Web API, or Incoming Webhook (`source.webhook_url` or `WEBHOOK_URL`)
+- File upload support with automatic image or rich-text block creation (Web API only; webhook delivery skips `file` blocks with a clear message)
+- Crossposting with permalinks and optional custom text (Web API only; webhook delivery skips crosspost)
+- Thread replies and thread creation for multi-block messages, plus `thread_replies` array for multiple replies in a thread (Web API only; webhook delivery skips thread replies)
+- Retry with exponential backoff on delivery for transient failures
+- Input flexibility: stdin, `-f|-file|--file`, `params.raw`, or `params.from_file`
 - Dry-run mode, dependency health check, and rich validation output
 - Debug mode with sanitized payload logging for troubleshooting
 - Legacy attachments for colored blocks and tables where Slack allows
@@ -294,17 +296,17 @@ Debug mode redacts authentication tokens but still logs the payload structure.
 
 ### Runtime Dependencies
 
-- <strong>Bash 3.1</strong> or later (scripts include version checks and will fail fast with clear error messages)
+- Bash 3.2 or later (project shell style targets Bash 3.2 plus)
 - `jq` - [jqlang](https://github.com/jqlang/jq) for JSON processing
 - `curl` - [curl](https://curl.se/) for HTTP requests
-- `gettext` - [GNU gettext](https://www.gnu.org/software/gettext/) for msgfmt tooling
+- `envsubst` from [GNU gettext](https://www.gnu.org/software/gettext/) (usually in the `gettext` package) for variable interpolation in blocks
 
 ### Interactive Components Dependencies
 
-- <strong>Python 3.9</strong> or later (for interactive button handling)
-- <strong>Flask 3.0.0</strong> or later (for web server)
-- <strong>requests 2.31.0</strong> or later (for HTTP requests to Slack API)
-- <strong>Docker</strong> (for ngrok integration, optional)
+- Python 3.9 or later (for interactive button handling)
+- Flask 3.0.0 or later (for web server)
+- requests 2.31.0 or later (for HTTP requests to Slack API)
+- Docker (optional, for running ngrok in a container as documented under `python/`)
 
 ### Slack Configuration
 
@@ -319,9 +321,13 @@ See [Slack API Scopes](https://api.slack.com/scopes) for complete documentation.
 
 ## Usage
 
-`send-to-slack` expects a JSON payload. Provide it on stdin or with `-f|--file`. You can also embed the payload through `params.raw` (stringified JSON) or `params.from_file` (path to a JSON file). When the `source` object is missing, the tool falls back to the environment variables `SLACK_BOT_USER_OAUTH_TOKEN`, `CHANNEL`, and `DRY_RUN`.
+`send-to-slack` expects a JSON payload. Provide it on stdin or with `-f|-file|--file`. You can also embed the payload through `params.raw` (stringified JSON) or `params.from_file` (path to a JSON file). When the `source` object is missing or omits credentials, the tool falls back to environment variables: `SLACK_BOT_USER_OAUTH_TOKEN` or `WEBHOOK_URL` for auth, plus `CHANNEL` and `DRY_RUN` where applicable.
+
+Configure one delivery method: `source.slack_bot_user_oauth_token` for the Web API or `source.webhook_url` for an Incoming Webhook. If both are present in `source`, the bot token wins and the Web API is used.
 
 ### Payload Structure
+
+Web API example:
 
 ```json
 {
@@ -348,11 +354,44 @@ See [Slack API Scopes](https://api.slack.com/scopes) for complete documentation.
 }
 ```
 
+Incoming Webhook example. You may omit `params.channel` when the webhook URL is already bound to a channel in Slack:
+
+```json
+{
+  "source": {
+    "webhook_url": "https://hooks.slack.com/services/<workspace-id>/<app-id>/<token>"
+  },
+  "params": {
+    "blocks": [
+      {
+        "type": "section",
+        "text": {
+          "type": "plain_text",
+          "text": "Hello via webhook"
+        }
+      }
+    ]
+  }
+}
+```
+
 ### Required Parameters
+
+Web API:
 
 - `source.slack_bot_user_oauth_token` or `SLACK_BOT_USER_OAUTH_TOKEN`
 - `params.channel` or `CHANNEL`
 - `params.blocks`
+
+Incoming Webhook:
+
+- `source.webhook_url` or `WEBHOOK_URL`, with no bot token in effect
+- `params.blocks`
+- `params.channel` or `CHANNEL` only when you need to override or supply a channel for tooling that expects it; many webhook-only payloads omit `channel` like [examples/webhook-slack.yaml](examples/webhook-slack.yaml)
+
+### Optional source fields
+
+- `source.webhook_url` - Slack Incoming Webhook URL for delivery when no bot token applies; not used together with Web API delivery from `source.slack_bot_user_oauth_token`
 
 ### Optional Parameters
 
@@ -406,6 +445,8 @@ Named colors on a block (`danger`, `success`, `warning`) or a `table` block are 
 - Maximum 40,000 characters for `text` fields
 
 ## Threading
+
+Threading features apply to Web API delivery only. Incoming Webhook delivery skips `thread_replies`, `create_thread`, and threaded sends that depend on `thread_ts`.
 
 `create_thread` and `thread_ts` are mutually exclusive. `thread_ts` can be supplied as either a Slack timestamp or a permalink; the tool converts permalinks automatically. When `create_thread` is `true` and multiple blocks are present, the first block is sent as the parent message and the remaining blocks are sent as the thread reply.
 
@@ -482,6 +523,8 @@ Use `thread_replies` to send several messages as separate replies in the same th
 
 ## Crossposting
 
+Crossposting uses the Web API and permalinks. Incoming Webhook delivery skips crosspost; the tool logs that on stderr.
+
 The program supports crossposting messages to additional channels after the initial notification is sent. Crosspost accepts the same params as a regular message, including blocks, text, thread_ts, and all other message params.
 
 ### Crosspost Configuration
@@ -535,9 +578,9 @@ The `$NOTIFICATION_PERMALINK` environment variable is available for use in cross
 
 ## File Uploads
 
-Use the `file` block type to upload files through Slack's `files.getUploadURLExternal` flow.
+Use the `file` block type to upload files through Slack's `files.getUploadURLExternal` flow. File blocks are not supported for Incoming Webhook delivery.
 
-- Required: `path` to the file and a resolvable `channel` (from `params.channel` or `CHANNEL`)
+- Required: `path` to the file and a resolvable `channel` (from `params.channel` or `CHANNEL`) for Web API delivery
 - Optional: `title` (defaults to filename) and `interpolate_file_contents_to_var` to export file contents to an environment variable
 - Files up to 1 GB are supported
 - Image files (png, jpg, jpeg, gif) create image blocks; other files create rich-text blocks that link to the uploaded file
@@ -592,6 +635,8 @@ make test-smoke      # Run smoke tests only
 make test-acceptance # Run acceptance tests only
 ```
 
+Some smoke and acceptance tests for Incoming Webhooks run only when `SLACK_WEBHOOK_URL` is set in the environment. Without it, those tests are skipped.
+
 ### Local Concourse Development
 
 ```bash
@@ -601,16 +646,18 @@ make concourse-load-examples       # Load example pipelines
 make concourse-run-all-examples    # Run all example pipelines end-to-end (CI)
 ```
 
-Required environment variables for `concourse-load-examples`:
+Environment variables for `make concourse-load-examples`, each passed to `fly set-pipeline -v`:
 
-- `SLACK_BOT_USER_OAUTH_TOKEN` - Slack bot OAuth token
-- `CHANNEL` - Target Slack channel for example pipelines
+- `SLACK_BOT_USER_OAUTH_TOKEN` - Slack bot OAuth token for pipelines that use the Web API
+- `CHANNEL` - Primary Slack channel for examples that need `channel`
+- `SIDE_CHANNEL` - Secondary channel for examples that use `side_channel`, may be empty
+- `SLACK_WEBHOOK_URL` - Incoming Webhook URL for [examples/webhook-slack.yaml](examples/webhook-slack.yaml), may be empty if you skip that pipeline
 
 ### Development Dependencies
 
 - `bats` - [Bash Automated Testing System](https://github.com/bats-core/bats-core)
-- `shfmt` - [Shell script formatter](https://github.com/mvdan/sh)
-- `shellcheck` - [Shell script static analysis](https://github.com/koalaman/shellcheck)
+- `shellcheck` - [Shell script static analysis](https://github.com/koalaman/shellcheck); required for `make lint`
+- `shfmt` - [Shell script formatter](https://github.com/mvdan/sh); optional locally, included in `Docker/Dockerfile.test` if you use that image
 
 ## Contributing
 

@@ -12,7 +12,7 @@ resource_types:
     type: registry-image
     source:
       repository: sunflowersoftware/send-to-slack
-      tag:
+      tag: ((TAG))
 
 resources:
   - name: slack-notification
@@ -42,7 +42,10 @@ See the [examples/](../examples/) directory for complete Concourse pipeline exam
 - Block Kit formatting
 - File uploads
 - Thread replies (multiple messages in a thread)
+- Incoming Webhooks ([webhook-slack.yaml](../examples/webhook-slack.yaml))
 - Interactive components
+
+Webhook resources use `source.webhook_url` instead of `slack_bot_user_oauth_token`. Incoming Webhooks do not support file uploads, crosspost, or thread replies in this tool; see the main [README.md](../README.md).
 
 ## Local Development
 
@@ -66,14 +69,21 @@ Load example pipelines into your local Concourse instance:
 
 ```bash
 export SLACK_BOT_USER_OAUTH_TOKEN="xoxb-your-token"
+export CHANNEL="#your-channel"
+# Required for examples/webhook-slack.yaml: replace with your real Incoming Webhook URL from Slack.
+export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/<workspace-id>/<app-id>/<token>"
+# Optional secondary channel for pipelines that reference side_channel.
+export SIDE_CHANNEL=""
 make concourse-load-examples
 ```
 
-This will load all YAML files from the `examples/` directory as pipelines. To run every example pipeline end-to-end in one go (start Concourse, load pipelines, trigger all jobs), use `make concourse-run-all-examples`; see [ci/README.md](ci/README.md) for run-all-examples.sh details.
+`make concourse-load-examples` passes `SLACK_BOT_USER_OAUTH_TOKEN`, `CHANNEL`, `SIDE_CHANNEL`, `SLACK_WEBHOOK_URL`, and `TAG` into `fly set-pipeline -v` for each `examples/*.yaml` file. `TAG` defaults to the value in the repo `VERSION` file when you do not export `TAG`.
+
+To run every example pipeline end-to-end in one go, use `make concourse-run-all-examples`; see [ci/README.md](../ci/README.md). If `SLACK_WEBHOOK_URL` is unset, the webhook example job is skipped automatically.
 
 ## Resource Type Implementation
 
-The resource type implementation is located in `concourse/resource-type/`. It follows the [Concourse resource type interface](https://concourse-ci.org/implementing-resource-types.html#implementing-resource-types):
+The resource type implementation lives under `concourse/resource-type/`, with scripts `scripts/check.sh`, `scripts/in.sh`, and `scripts/out.sh`, plus tests. It follows the [Concourse resource type interface](https://concourse-ci.org/implementing-resource-types.html#implementing-resource-types):
 
 - `check` - Checks for new versions (not applicable for this resource)
 - `in` - Retrieves a version (not applicable for this resource)

@@ -142,11 +142,13 @@ make concourse-run-all-examples
 
 ### Environment Variables
 
-- `SLACK_BOT_USER_OAUTH_TOKEN` (required): Slack bot OAuth token for pipeline variables
-- `CHANNEL` (required): Primary Slack channel for pipeline variables
-- `SIDE_CHANNEL` (optional): Secondary Slack channel; defaults to empty
-- `TAG` (optional): Docker image tag for the resource type; defaults to contents of `VERSION` file
+- `SLACK_BOT_USER_OAUTH_TOKEN`, required: Slack bot OAuth token for pipeline variables
+- `CHANNEL`, required: Primary Slack channel for pipeline variables
+- `SIDE_CHANNEL`, optional: Secondary Slack channel, defaults to empty
+- `SLACK_WEBHOOK_URL`, optional: Incoming Webhook URL for `examples/webhook-slack.yaml`. When unset, `webhook-slack/notify-via-slack-webhook` is skipped so the suite can still pass without a webhook
+- `TAG`, optional: Docker image tag for the resource type, defaults to contents of `VERSION` file
 
 ### Notes
 
-- Jobs listed in the hardcoded `SKIPPED_JOBS` array are silently skipped. This includes `thread-replies/thread-replies-with-thread-ts` and all `video/*` jobs, which require external Slack app configuration not available in a local environment.
+- Jobs listed in the hardcoded `SKIPPED_JOBS` array are skipped. This includes `thread-replies/thread-replies-with-thread-ts` and all `video/*` jobs, which need Slack app configuration that a local run may not have.
+- When `SLACK_WEBHOOK_URL` is empty, `webhook-slack/notify-via-slack-webhook` is skipped for the same reason.
