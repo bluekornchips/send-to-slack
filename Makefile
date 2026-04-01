@@ -29,7 +29,7 @@ test-smoke:
 	clear && RUN_SMOKE_TEST=true $(BATS_COMMAND) $(TEST_FILES) -f "smoke_test::"
 
 test-acceptance:
-	clear && RUN_ACCEPTANCE_TEST=true $(BATS_COMMAND) $(TEST_FILES) -f "acceptance_test::"
+	clear && RUN_ACCEPTANCE_TEST=true $(BATS_COMMAND) $(TEST_FILES) -f "acceptance::"
 
 test-all:
 	clear && RUN_SMOKE_TEST=true RUN_ACCEPTANCE_TEST=true $(BATS_COMMAND) $(TEST_FILES)
@@ -55,6 +55,7 @@ concourse-load-examples:
 			-v "SLACK_BOT_USER_OAUTH_TOKEN=$$SLACK_BOT_USER_OAUTH_TOKEN" \
 			-v "channel=$$CHANNEL" \
 			-v "side_channel=$$SIDE_CHANNEL" \
+			-v "SLACK_WEBHOOK_URL=$$SLACK_WEBHOOK_URL" \
 			-v "TAG=$(TAG)" \
 			|| exit 1; \
 	done
@@ -63,5 +64,7 @@ concourse-clean-restart:
 	clear && \
 		$(MAKE) concourse-down && \
 		$(MAKE) concourse-up && \
-		./ci/build.sh && \
+		./ci/build.sh
+
+concourse-run-all-examples: concourse-clean-restart
 		./ci/run-all-examples.sh

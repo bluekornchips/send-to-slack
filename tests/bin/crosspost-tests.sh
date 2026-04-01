@@ -368,3 +368,38 @@ teardown() {
 
 	rm -f "$input_payload"
 }
+
+@test "crosspost_notification:: webhook delivery skips permalink append with warning" {
+	DRY_RUN="true"
+	DELIVERY_METHOD="webhook"
+	NOTIFICATION_PERMALINK="https://workspace.slack.com/archives/C123/p123"
+
+	local input_payload
+	input_payload=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.test-crosspost.XXXXXX")
+	jq -n '{
+		source: { webhook_url: "https://hooks.slack.com/services/test" },
+		params: {
+			blocks: [{
+				section: {
+					type: "text",
+					text: { type: "plain_text", text: "Primary" }
+				}
+			}],
+			crosspost: {
+				channel: "#channel1",
+				blocks: [{
+					section: {
+						type: "text",
+						text: { type: "plain_text", text: "Crosspost message" }
+					}
+				}]
+			}
+		}
+	}' >"$input_payload"
+
+	run crosspost_notification "$input_payload"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "webhook delivery does not support permalink, skipping automatic link block"
+
+	rm -f "$input_payload"
+}

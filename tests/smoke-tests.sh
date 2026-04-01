@@ -26,6 +26,11 @@ setup_file() {
 		export REAL_TOKEN
 	fi
 
+	if [[ -n "$SLACK_WEBHOOK_URL" ]]; then
+		REAL_WEBHOOK_URL="$SLACK_WEBHOOK_URL"
+		export REAL_WEBHOOK_URL
+	fi
+
 	export GIT_ROOT
 	export CHANNEL
 	export SEND_TO_SLACK_SCRIPT
@@ -80,6 +85,50 @@ smoke_test_setup() {
 	export SMOKE_TEST_PAYLOAD_FILE
 }
 
+smoke_test_setup_webhook() {
+	local blocks_json="$1"
+
+	if [[ -z "${REAL_WEBHOOK_URL:-}" ]]; then
+		skip "SLACK_WEBHOOK_URL not set"
+	fi
+
+	local dry_run="false"
+
+	SMOKE_TEST_PAYLOAD_FILE=$(mktemp "${BATS_TEST_TMPDIR}/smoke-tests.smoke-payload-webhook.XXXXXX")
+
+	jq -n \
+		--argjson blocks "$blocks_json" \
+		--arg dry_run "$dry_run" \
+		--arg url "$REAL_WEBHOOK_URL" \
+		'{
+			source: {
+				webhook_url: $url
+			},
+			params: {
+				blocks: $blocks,
+				dry_run: $dry_run
+			}
+		}' >"$SMOKE_TEST_PAYLOAD_FILE"
+
+	export SMOKE_TEST_PAYLOAD_FILE
+}
+
+# parse_payload must run in this shell, not in command substitution, so exports from
+# load_configuration stay set for send_notification. Sets SMOKE_PARSED_PAYLOAD on success.
+smoke_parse_payload_capture() {
+	local out_file
+	local payload_path="$1"
+
+	out_file=$(mktemp "${BATS_TEST_TMPDIR}/smoke-tests.parsed-payload.XXXXXX")
+	if ! parse_payload "$payload_path" >"$out_file"; then
+		rm -f "$out_file"
+		return 1
+	fi
+	SMOKE_PARSED_PAYLOAD=$(cat "$out_file")
+	rm -f "$out_file"
+	return 0
+}
+
 ########################################################
 # Table block smoke tests
 ########################################################
@@ -91,10 +140,11 @@ smoke_test_setup() {
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -112,10 +162,11 @@ smoke_test_setup() {
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -174,10 +225,11 @@ smoke_test_setup() {
 	export SMOKE_TEST_PAYLOAD_FILE
 
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -214,10 +266,11 @@ smoke_test_setup() {
 	export SMOKE_TEST_PAYLOAD_FILE
 
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -239,10 +292,11 @@ smoke_test_setup() {
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -262,10 +316,11 @@ smoke_test_setup() {
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -285,10 +340,11 @@ smoke_test_setup() {
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -310,10 +366,11 @@ smoke_test_setup() {
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -335,10 +392,11 @@ smoke_test_setup() {
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -356,10 +414,11 @@ smoke_test_setup() {
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -381,10 +440,11 @@ smoke_test_setup() {
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -402,10 +462,11 @@ smoke_test_setup() {
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -427,10 +488,11 @@ smoke_test_setup() {
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -448,10 +510,11 @@ smoke_test_setup() {
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -469,10 +532,11 @@ smoke_test_setup() {
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -494,10 +558,11 @@ smoke_test_setup() {
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -515,10 +580,11 @@ smoke_test_setup() {
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -540,10 +606,11 @@ smoke_test_setup() {
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -586,10 +653,11 @@ smoke_test_setup() {
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -607,10 +675,11 @@ smoke_test_setup() {
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -628,10 +697,11 @@ smoke_test_setup() {
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -649,10 +719,11 @@ smoke_test_setup() {
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -670,10 +741,11 @@ smoke_test_setup() {
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -702,11 +774,12 @@ smoke_test_setup() {
 
 	smoke_test_setup "$blocks_json"
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		rm -f "$long_text_file"
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -739,11 +812,12 @@ smoke_test_setup() {
 	smoke_test_setup "$blocks_json"
 
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		rm -f "$hello_world_file"
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -783,11 +857,12 @@ smoke_test_setup() {
 	smoke_test_setup "$blocks_json"
 
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		rm -f "$slack_logo_file"
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -825,11 +900,12 @@ smoke_test_setup() {
 	smoke_test_setup "$blocks_json"
 
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		rm -f "$file1" "$file2"
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -858,11 +934,12 @@ smoke_test_setup() {
 	smoke_test_setup "$blocks_json"
 
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		rm -f "$test_file"
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -898,11 +975,12 @@ smoke_test_setup() {
 	smoke_test_setup "$blocks_json"
 
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		rm -f "$test_file"
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -935,11 +1013,12 @@ smoke_test_setup() {
 	smoke_test_setup "$blocks_json"
 
 	local parsed_payload
-	if ! parsed_payload=$(parse_payload "$SMOKE_TEST_PAYLOAD_FILE"); then
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
 		echo "parse_payload failed" >&2
 		rm -f "$test_file"
 		return 1
 	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
 
 	if [[ -z "$parsed_payload" ]]; then
 		echo "parsed_payload is empty" >&2
@@ -1159,4 +1238,63 @@ smoke_test_setup() {
 
 	rm -rf output
 	trap - EXIT
+}
+
+########################################################
+# Incoming Webhook smoke tests
+########################################################
+
+@test "smoke_test:: webhook posts section block" {
+	local blocks_json
+	blocks_json=$(jq -n '[{
+		section: {
+			type: "text",
+			text: {
+				type: "plain_text",
+				text: "Smoke test Incoming Webhook delivery"
+			}
+		}
+	}]')
+
+	smoke_test_setup_webhook "$blocks_json"
+	unset SLACK_BOT_USER_OAUTH_TOKEN
+	local parsed_payload
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
+		echo "parse_payload failed" >&2
+		return 1
+	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
+
+	if [[ -z "$parsed_payload" ]]; then
+		echo "parsed_payload is empty" >&2
+		return 1
+	fi
+
+	run send_notification "$parsed_payload"
+	[[ "$status" -eq 0 ]]
+}
+
+@test "smoke_test:: webhook posts blocks from webhook example yaml" {
+	local EXAMPLES_FILE="$GIT_ROOT/examples/webhook-slack.yaml"
+	local blocks_json
+	blocks_json=$(yq -o json -r \
+		'.jobs[] | select(.name == "notify-via-slack-webhook") | .plan[0].params.blocks' \
+		"$EXAMPLES_FILE")
+
+	smoke_test_setup_webhook "$blocks_json"
+	unset SLACK_BOT_USER_OAUTH_TOKEN
+	local parsed_payload
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
+		echo "parse_payload failed" >&2
+		return 1
+	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
+
+	if [[ -z "$parsed_payload" ]]; then
+		echo "parsed_payload is empty" >&2
+		return 1
+	fi
+
+	run send_notification "$parsed_payload"
+	[[ "$status" -eq 0 ]]
 }

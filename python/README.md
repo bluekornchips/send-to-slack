@@ -8,12 +8,13 @@ When users click buttons in Slack messages, Slack sends HTTP POST requests to a 
 
 ## Quick Start
 
-Start the server using the Makefile:
+From the repository root, the Python targets live in `python/Makefile`. Use `-C python`:
 
 ```bash
 export SLACK_BOT_USER_OAUTH_TOKEN="xoxb-your-token-here"
+export SLACK_SIGNING_SECRET="your-signing-secret"
 export PORT=3000
-make python-server
+make -C python python-server
 ```
 
 Or run directly:
@@ -21,11 +22,12 @@ Or run directly:
 ```bash
 cd python
 export SLACK_BOT_USER_OAUTH_TOKEN="xoxb-your-token-here"
+export SLACK_SIGNING_SECRET="your-signing-secret"
 export PORT=3000
-python3 server.py
+python3 -m venv .venv && .venv/bin/pip install flask requests && .venv/bin/python server.py
 ```
 
-The server automatically creates a virtual environment and installs dependencies on first run.
+The `make -C python python-server` target creates `.venv` under `python/` and installs dependencies on first run.
 
 ## Environment Variables
 
@@ -38,7 +40,7 @@ The server automatically creates a virtual environment and installs dependencies
 
 ## Dependencies
 
-The server requires the following Python packages (automatically installed when using `make python-server`):
+The server requires the following Python packages (installed by `make -C python python-server`):
 
 - `flask>=3.0.0` - Web framework for handling HTTP requests
 - `requests>=2.31.0` - HTTP library for Slack API calls
@@ -79,13 +81,16 @@ export NGROK_URL="your-custom-domain.ngrok.io"  # Optional, for custom domains
 3. Start the Python server in one terminal:
 
 ```bash
-make python-server
+make -C python python-server
 ```
 
 4. Start ngrok in another terminal:
 
 ```bash
-make ngrok-up
+export NGROK_AUTHTOKEN="your-token"
+# Optional reserved hostname, otherwise ngrok assigns a URL each run:
+# export NGROK_URL="https://your-name.ngrok-free.app"
+make -C python ngrok-up
 ```
 
 ngrok will display a public HTTPS URL. Use this URL in your Slack app configuration.
@@ -93,9 +98,9 @@ ngrok will display a public HTTPS URL. Use this URL in your Slack app configurat
 ### Slack App Configuration
 
 1. Navigate to your Slack app settings at [api.slack.com/apps](https://api.slack.com/apps)
-2. Go to <strong>Interactivity & Shortcuts</strong>
-3. Enable <strong>Interactivity</strong>
-4. Set the <strong>Request URL</strong> to your ngrok URL: `https://your-ngrok-url.ngrok.io/slack/actions`
+2. Open Interactivity and Shortcuts
+3. Enable Interactivity
+4. Set the Request URL to your ngrok URL, for example `https://your-ngrok-host/slack/actions`
 5. Save changes
 
 ## Testing Interactive Components

@@ -21,6 +21,7 @@ This directory contains complete configuration examples for all supported Slack 
 - [table.yaml](table.yaml) - Table block examples
 - [thread-replies.yaml](thread-replies.yaml) - Multiple replies in a thread via `thread_replies` array
 - [video.yaml](video.yaml) - Video block examples
+- [webhook-slack.yaml](webhook-slack.yaml) - Incoming Webhook delivery, no bot token
 
 ## Formats
 
@@ -28,15 +29,20 @@ The tool accepts both the keyed format (`{ "section": { ... } }`) and Slack's na
 
 ## Running the Examples
 
-These files are Concourse pipelines that use the `sunflowersoftware/send-to-slack` resource type. Provide your Slack token and channel when setting a pipeline, for example:
+These files are Concourse pipelines that use the `sunflowersoftware/send-to-slack` resource type. Pass the variables each file expects, for example:
 
 ```bash
 fly -t <target> set-pipeline \
   -p send-to-slack-demo \
   -c examples/acceptance.yaml \
   -v SLACK_BOT_USER_OAUTH_TOKEN=<token> \
-  -v channel=<channel>
+  -v channel=<channel> \
+  -v side_channel=<secondary-or-empty> \
+  -v TAG=<image-tag> \
+  -v SLACK_WEBHOOK_URL=<webhook-or-empty>
 ```
+
+`webhook-slack.yaml` only needs `SLACK_WEBHOOK_URL` and `TAG`. See that file for the exact `((VAR))` names. Pipelines that use the Web API need `SLACK_BOT_USER_OAUTH_TOKEN` and `channel`.
 
 ## Supported Block Types
 
@@ -187,13 +193,15 @@ File blocks support the following parameters:
 
 The program enforces Slack's message composition limits:
 
-- Maximum <strong>50 blocks</strong> per message
-- Maximum <strong>20 attachments</strong> per message
-- Maximum <strong>40,000 characters</strong> for text fields
+- Maximum 50 blocks per message
+- Maximum 20 attachments per message
+- Maximum 40,000 characters for text fields
 
 ## Threading
 
-Reply to existing threads with `thread_ts`. Create new threads with `create_thread: true` with the first block as the parent message, remaining blocks as the thread reply. Use the `thread_replies` array to send multiple separate messages as replies in the same thread; each element is a message config (e.g. `blocks`). See [acceptance.yaml](acceptance.yaml) and [thread-replies.yaml](thread-replies.yaml) for examples. If you only have one block, it will be sent as a regular message.
+Reply to existing threads with `thread_ts`. Create new threads with `create_thread: true` with the first block as the parent message, remaining blocks as the thread reply. Use the `thread_replies` array to send multiple separate messages as replies in the same thread; each element is a message config, often with a `blocks` field. See [acceptance.yaml](acceptance.yaml) and [thread-replies.yaml](thread-replies.yaml) for examples. If you only have one block, it will be sent as a regular message.
+
+Incoming Webhook delivery does not support `thread_ts`, `create_thread`, or `thread_replies`; use a bot token and the Web API for those features.
 
 ## Alternative Input Methods
 
@@ -204,7 +212,7 @@ Provide a complete JSON payload as a string using `params.raw`:
 ```json
 {
   "params": {
-    "raw": "{\"source\": {...}, \"params\": {...}}"
+    "raw": "{\"source\": { }, \"params\": { }}"
   }
 }
 ```

@@ -59,11 +59,13 @@ crosspost_notification() {
 	local original_permalink="$NOTIFICATION_PERMALINK"
 
 	# By default, append a permalink block unless no_link is true
-	if [[ "$no_link" != "true" ]]; then
+	if [[ "$no_link" != "true" ]] && [[ "${DELIVERY_METHOD:-api}" != "webhook" ]]; then
 		# Add a context block with the permalink at the end of blocks
 		# shellcheck disable=SC2016
 		local permalink_block='{"context": {"elements": [{"type": "mrkdwn", "text": "<$NOTIFICATION_PERMALINK|View original message>"}]}}'
 		crosspost_params=$(echo "$crosspost_params" | jq --argjson link "$permalink_block" '.blocks = (.blocks // []) + [$link]')
+	elif [[ "$no_link" != "true" ]] && [[ "${DELIVERY_METHOD:-api}" == "webhook" ]]; then
+		echo "crosspost_notification:: webhook delivery does not support permalink, skipping automatic link block" >&2
 	fi
 
 	# Process each channel

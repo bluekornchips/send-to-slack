@@ -397,12 +397,71 @@ mock_curl_network_error() {
 	rm -f "$input_file"
 }
 
+@test "main:: webhook delivery skips thread replies and crosspost" {
+	unset SLACK_BOT_USER_OAUTH_TOKEN
+	unset CHANNEL
+
+	curl() {
+		echo "ok"
+		echo "200"
+		return 0
+	}
+	export -f curl
+
+	local test_payload
+	test_payload=$(jq -n '{
+		source: {
+			webhook_url: "https://hooks.slack.com/services/test"
+		},
+		params: {
+			dry_run: false,
+			blocks: [{
+				section: {
+					type: "text",
+					text: { type: "plain_text", text: "Primary" }
+				}
+			}],
+			thread: {
+				replies: [{
+					blocks: [{
+						section: {
+							type: "text",
+							text: { type: "plain_text", text: "Reply" }
+						}
+					}]
+				}]
+			},
+			crosspost: {
+				channel: ["#side-channel"],
+				blocks: [{
+					section: {
+						type: "text",
+						text: { type: "plain_text", text: "Crosspost" }
+					}
+				}]
+			}
+		}
+	}')
+
+	local input_file
+	input_file=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.input.XXXXXX")
+	echo "$test_payload" >"$input_file"
+
+	run main --file "$input_file"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "delivery method webhook does not support thread replies, skipping send_thread_replies"
+	echo "$output" | grep -q "delivery method webhook does not support crosspost, skipping crosspost_notification"
+
+	rm -f "$input_file"
+}
+
 ########################################################
 # send_notification
 ########################################################
 
 @test "send_notification:: skips API call when dry run enabled" {
 	DRY_RUN="true"
+	DELIVERY_METHOD="api"
 	local payload='{"channel": "#test"}'
 
 	run send_notification "$payload"
@@ -412,6 +471,7 @@ mock_curl_network_error() {
 
 @test "send_notification:: fails with missing token" {
 	DRY_RUN="false"
+	DELIVERY_METHOD="api"
 	SLACK_BOT_USER_OAUTH_TOKEN=""
 	local payload='{"channel": "#test"}'
 
@@ -422,6 +482,7 @@ mock_curl_network_error() {
 
 @test "send_notification:: fails with missing payload" {
 	DRY_RUN="false"
+	DELIVERY_METHOD="api"
 	SLACK_BOT_USER_OAUTH_TOKEN="test-token"
 
 	run send_notification ""
@@ -432,6 +493,7 @@ mock_curl_network_error() {
 @test "send_notification:: fails when curl fails" {
 	mock_curl_failure
 	DRY_RUN="false"
+	DELIVERY_METHOD="api"
 	RETRY_INITIAL_DELAY=0
 	export RETRY_INITIAL_DELAY
 	local payload='{"channel": "#test"}'
@@ -444,6 +506,7 @@ mock_curl_network_error() {
 @test "send_notification:: fails when Slack API returns error" {
 	mock_curl_failure
 	DRY_RUN="false"
+	DELIVERY_METHOD="api"
 	RETRY_INITIAL_DELAY=0
 	export RETRY_INITIAL_DELAY
 	local payload='{"channel": "#test"}'
@@ -966,6 +1029,65 @@ mock_curl_permalink_failure() {
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "process_input_to_file::"
 	echo "$output" | grep -q "unknown option"
+}
+
+@test "main:: fails when both token and webhook are missing" {
+	unset SLACK_BOT_USER_OAUTH_TOKEN
+
+	local input_file
+	input_file=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.missing-delivery.XXXXXX")
+	jq -n '{
+		source: {
+		},
+		params: {
+			channel: "#test",
+			blocks: [{
+				section: {
+					type: "text",
+					text: { type: "plain_text", text: "Test" }
+				}
+			}]
+		}
+	}' >"$input_file"
+
+	run "$SCRIPT" --file "$input_file"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "either source.slack_bot_user_oauth_token or source.webhook_url is required"
+
+	rm -f "$input_file"
+}
+
+@test "main:: webhook mode does not require params.channel" {
+	unset SLACK_BOT_USER_OAUTH_TOKEN
+	unset CHANNEL
+
+	curl() {
+		echo "ok"
+		echo "200"
+		return 0
+	}
+	export -f curl
+
+	local input_file
+	input_file=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.webhook-no-channel.XXXXXX")
+	jq -n '{
+		source: {
+			webhook_url: "https://hooks.slack.com/services/test"
+		},
+		params: {
+			blocks: [{
+				section: {
+					type: "text",
+					text: { type: "plain_text", text: "Test" }
+				}
+			}]
+		}
+	}' >"$input_file"
+
+	run "$SCRIPT" --file "$input_file"
+	[[ "$status" -eq 0 ]]
+
+	rm -f "$input_file"
 }
 
 @test "main:: file input works same as stdin input" {
