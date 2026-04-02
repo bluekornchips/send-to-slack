@@ -384,6 +384,7 @@ load_input_payload_params() {
 #
 # Side Effects:
 #   Exports SLACK_BOT_USER_OAUTH_TOKEN, WEBHOOK_URL, CHANNEL, DRY_RUN, DELIVERY_METHOD
+#   Sets and exports EPHEMERAL_USER when params.ephemeral_user is set, otherwise unsets EPHEMERAL_USER
 #
 # Returns:
 #   0 on success
@@ -438,6 +439,18 @@ load_configuration() {
 		fi
 	fi
 
+	unset EPHEMERAL_USER 2>/dev/null || true
+	local ephemeral_user_param
+	ephemeral_user_param=$(jq -r '.params.ephemeral_user // empty' "$INPUT_PAYLOAD")
+	if [[ -n "$ephemeral_user_param" ]]; then
+		if [[ "$DELIVERY_METHOD" != "api" ]]; then
+			echo "load_configuration:: params.ephemeral_user requires API delivery with a bot token, not webhook" >&2
+			return 1
+		fi
+		EPHEMERAL_USER="$ephemeral_user_param"
+		export EPHEMERAL_USER
+	fi
+
 	local params_dry_run
 	params_dry_run=$(jq -r '.params.dry_run // empty' "$INPUT_PAYLOAD")
 	if [[ -n "$params_dry_run" ]]; then
@@ -454,11 +467,14 @@ load_configuration() {
 
 	local token_preview
 	local webhook_preview
+	local ephemeral_preview
 	token_preview="set"
 	webhook_preview="set"
+	ephemeral_preview="none"
 	[[ -z "${SLACK_BOT_USER_OAUTH_TOKEN:-}" ]] && token_preview="empty"
 	[[ -z "${WEBHOOK_URL:-}" ]] && webhook_preview="empty"
-	echo "load_configuration:: method=${DELIVERY_METHOD} channel=${CHANNEL:-none} dry_run=${DRY_RUN} token=${token_preview} webhook=${webhook_preview}" >&2
+	[[ -n "${EPHEMERAL_USER:-}" ]] && ephemeral_preview="set"
+	echo "load_configuration:: method=${DELIVERY_METHOD} channel=${CHANNEL:-none} dry_run=${DRY_RUN} token=${token_preview} webhook=${webhook_preview} ephemeral=${ephemeral_preview}" >&2
 
 	return 0
 }
@@ -611,6 +627,11 @@ process_blocks() {
 		--slurpfile blocks "$BLOCKS_FILE" \
 		--slurpfile attachments "$ATTACHMENTS_FILE" \
 		'{ "channel": $channel, "blocks": $blocks[0], "attachments": $attachments[0] }')
+
+	# Add user for chat.postEphemeral when params.ephemeral_user was set in load_configuration
+	if [[ -n "${EPHEMERAL_USER:-}" ]]; then
+		payload=$(jq --arg user "$EPHEMERAL_USER" '. + {user: $user}' <<<"$payload")
+	fi
 
 	# Add thread_ts to payload if provided and not empty
 	if [[ -n "$thread_ts" && "$thread_ts" != "null" && "$thread_ts" != "empty" ]]; then

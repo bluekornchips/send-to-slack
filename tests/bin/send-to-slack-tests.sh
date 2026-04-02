@@ -516,6 +516,132 @@ mock_curl_network_error() {
 }
 
 ########################################################
+# _send_by_api
+########################################################
+
+@test "_send_by_api:: uses chat.postEphemeral URL when EPHEMERAL_USER is set" {
+	local url_capture
+	url_capture=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.api-url.XXXXXX")
+	export url_capture
+
+	EPHEMERAL_USER="U123"
+	export EPHEMERAL_USER
+	export SLACK_BOT_USER_OAUTH_TOKEN
+
+	curl() {
+		local arg
+		for arg in "$@"; do
+			case "$arg" in
+			http*)
+				printf '%s\n' "$arg" >>"$url_capture"
+				;;
+			esac
+		done
+		printf '%s\n' '{"ok": true}'
+		printf '%s\n' '200'
+		return 0
+	}
+	export -f curl
+
+	local pf
+	pf=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.api-payload.XXXXXX")
+	echo '{"channel":"#c"}' >"$pf"
+
+	run _send_by_api "$pf" '{"channel":"#c"}'
+	rm -f "$pf"
+
+	[[ "$status" -eq 0 ]]
+	grep -q "chat.postEphemeral" "$url_capture"
+	rm -f "$url_capture"
+}
+
+@test "_send_by_api:: uses chat.postMessage URL when EPHEMERAL_USER is unset" {
+	local url_capture
+	url_capture=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.api-url2.XXXXXX")
+	export url_capture
+
+	unset EPHEMERAL_USER
+	SLACK_BOT_USER_OAUTH_TOKEN="test-token"
+	export SLACK_BOT_USER_OAUTH_TOKEN
+
+	curl() {
+		local arg
+		for arg in "$@"; do
+			case "$arg" in
+			http*)
+				printf '%s\n' "$arg" >>"$url_capture"
+				;;
+			esac
+		done
+		printf '%s\n' '{"ok": true}'
+		printf '%s\n' '200'
+		return 0
+	}
+	export -f curl
+
+	local pf
+	pf=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.api-payload2.XXXXXX")
+	echo '{"channel":"#c"}' >"$pf"
+
+	run _send_by_api "$pf" '{"channel":"#c"}'
+	rm -f "$pf"
+
+	[[ "$status" -eq 0 ]]
+	grep -q "chat.postMessage" "$url_capture"
+	rm -f "$url_capture"
+}
+
+@test "send_notification:: skips thread_replies and crosspost for ephemeral messages" {
+	local test_payload
+	test_payload=$(jq -n '{
+		source: {
+			slack_bot_user_oauth_token: "xoxb-test-token"
+		},
+		params: {
+			channel: "C123",
+			dry_run: true,
+			ephemeral_user: "U123",
+			blocks: [{
+				section: {
+					type: "text",
+					text: { type: "plain_text", text: "Primary" }
+				}
+			}],
+			thread: {
+				replies: [{
+					blocks: [{
+						section: {
+							type: "text",
+							text: { type: "plain_text", text: "Reply" }
+						}
+					}]
+				}]
+			},
+			crosspost: {
+				channel: ["#side-channel"],
+				blocks: [{
+					section: {
+						type: "text",
+						text: { type: "plain_text", text: "Crosspost" }
+					}
+				}]
+			}
+		}
+	}')
+
+	local input_file
+	input_file=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.ephemeral-input.XXXXXX")
+	echo "$test_payload" >"$input_file"
+
+	run main --file "$input_file"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "chat.postEphemeral does not support thread replies or crosspost"
+	! echo "$output" | grep -q "send_thread_replies:: sending"
+
+	rm -f "$input_file"
+}
+
+########################################################
 # get_message_permalink
 ########################################################
 

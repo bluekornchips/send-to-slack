@@ -8,7 +8,9 @@
 ########################################################
 # Default values
 ########################################################
-SLACK_API_URL="https://slack.com/api/chat.postMessage"
+SLACK_API_BASE_URL="https://slack.com/api"
+SLACK_API_URL="${SLACK_API_BASE_URL}/chat.postMessage"
+SLACK_API_URL_EPHEMERAL="${SLACK_API_BASE_URL}/chat.postEphemeral"
 SHOW_METADATA="true"
 SHOW_PAYLOAD="true"
 METADATA="[]"
@@ -23,6 +25,7 @@ ERROR_CODES_TRUE_FAILURES=(
 	"invalid_auth"
 	"channel_not_found"
 	"not_in_channel"
+	"user_not_in_channel"
 	"missing_scope"
 	"invalid_blocks"
 	"invalid_attachments")
@@ -589,8 +592,14 @@ _send_by_api() {
 	local payload_file="$1"
 	local payload="$2"
 
+	local api_url
+	api_url="${SLACK_API_URL}"
+	if [[ -n "${EPHEMERAL_USER:-}" ]]; then
+		api_url="${SLACK_API_URL_EPHEMERAL}"
+	fi
+
 	local curl_output
-	curl_output=$(curl -X POST "${SLACK_API_URL}" \
+	curl_output=$(curl -X POST "${api_url}" \
 		-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
 		-H "Content-type: application/json; charset=utf-8" \
 		-d "@${payload_file}" \
@@ -1146,28 +1155,32 @@ main() {
 	fi
 
 	if [[ "${DELIVERY_METHOD:-api}" == "api" ]]; then
-		# Capture ts from primary message for use as thread anchor in replies
-		local primary_ts
-		if [[ -n "${RESPONSE:-}" ]] && jq . >/dev/null 2>&1 <<<"$RESPONSE"; then
-			primary_ts=$(echo "$RESPONSE" | jq -r '.ts // empty')
+		if [[ -n "${EPHEMERAL_USER:-}" ]]; then
+			echo "main:: chat.postEphemeral does not support thread replies or crosspost, skipping send_thread_replies and crosspost_notification" >&2
 		else
-			primary_ts=""
-		fi
+			# Capture ts from primary message for use as thread anchor in replies
+			local primary_ts
+			if [[ -n "${RESPONSE:-}" ]] && jq . >/dev/null 2>&1 <<<"$RESPONSE"; then
+				primary_ts=$(echo "$RESPONSE" | jq -r '.ts // empty')
+			else
+				primary_ts=""
+			fi
 
-		# Resolve thread_ts for replies, prefer parsed_payload.thread_ts, then primary ts
-		local reply_thread_ts
-		reply_thread_ts=$(echo "$parsed_payload" | jq -r '.thread_ts // empty')
-		if [[ -z "$reply_thread_ts" || "$reply_thread_ts" == "null" ]]; then
-			reply_thread_ts="${primary_ts:-}"
-		fi
+			# Resolve thread_ts for replies, prefer parsed_payload.thread_ts, then primary ts
+			local reply_thread_ts
+			reply_thread_ts=$(echo "$parsed_payload" | jq -r '.thread_ts // empty')
+			if [[ -z "$reply_thread_ts" || "$reply_thread_ts" == "null" ]]; then
+				reply_thread_ts="${primary_ts:-}"
+			fi
 
-		if ! send_thread_replies "${input_payload}" "$reply_thread_ts" "$parsed_payload"; then
-			echo "main:: send_thread_replies encountered failures, continuing" >&2
-		fi
+			if ! send_thread_replies "${input_payload}" "$reply_thread_ts" "$parsed_payload"; then
+				echo "main:: send_thread_replies encountered failures, continuing" >&2
+			fi
 
-		if ! crosspost_notification "${input_payload}"; then
-			echo "main:: failed to crosspost notification" >&2
-			return 1
+			if ! crosspost_notification "${input_payload}"; then
+				echo "main:: failed to crosspost notification" >&2
+				return 1
+			fi
 		fi
 	else
 		echo "main:: delivery method webhook does not support thread replies, skipping send_thread_replies" >&2

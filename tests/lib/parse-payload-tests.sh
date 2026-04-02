@@ -206,6 +206,134 @@ block_output_json() { cat "$CREATE_BLOCK_OUTPUT_FILE"; }
 	echo "$output" | grep -q "either source.slack_bot_user_oauth_token or source.webhook_url is required"
 }
 
+########################################################
+# load_configuration
+########################################################
+
+@test "load_configuration:: exports EPHEMERAL_USER when params.ephemeral_user is set" {
+	unset EPHEMERAL_USER
+
+	jq -n '{
+		source: {
+			slack_bot_user_oauth_token: "xoxb-test"
+		},
+		params: {
+			channel: "C123",
+			dry_run: true,
+			ephemeral_user: "U012AB3CD"
+		}
+	}' >"$TEST_PAYLOAD_FILE"
+
+	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
+	export INPUT_PAYLOAD
+
+	if ! load_configuration; then
+		fail "load_configuration failed"
+	fi
+	[[ "${EPHEMERAL_USER:-}" == "U012AB3CD" ]]
+}
+
+@test "load_configuration:: fails when ephemeral_user is set with webhook delivery" {
+	unset SLACK_BOT_USER_OAUTH_TOKEN
+	unset CHANNEL
+	unset EPHEMERAL_USER
+
+	jq -n '{
+		source: {
+			webhook_url: "https://hooks.slack.com/services/test"
+		},
+		params: {
+			ephemeral_user: "U1",
+			blocks: [{
+				section: {
+					type: "text",
+					text: { type: "plain_text", text: "x" }
+				}
+			}]
+		}
+	}' >"$TEST_PAYLOAD_FILE"
+
+	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
+	export INPUT_PAYLOAD
+
+	run load_configuration
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "params.ephemeral_user requires API delivery"
+}
+
+@test "load_configuration:: does not set EPHEMERAL_USER when params.ephemeral_user is absent" {
+	export EPHEMERAL_USER="stale-from-environment"
+
+	jq -n '{
+		source: {
+			slack_bot_user_oauth_token: "xoxb-test"
+		},
+		params: {
+			channel: "C123",
+			dry_run: true
+		}
+	}' >"$TEST_PAYLOAD_FILE"
+
+	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
+	export INPUT_PAYLOAD
+
+	if ! load_configuration; then
+		fail "load_configuration failed"
+	fi
+	[[ -z "${EPHEMERAL_USER:-}" ]]
+}
+
+########################################################
+# process_blocks, ephemeral user in API payload
+########################################################
+
+@test "process_blocks:: includes user field in payload when EPHEMERAL_USER is set" {
+	jq -n '{
+		source: {
+			slack_bot_user_oauth_token: "xoxb-test"
+		},
+		params: {
+			channel: "C123",
+			dry_run: true,
+			ephemeral_user: "U99",
+			blocks: [{
+				section: {
+					type: "text",
+					text: { type: "plain_text", text: "Hello" }
+				}
+			}]
+		}
+	}' >"$TEST_PAYLOAD_FILE"
+
+	local payload_output
+	payload_output=$(parse_payload "$TEST_PAYLOAD_FILE")
+
+	echo "$payload_output" | jq -e '.user == "U99"' >/dev/null
+}
+
+@test "process_blocks:: does not include user field when EPHEMERAL_USER is unset" {
+	jq -n '{
+		source: {
+			slack_bot_user_oauth_token: "xoxb-test"
+		},
+		params: {
+			channel: "C123",
+			dry_run: true,
+			blocks: [{
+				section: {
+					type: "text",
+					text: { type: "plain_text", text: "Hello" }
+				}
+			}]
+		}
+	}' >"$TEST_PAYLOAD_FILE"
+
+	local payload_output
+	payload_output=$(parse_payload "$TEST_PAYLOAD_FILE")
+
+	echo "$payload_output" | jq -e 'has("user") | not' >/dev/null
+}
+
 @test "parse_payload:: file blocks fail in webhook mode" {
 	unset SLACK_BOT_USER_OAUTH_TOKEN
 	unset CHANNEL
