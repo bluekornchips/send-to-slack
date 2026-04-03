@@ -20,6 +20,7 @@ This directory contains complete configuration examples for all supported Slack 
 - [slack-native.yaml](slack-native.yaml) - Using Slack's native `type` format end to end
 - [table.yaml](table.yaml) - Table block examples
 - [thread-replies.yaml](thread-replies.yaml) - Multiple replies in a thread via `thread_replies` array
+- [update-message.yaml](update-message.yaml) - Post a message, then update it with `params.message_ts` and `chat.update`
 - [video.yaml](video.yaml) - Video block examples
 - [webhook-slack.yaml](webhook-slack.yaml) - Incoming Webhook delivery, no bot token
 
@@ -241,4 +242,8 @@ blocks:
   - from_file: more-blocks.json
 ```
 
-See [blocks-from-file.yaml](blocks-from-file.yaml) for a complete example. The referenced JSON files are in [tests/fixtures/](../tests/fixtures/); copy them to your payload base directory or ensure they exist where the pipeline runs. A file may contain a single block or an array of blocks.
+See [blocks-from-file.yaml](blocks-from-file.yaml) for a complete example. Fixture JSON for that pipeline lives under [fixtures/](fixtures/) in this repository, for example `blocks-from-file-3.json`. The Concourse job checks out the `send-to-slack` git resource so paths like `send-to-slack/examples/fixtures/blocks-from-file-3.json` resolve on the worker. Local CLI runs need the same files on disk or paths adjusted to your `SEND_TO_SLACK_PAYLOAD_BASE_DIR` and current working directory. A file may contain a single block or an array of blocks.
+
+## Updating a message
+
+Set `params.message_ts` to the message `ts` returned from a previous send, with `params.channel` and new `blocks` or `text`, to update that message via the Web API. The resource version file exposes `message_ts` for a later `get` and `load_var` pattern. See [update-message.yaml](update-message.yaml).

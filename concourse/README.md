@@ -42,10 +42,11 @@ See the [examples/](../examples/) directory for complete Concourse pipeline exam
 - Block Kit formatting
 - File uploads
 - Thread replies (multiple messages in a thread)
+- Updating an existing message with `params.message_ts` and `chat.update` ([update-message.yaml](../examples/update-message.yaml))
 - Incoming Webhooks ([webhook-slack.yaml](../examples/webhook-slack.yaml))
 - Interactive components
 
-Webhook resources use `source.webhook_url` instead of `slack_bot_user_oauth_token`. Incoming Webhooks do not support file uploads, crosspost, or thread replies in this tool; see the main [README.md](../README.md).
+Webhook resources use `source.webhook_url` instead of `slack_bot_user_oauth_token`. Incoming Webhooks do not support file uploads, crosspost, thread replies, or `params.message_ts` updates in this tool; see the main [README.md](../README.md).
 
 ## Local Development
 
@@ -83,7 +84,7 @@ To run every example pipeline end-to-end in one go, use `make concourse-run-all-
 
 ## Resource Type Implementation
 
-The resource type implementation lives under `concourse/resource-type/`, with scripts `scripts/check.sh`, `scripts/in.sh`, and `scripts/out.sh`, plus tests. It follows the [Concourse resource type interface](https://concourse-ci.org/implementing-resource-types.html#implementing-resource-types):
+The resource type implementation lives under `concourse/resource-type/scripts/` as `check.sh`, `in.sh`, and `out.sh`, with tests under `concourse/resource-type/tests/`. It follows the [Concourse resource type interface](https://concourse-ci.org/implementing-resource-types.html#implementing-resource-types):
 
 - `check` - Checks for new versions (not applicable for this resource)
 - `in` - Retrieves a version (not applicable for this resource)

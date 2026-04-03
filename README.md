@@ -230,6 +230,7 @@ The following environment variables control tool behavior:
 - `CHANNEL` - Target Slack channel when `params.channel` is empty. Required for Web API delivery. For webhooks, optional when the hook URL already targets a channel.
 - `DRY_RUN` - Set to `true` to validate without sending messages
 - `SEND_TO_SLACK_OUTPUT` - File path to write JSON output instead of stdout
+- `SEND_TO_SLACK_PAYLOAD_BASE_DIR` - First directory tried when resolving relative paths for `params.from_file` and block-level `from_file` (the Concourse resource `out` script sets this to the step destination directory)
 - `SHOW_METADATA` - Set to `false` to disable metadata output (default: `true`)
 - `SHOW_PAYLOAD` - Set to `false` to exclude payload from metadata (default: `true`)
 - `SKIP_SLACK_API_CHECK` - Set to `true` to skip API connectivity check in health check mode
@@ -255,7 +256,7 @@ Enable debug mode by setting `params.debug: true` in your payload. When enabled,
   "params": {
     "channel": "notifications",
     "debug": true,
-    "blocks": [...]
+    "blocks": []
   }
 }
 ```
@@ -270,7 +271,7 @@ parse_payload:: input payload (sanitized):
   },
   "params": {
     "channel": "notifications",
-    "blocks": [...]
+    "blocks": []
   }
 }
 ```
@@ -284,6 +285,7 @@ Debug mode redacts authentication tokens but still logs the payload structure.
 - File upload support with automatic image or rich-text block creation (Web API only; webhook delivery skips `file` blocks with a clear message)
 - Crossposting with permalinks and optional custom text (Web API only; webhook delivery skips crosspost)
 - Thread replies and thread creation for multi-block messages, plus `thread_replies` array for multiple replies in a thread (Web API only; webhook delivery skips thread replies)
+- Update an existing channel message with `chat.update` when `params.message_ts` is set (Web API only; requires `params.channel` in the same JSON payload; skips new post, thread replies, and crosspost for that run)
 - Ephemeral channel messages via `chat.postEphemeral` when `params.ephemeral_user` is set (Web API only; incompatible with webhooks; skips thread replies, crosspost, and permalink)
 - Retry with exponential backoff on delivery for transient failures
 - Input flexibility: stdin, `-f|-file|--file`, `params.raw`, or `params.from_file`
@@ -311,12 +313,12 @@ Debug mode redacts authentication tokens but still logs the payload structure.
 
 ### Slack Configuration
 
-Slack bot token with appropriate OAuth scopes:
+Slack bot token with appropriate OAuth scopes. Posting, updating, ephemeral sends, and thread replies need `chat:write`; some channels also need `chat:write.public`.
 
-- `channels:read`, `channels:write` - Channel access
+- `chat:write` - Post, update, and thread messages via Web API
+- `channels:read`, `groups:read`, `im:read` - Channel, private channel, and DM access for lookups where used
 - `files:write`, `files:read` - File operations
-- `groups:read`, `im:read` - Group and DM access
-- `users:read` - User information
+- `users:read` - User information for mention resolution and similar features
 
 See [Slack API Scopes](https://api.slack.com/scopes) for complete documentation.
 
@@ -346,15 +348,22 @@ Web API example:
     "thread_replies": [],
     "crosspost": {
       "channel": ["#channel1", "#channel2"],
-      "blocks": [...],
+      "blocks": [
+        {
+          "type": "section",
+          "text": { "type": "plain_text", "text": "Crosspost body" }
+        }
+      ],
       "no_link": false
     },
-    "raw": "{\"source\": {...}, \"params\": {...}}",
+    "raw": "{\"source\":{},\"params\":{\"channel\":\"channel-name-or-id\",\"blocks\":[]}}",
     "from_file": "./payload.json",
     "ephemeral_user": "U012AB3CD"
   }
 }
 ```
+
+Set `params.message_ts` to the Slack message `ts` of an existing message to call [`chat.update`](https://api.slack.com/methods/chat.update) instead of posting a new message. Requires Web API delivery, `params.channel` set in the same JSON payload as the timestamp (the tool reads the raw input file for this path, so `CHANNEL` alone is not enough), and the usual `params.blocks` and optional `params.text`. Thread replies, crosspost, and ephemeral flows are not run on an update invocation. Use the `chat:write` scope. After a successful post or update, Concourse-style output includes `version.message_ts` when the API returns a `ts`. See [examples/update-message.yaml](examples/update-message.yaml).
 
 Set `params.ephemeral_user` to a Slack user ID to send with [`chat.postEphemeral`](https://api.slack.com/methods/chat.postEphemeral) instead of `chat.postMessage`. Only that user sees the message in the channel. Requires Web API delivery with a bot token; it cannot be used with `source.webhook_url` as the only delivery method. Thread replies, crosspost, and permalink metadata are not supported for ephemeral sends. Use the `chat:write` scope.
 
@@ -384,8 +393,8 @@ Incoming Webhook example. You may omit `params.channel` when the webhook URL is 
 Web API:
 
 - `source.slack_bot_user_oauth_token` or `SLACK_BOT_USER_OAUTH_TOKEN`
-- `params.channel` or `CHANNEL`
-- `params.blocks`
+- `params.channel` or `CHANNEL` (for `params.message_ts` updates, set `params.channel` in the JSON; see Updating messages)
+- `params.blocks` for typical new messages; updates may use `params.text` with an empty `blocks` array when Slack accepts that shape
 
 Incoming Webhook:
 
@@ -412,6 +421,7 @@ Incoming Webhook:
 - `params.raw` - JSON string that replaces the `params` object
 - `params.from_file` - Path to JSON that replaces the `params` object
 - `params.blocks` - Array of block configurations
+- `params.message_ts` - Slack message timestamp for `chat.update`; Web API only; requires `params.channel` in the payload; omits new post, thread replies, and crosspost for that run (see Updating messages above)
 - `params.ephemeral_user` - Slack user ID for `chat.postEphemeral`; Web API only, not valid with webhook-only delivery (see Ephemeral messages in the Web API example above)
 
 ### Block Formats
@@ -464,7 +474,12 @@ Provide `thread_ts` with the parent message timestamp. Extract from the permalin
   "params": {
     "channel": "notifications",
     "thread_ts": "1763161862.880069",
-    "blocks": [...]
+    "blocks": [
+      {
+        "type": "section",
+        "text": { "type": "plain_text", "text": "Reply in thread" }
+      }
+    ]
   }
 }
 ```
@@ -478,7 +493,12 @@ Set `create_thread: true` with multiple blocks. First block sent as regular mess
   "params": {
     "channel": "notifications",
     "create_thread": true,
-    "blocks": [...]
+    "blocks": [
+      {
+        "type": "section",
+        "text": { "type": "plain_text", "text": "Parent message" }
+      }
+    ]
   }
 }
 ```
@@ -526,6 +546,10 @@ Use `thread_replies` to send several messages as separate replies in the same th
 }
 ```
 
+## Updating messages
+
+When `params.message_ts` is present, the tool calls Slack `chat.update` with the parsed payload, `params.channel`, and that timestamp. Incoming Webhooks are not supported. For that run the tool does not call `chat.postMessage`, `send_thread_replies`, or `crosspost_notification`. Supply `params.channel` in the JSON; the update branch reads the raw input file and does not substitute the `CHANNEL` environment variable for this check. Concourse output `version` includes `message_ts` when the API response contains `ts`. See [examples/update-message.yaml](examples/update-message.yaml).
+
 ## Crossposting
 
 Crossposting uses the Web API and permalinks. Incoming Webhook delivery skips crosspost; the tool logs that on stderr.
@@ -540,7 +564,12 @@ Add a `crosspost` object to your `params` section:
 {
   "params": {
     "channel": "#main-channel",
-    "blocks": [...],
+    "blocks": [
+      {
+        "type": "section",
+        "text": { "type": "plain_text", "text": "Main announcement" }
+      }
+    ],
     "crosspost": {
       "channel": ["#channel1", "#channel2"],
       "blocks": [

@@ -16,7 +16,7 @@ Detects changed shell files and runs corresponding bats tests.
 
 #### GitHub Actions
 
-The script runs automatically in GitHub Actions workflows. Set `GITHUB_BASE_REF` to the base branch for comparison.
+The workflow [.github/workflows/run-bats.yaml](../.github/workflows/run-bats.yaml) runs this script on pull requests with `GITHUB_BASE_REF` set from the event. Linting uses [.github/workflows/lint.yaml](../.github/workflows/lint.yaml) and runs `make lint` (shellcheck on all shell files), not `run-bats.sh`.
 
 #### Local Development
 
@@ -150,5 +150,5 @@ make concourse-run-all-examples
 
 ### Notes
 
-- Jobs listed in the hardcoded `SKIPPED_JOBS` array are skipped. This includes `thread-replies/thread-replies-with-thread-ts` and all `video/*` jobs, which need Slack app configuration that a local run may not have.
-- When `SLACK_WEBHOOK_URL` is empty, `webhook-slack/notify-via-slack-webhook` is skipped for the same reason.
+- Jobs listed in the hardcoded `SKIPPED_JOBS` array in `ci/run-all-examples.sh` are skipped. That list includes `thread-replies/thread-replies-with-thread-ts`, `blocks-from-file/blocks-from-file-3` and `blocks-from-file/concourse-metadata` (they need a GitHub reachable from the worker), and all `video/*` jobs (Slack unfurl domains and scopes). Keep this README in sync when `SKIPPED_JOBS` changes.
+- When `SLACK_WEBHOOK_URL` is empty, `webhook-slack/notify-via-slack-webhook` is skipped so the suite can still pass.
