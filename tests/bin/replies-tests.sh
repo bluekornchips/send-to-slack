@@ -28,6 +28,7 @@ setup_file() {
 
 setup() {
 	cd "$GIT_ROOT" || return 1
+	source "$GIT_ROOT/lib/slack-api.sh"
 	source "$SCRIPT"
 	source "$GIT_ROOT/lib/parse-payload.sh"
 	source "$GIT_ROOT/bin/replies.sh"
