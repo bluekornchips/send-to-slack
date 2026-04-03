@@ -1,0 +1,82 @@
+# Example Concourse pipeline: post a message, then update it with chat.update
+#
+# The first put uses chat.postMessage. The resource version includes message_ts so a
+# later get can read slack-notification/version. The second job extracts message_ts,
+# then put with params.message_ts triggers chat.update on the same message.
+#
+# Requires: chat:write and chat:write.public scopes for the bot token.
+
+resource_types:
+  - name: slack-notification
+    type: registry-image
+    source:
+      repository: sunflowersoftware/send-to-slack
+      tag: ((TAG))
+
+resources:
+  - name: slack-notification
+    type: slack-notification
+    source:
+      slack_bot_user_oauth_token: ((SLACK_BOT_USER_OAUTH_TOKEN))
+
+jobs:
+  # Posts an initial status message. Version metadata and version.message_ts identify it.
+  - name: notify-start
+    plan:
+      - put: slack-notification
+        params:
+          channel: ((channel))
+          blocks:
+            - header:
+                text:
+                  type: plain_text
+                  text: "Pipeline running"
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "Build started, this message will be updated when finished."
+
+  # Fetches the version from notify-start, reads message_ts, updates the same message.
+  - name: notify-complete
+    plan:
+      - get: slack-notification
+        passed: [notify-start]
+        trigger: false
+      - task: extract-message-ts
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: alpine
+              tag: latest
+          inputs:
+            - name: slack-notification
+          outputs:
+            - name: ts-out
+          run:
+            path: sh
+            args:
+              - -ec
+              - |
+                apk add --no-cache jq
+                jq -r '.version.message_ts // empty' slack-notification/version > ts-out/message_ts.txt
+                test -s ts-out/message_ts.txt
+      - load_var: message_ts
+        file: ts-out/message_ts.txt
+        trim: true
+      - put: slack-notification
+        params:
+          channel: ((channel))
+          message_ts: ((message_ts))
+          blocks:
+            - header:
+                text:
+                  type: plain_text
+                  text: "Pipeline finished"
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "Build completed successfully. Same message, updated via chat.update."

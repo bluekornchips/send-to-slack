@@ -598,47 +598,81 @@ main() {
 	parsed_payload=$(cat "${parsed_payload_file}")
 	rm -f "${parsed_payload_file}"
 
-	echo "main:: sending notification"
-	if ! send_notification "$parsed_payload"; then
-		echo "main:: failed to send notification" >&2
-		return 1
-	fi
+	local update_ts
+	update_ts=$(jq -r '.params.message_ts // empty' "${input_payload}")
 
-	if [[ "${DELIVERY_METHOD:-api}" == "api" ]]; then
-		if [[ -n "${EPHEMERAL_USER:-}" ]]; then
-			echo "main:: chat.postEphemeral does not support thread replies or crosspost, skipping send_thread_replies and crosspost_notification" >&2
-		else
-			# Capture ts from primary message for use as thread anchor in replies
-			local primary_ts
-			if [[ -n "${RESPONSE:-}" ]] && jq . >/dev/null 2>&1 <<<"$RESPONSE"; then
-				primary_ts=$(echo "$RESPONSE" | jq -r '.ts // empty')
-			else
-				primary_ts=""
-			fi
+	if [[ -n "$update_ts" ]]; then
+		echo "main:: updating existing Slack message via chat.update"
+		local update_channel
+		update_channel=$(jq -r '.params.channel // empty' "${input_payload}")
 
-			# Resolve thread_ts for replies, prefer parsed_payload.thread_ts, then primary ts
-			local reply_thread_ts
-			reply_thread_ts=$(echo "$parsed_payload" | jq -r '.thread_ts // empty')
-			if [[ -z "$reply_thread_ts" || "$reply_thread_ts" == "null" ]]; then
-				reply_thread_ts="${primary_ts:-}"
-			fi
+		if [[ -z "$update_channel" || "$update_channel" == "null" ]]; then
+			echo "main:: params.channel is required when params.message_ts is set" >&2
+			return 1
+		fi
 
-			if ! send_thread_replies "${input_payload}" "$reply_thread_ts" "$parsed_payload"; then
-				echo "main:: send_thread_replies encountered failures, continuing" >&2
-			fi
+		if [[ "${DELIVERY_METHOD:-api}" != "api" ]]; then
+			echo "main:: params.message_ts requires API delivery, not webhook" >&2
+			return 1
+		fi
 
-			if ! crosspost_notification "${input_payload}"; then
-				echo "main:: failed to crosspost notification" >&2
-				return 1
-			fi
+		if ! update_message "$update_channel" "$update_ts" "$parsed_payload"; then
+			echo "main:: failed to update Slack message" >&2
+			return 1
 		fi
 	else
-		echo "main:: delivery method webhook does not support thread replies, skipping send_thread_replies" >&2
-		echo "main:: delivery method webhook does not support crosspost, skipping crosspost_notification" >&2
+		echo "main:: sending notification"
+		if ! send_notification "$parsed_payload"; then
+			echo "main:: failed to send notification" >&2
+			return 1
+		fi
+
+		if [[ "${DELIVERY_METHOD:-api}" == "api" ]]; then
+			if [[ -n "${EPHEMERAL_USER:-}" ]]; then
+				echo "main:: chat.postEphemeral does not support thread replies or crosspost, skipping send_thread_replies and crosspost_notification" >&2
+			else
+				# Capture ts from primary message for use as thread anchor in replies
+				local primary_ts
+				if [[ -n "${RESPONSE:-}" ]] && jq . >/dev/null 2>&1 <<<"$RESPONSE"; then
+					primary_ts=$(echo "$RESPONSE" | jq -r '.ts // empty')
+				else
+					primary_ts=""
+				fi
+
+				# Resolve thread_ts for replies, prefer parsed_payload.thread_ts, then primary ts
+				local reply_thread_ts
+				reply_thread_ts=$(echo "$parsed_payload" | jq -r '.thread_ts // empty')
+				if [[ -z "$reply_thread_ts" || "$reply_thread_ts" == "null" ]]; then
+					reply_thread_ts="${primary_ts:-}"
+				fi
+
+				if ! send_thread_replies "${input_payload}" "$reply_thread_ts" "$parsed_payload"; then
+					echo "main:: send_thread_replies encountered failures, continuing" >&2
+				fi
+
+				if ! crosspost_notification "${input_payload}"; then
+					echo "main:: failed to crosspost notification" >&2
+					return 1
+				fi
+			fi
+		else
+			echo "main:: delivery method webhook does not support thread replies, skipping send_thread_replies" >&2
+			echo "main:: delivery method webhook does not support crosspost, skipping crosspost_notification" >&2
+		fi
 	fi
 
+	local meta_ts=""
+	local meta_ch=""
+	if [[ -n "${RESPONSE:-}" ]] && jq . >/dev/null 2>&1 <<<"$RESPONSE"; then
+		meta_ts=$(echo "$RESPONSE" | jq -r '.ts // empty')
+		meta_ch=$(echo "$RESPONSE" | jq -r '.channel // empty')
+	fi
+
+	[[ "$meta_ts" == "null" ]] && meta_ts=""
+	[[ "$meta_ch" == "null" ]] && meta_ch=""
+
 	echo "main:: creating Concourse metadata"
-	if ! create_metadata "$parsed_payload"; then
+	if ! create_metadata "$parsed_payload" "$meta_ts" "$meta_ch"; then
 		echo "main:: failed to create metadata" >&2
 		return 1
 	fi
@@ -648,9 +682,14 @@ main() {
 	local json_output
 	json_output=$(jq -n \
 		--arg timestamp "${timestamp}" \
+		--arg version_message_ts "${meta_ts}" \
 		--argjson metadata "${METADATA}" \
 		'{
-      version: { timestamp: $timestamp },
+      version: (
+        if $version_message_ts != "" then { timestamp: $timestamp, message_ts: $version_message_ts }
+        else { timestamp: $timestamp }
+        end
+      ),
       metadata: $metadata
     }')
 

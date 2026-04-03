@@ -28,6 +28,8 @@ _get_safe_payload_size() {
 #
 # Arguments:
 #   $1 - payload: JSON payload to include in metadata, optional, only if SHOW_PAYLOAD is true
+#   $2 - message_ts: Slack message ts for chat.update workflows, optional
+#   $3 - channel: Slack channel id from API response, optional
 #
 # Side Effects:
 # - Sets global METADATA variable with Concourse metadata format
@@ -36,24 +38,36 @@ _get_safe_payload_size() {
 # - 0 on successful metadata creation
 create_metadata() {
 	local payload="$1"
+	local message_ts="${2:-}"
+	local channel="${3:-}"
 	local payload_for_metadata
 	local safe_size
+
+	METADATA=$(
+		jq -n \
+			--arg ts "${message_ts}" \
+			--arg ch "${channel}" \
+			'[]
+        + (if ($ts != "" and $ts != "null") then [{"name": "message_ts", "value": $ts}] else [] end)
+        + (if ($ch != "" and $ch != "null") then [{"name": "channel", "value": $ch}] else [] end)'
+	)
 
 	if [[ "${SHOW_METADATA}" != "true" ]]; then
 		return 0
 	fi
 
-	METADATA=$(
-		jq -n \
-			--arg dry_run "$DRY_RUN" \
-			--arg show_metadata "$SHOW_METADATA" \
-			--arg show_payload "$SHOW_PAYLOAD" \
-			'[
+	if ! METADATA=$(echo "$METADATA" | jq \
+		--arg dry_run "$DRY_RUN" \
+		--arg show_metadata "$SHOW_METADATA" \
+		--arg show_payload "$SHOW_PAYLOAD" \
+		'. + [
           { "name": "dry_run", "value": $dry_run },
           { "name": "show_metadata", "value": $show_metadata },
           { "name": "show_payload", "value": $show_payload }
-        ]'
-	)
+        ]' 2>/dev/null); then
+		echo "create_metadata:: failed to append debug metadata fields" >&2
+		return 1
+	fi
 
 	if [[ "${SHOW_PAYLOAD}" == "true" ]] && [[ -n "${payload}" ]]; then
 		payload_for_metadata="$payload"

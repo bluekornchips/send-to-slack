@@ -44,8 +44,17 @@ main() {
 
 	# Use the version as the timestamp because we don't care about the source
 	version=$(jq -r '.version.timestamp // "none"' "${payload}")
+	local message_ts_value
+	message_ts_value=$(jq -r '.version.message_ts // empty' "${payload}")
 
-	jq -n --arg timestamp "${version}" '{"version": {"timestamp": $timestamp}}' >&3
+	if [[ -n "$message_ts_value" ]] && [[ "$message_ts_value" != "null" ]]; then
+		jq -n \
+			--arg timestamp "${version}" \
+			--arg message_ts "${message_ts_value}" \
+			'{"version": {"timestamp": $timestamp, "message_ts": $message_ts}}' >&3
+	else
+		jq -n --arg timestamp "${version}" '{"version": {"timestamp": $timestamp}}' >&3
+	fi
 
 	return 0
 }

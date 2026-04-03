@@ -35,6 +35,15 @@ create_empty_version_input() {
 	jq -n '{"version": {}}' >"${TEST_PAYLOAD_FILE}"
 }
 
+create_version_input_with_message_ts() {
+	local timestamp="${1:-${test_timestamp}}"
+	local message_ts="${2:-1234567890.123456}"
+	jq -n \
+		--arg timestamp "${timestamp}" \
+		--arg message_ts "${message_ts}" \
+		'{"version": {"timestamp": $timestamp, "message_ts": $message_ts}}' >"${TEST_PAYLOAD_FILE}"
+}
+
 ########################################################
 # main
 ########################################################
@@ -71,4 +80,19 @@ create_empty_version_input() {
 	local version_timestamp
 	version_timestamp=$(jq -r '.version.timestamp' <<<"${output}")
 	[[ "${version_timestamp}" == "none" ]]
+}
+
+@test "main:: passes through version.message_ts when present" {
+	create_version_input_with_message_ts "${test_timestamp}" "1712000000.000100"
+
+	run "$SCRIPT" <"${TEST_PAYLOAD_FILE}"
+
+	[[ "$status" -eq 0 ]]
+
+	local out_ts
+	out_ts=$(jq -r '.version.message_ts' <<<"${output}")
+	[[ "${out_ts}" == "1712000000.000100" ]]
+	local version_timestamp
+	version_timestamp=$(jq -r '.version.timestamp' <<<"${output}")
+	[[ "${version_timestamp}" == "${test_timestamp}" ]]
 }
