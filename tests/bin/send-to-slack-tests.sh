@@ -395,6 +395,7 @@ create_test_payload() {
 	run main --file "$input_file"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "chat.postEphemeral does not support thread replies or crosspost"
+	# shellcheck disable=SC2154
 	! echo "$output" | grep -q "send_thread_replies:: sending"
 
 	rm -f "$input_file"
