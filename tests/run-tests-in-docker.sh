@@ -140,11 +140,16 @@ run_tests() {
 	# Create isolated workspace copy to prevent container git ops from affecting host repo
 	# Use project-relative temp directory instead of /tmp for better Docker compatibility
 	temp_workspace="$(mktemp -d "${GIT_ROOT}/.test-workspace.XXXXXX")"
-	trap 'rm -rf "$temp_workspace"' EXIT
+	# Path must be expanded when the trap is installed, local is out of scope when EXIT runs
+	# shellcheck disable=SC2064
+	trap "rm -rf $(printf '%q' "$temp_workspace")" EXIT
 
 	echo "Creating isolated workspace copy at ${temp_workspace}"
-	# Copy workspace excluding .git directory to isolate from host repository
-	if ! rsync -a --exclude='.git' "${GIT_ROOT}/" "${temp_workspace}/"; then
+	# Copy workspace excluding .git and prior docker test workspace copies
+	if ! rsync -a \
+		--exclude='.git' \
+		--exclude='.test-workspace.*' \
+		"${GIT_ROOT}/" "${temp_workspace}/"; then
 		echo "run_tests:: failed to copy workspace files" >&2
 		return 1
 	fi

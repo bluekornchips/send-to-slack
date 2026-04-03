@@ -284,6 +284,7 @@ Debug mode redacts authentication tokens but still logs the payload structure.
 - File upload support with automatic image or rich-text block creation (Web API only; webhook delivery skips `file` blocks with a clear message)
 - Crossposting with permalinks and optional custom text (Web API only; webhook delivery skips crosspost)
 - Thread replies and thread creation for multi-block messages, plus `thread_replies` array for multiple replies in a thread (Web API only; webhook delivery skips thread replies)
+- Ephemeral channel messages via `chat.postEphemeral` when `params.ephemeral_user` is set (Web API only; incompatible with webhooks; skips thread replies, crosspost, and permalink)
 - Retry with exponential backoff on delivery for transient failures
 - Input flexibility: stdin, `-f|-file|--file`, `params.raw`, or `params.from_file`
 - Dry-run mode, dependency health check, and rich validation output
@@ -349,10 +350,13 @@ Web API example:
       "no_link": false
     },
     "raw": "{\"source\": {...}, \"params\": {...}}",
-    "from_file": "./payload.json"
+    "from_file": "./payload.json",
+    "ephemeral_user": "U012AB3CD"
   }
 }
 ```
+
+Set `params.ephemeral_user` to a Slack user ID to send with [`chat.postEphemeral`](https://api.slack.com/methods/chat.postEphemeral) instead of `chat.postMessage`. Only that user sees the message in the channel. Requires Web API delivery with a bot token; it cannot be used with `source.webhook_url` as the only delivery method. Thread replies, crosspost, and permalink metadata are not supported for ephemeral sends. Use the `chat:write` scope.
 
 Incoming Webhook example. You may omit `params.channel` when the webhook URL is already bound to a channel in Slack:
 
@@ -408,6 +412,7 @@ Incoming Webhook:
 - `params.raw` - JSON string that replaces the `params` object
 - `params.from_file` - Path to JSON that replaces the `params` object
 - `params.blocks` - Array of block configurations
+- `params.ephemeral_user` - Slack user ID for `chat.postEphemeral`; Web API only, not valid with webhook-only delivery (see Ephemeral messages in the Web API example above)
 
 ### Block Formats
 
