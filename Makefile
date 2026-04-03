@@ -56,6 +56,7 @@ concourse-load-examples:
 			-v "channel=$$CHANNEL" \
 			-v "side_channel=$$SIDE_CHANNEL" \
 			-v "SLACK_WEBHOOK_URL=$$SLACK_WEBHOOK_URL" \
+			-v "ephemeral_user=$$EPHEMERAL_USER" \
 			-v "TAG=$(TAG)" \
 			|| exit 1; \
 	done

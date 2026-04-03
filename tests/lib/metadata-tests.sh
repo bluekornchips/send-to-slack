@@ -39,12 +39,7 @@ setup() {
 ########################################################
 
 @test "create_metadata:: creates metadata when show_metadata is true" {
-	SHOW_METADATA="true"
-	DRY_RUN="true"
 	SHOW_PAYLOAD="false"
-	export SHOW_METADATA
-	export DRY_RUN
-	export SHOW_PAYLOAD
 	local payload='{"channel": "#test", "text": "test"}'
 
 	create_metadata "$payload"
@@ -53,12 +48,7 @@ setup() {
 }
 
 @test "create_metadata:: includes payload when show_payload is true" {
-	SHOW_METADATA="true"
-	DRY_RUN="false"
 	SHOW_PAYLOAD="true"
-	export SHOW_METADATA
-	export DRY_RUN
-	export SHOW_PAYLOAD
 	local payload='{"channel": "#test", "text": "test"}'
 
 	create_metadata "$payload"
@@ -66,20 +56,36 @@ setup() {
 	echo "$METADATA" | jq -e '.[] | select(.name == "payload")' >/dev/null
 }
 
-@test "create_metadata:: does nothing when show_metadata is false" {
+@test "create_metadata:: operational fields only when show_metadata is false" {
 	SHOW_METADATA="false"
-	export SHOW_METADATA
 	local payload='{"channel": "#test", "text": "test"}'
 
 	create_metadata "$payload"
 	[[ "$METADATA" == "[]" ]]
 }
 
-@test "create_metadata:: non-UTF payload produces valid metadata" {
+@test "create_metadata:: emits message_ts and channel when show_metadata is false" {
+	SHOW_METADATA="false"
+	local payload='{"channel": "#test", "text": "test"}'
+
+	create_metadata "$payload" "1712131234.567890" "C01234567"
+	echo "$METADATA" | jq -e '.[] | select(.name == "message_ts") | .value == "1712131234.567890"' >/dev/null
+	echo "$METADATA" | jq -e '.[] | select(.name == "channel") | .value == "C01234567"' >/dev/null
+	echo "$METADATA" | jq -e '[.[] | .name] | contains(["dry_run"]) | not' >/dev/null
+}
+
+@test "create_metadata:: includes operational fields before debug fields when show_metadata is true" {
 	SHOW_METADATA="true"
-	SHOW_PAYLOAD="true"
-	export SHOW_METADATA
-	export SHOW_PAYLOAD
+	SHOW_PAYLOAD="false"
+	local payload='{"channel": "#test", "text": "test"}'
+
+	create_metadata "$payload" "99.000001" "C999"
+	echo "$METADATA" | jq -e '.[0].name == "message_ts"' >/dev/null
+	echo "$METADATA" | jq -e '.[1].name == "channel"' >/dev/null
+	echo "$METADATA" | jq -e '.[] | select(.name == "dry_run")' >/dev/null
+}
+
+@test "create_metadata:: non-UTF payload produces valid metadata" {
 	local bad_payload
 	bad_payload=$(printf '{"channel":"#test","text":"\200"}')
 
@@ -91,8 +97,7 @@ setup() {
 @test "create_metadata:: oversize payload strips blocks and attachments" {
 	SHOW_METADATA="true"
 	SHOW_PAYLOAD="true"
-	export SHOW_METADATA
-	export SHOW_PAYLOAD
+
 	local safe_size
 	local huge_payload
 	safe_size=$(($(getconf ARG_MAX 2>/dev/null || echo 262144) / 4))
@@ -115,8 +120,7 @@ setup() {
 @test "create_metadata:: normal-sized payload with blocks preserves blocks in metadata" {
 	SHOW_METADATA="true"
 	SHOW_PAYLOAD="true"
-	export SHOW_METADATA
-	export SHOW_PAYLOAD
+
 	local payload
 	payload='{"channel":"#test","blocks":[{"type":"section","text":{"type":"mrkdwn","text":"hello"}}]}'
 
