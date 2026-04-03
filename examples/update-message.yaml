@@ -61,11 +61,10 @@ jobs:
               - -ec
               - |
                 apk add --no-cache jq
-                jq -r '.version.message_ts // empty' slack-notification/version > ts-out/message_ts.txt
+                printf '%s' "$(jq -r '.version.message_ts // empty' slack-notification/version)" > ts-out/message_ts.txt
                 test -s ts-out/message_ts.txt
       - load_var: message_ts
         file: ts-out/message_ts.txt
-        trim: true
       - put: slack-notification
         params:
           channel: ((channel))
