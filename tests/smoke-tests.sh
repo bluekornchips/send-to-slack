@@ -115,6 +115,44 @@ smoke_test_setup_webhook() {
 	export SMOKE_TEST_PAYLOAD_FILE
 }
 
+smoke_test_setup_ephemeral() {
+	local blocks_json="$1"
+
+	if [[ -z "$REAL_TOKEN" ]]; then
+		skip "SLACK_BOT_USER_OAUTH_TOKEN not set"
+	fi
+
+	if [[ -z "${EPHEMERAL_USER:-}" ]]; then
+		skip "EPHEMERAL_USER not set"
+	fi
+
+	local dry_run="false"
+	local channel="$CHANNEL"
+	local ephemeral_user="$EPHEMERAL_USER"
+
+	SMOKE_TEST_PAYLOAD_FILE=$(mktemp "${BATS_TEST_TMPDIR}/smoke-tests.smoke-payload-ephemeral.XXXXXX")
+
+	jq -n \
+		--argjson blocks "$blocks_json" \
+		--arg channel "$channel" \
+		--arg dry_run "$dry_run" \
+		--arg token "$REAL_TOKEN" \
+		--arg ephemeral_user "$ephemeral_user" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: $token
+			},
+			params: {
+				channel: $channel,
+				ephemeral_user: $ephemeral_user,
+				blocks: $blocks,
+				dry_run: $dry_run
+			}
+		}' >"$SMOKE_TEST_PAYLOAD_FILE"
+
+	export SMOKE_TEST_PAYLOAD_FILE
+}
+
 # parse_payload must run in this shell, not in command substitution, so exports from
 # load_configuration stay set for send_notification. Sets SMOKE_PARSED_PAYLOAD on success.
 smoke_parse_payload_capture() {
@@ -1062,6 +1100,122 @@ smoke_parse_payload_capture() {
 }
 
 ########################################################
+# Ephemeral and chat.update smoke tests
+########################################################
+
+@test "smoke_test:: chat.postEphemeral via params.ephemeral_user" {
+	local EXAMPLES_FILE="$GIT_ROOT/examples/ephemeral.yaml"
+	local blocks_json
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "ephemeral-basic-blocks") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+
+	smoke_test_setup_ephemeral "$blocks_json"
+	local parsed_payload
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
+		echo "parse_payload failed" >&2
+		return 1
+	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
+
+	if [[ -z "$parsed_payload" ]]; then
+		echo "parsed_payload is empty" >&2
+		return 1
+	fi
+
+	run send_notification "$parsed_payload"
+	[[ "$status" -eq 0 ]]
+}
+
+@test "smoke_test:: post_message then chat.update" {
+	if [[ -z "$REAL_TOKEN" ]]; then
+		skip "SLACK_BOT_USER_OAUTH_TOKEN not set"
+	fi
+
+	local token="$REAL_TOKEN"
+	local dry_run="false"
+	local post_payload_file
+	local out_file
+	local update_payload_file
+
+	post_payload_file=$(mktemp "${BATS_TEST_TMPDIR}/smoke-update-post.XXXXXX")
+	out_file=$(mktemp "${BATS_TEST_TMPDIR}/smoke-update-out.XXXXXX")
+	update_payload_file=$(mktemp "${BATS_TEST_TMPDIR}/smoke-update-put.XXXXXX")
+	trap 'rm -f "$post_payload_file" "$out_file" "$update_payload_file" 2>/dev/null || true' EXIT
+
+	jq -n \
+		--arg token "$token" \
+		--arg channel "$CHANNEL" \
+		--arg dry_run "$dry_run" \
+		'{
+			source: { slack_bot_user_oauth_token: $token },
+			params: {
+				channel: $channel,
+				dry_run: $dry_run,
+				text: "smoke test post for chat.update",
+				blocks: [
+					{
+						section: {
+							type: "text",
+							text: { type: "mrkdwn", text: "smoke: message before chat.update" }
+						}
+					}
+				]
+			}
+		}' >"$post_payload_file"
+
+	if ! env SEND_TO_SLACK_OUTPUT="$out_file" "$SEND_TO_SLACK_SCRIPT" <"$post_payload_file"; then
+		echo "smoke post_message then chat.update:: first send-to-slack run failed" >&2
+		return 1
+	fi
+
+	local message_ts
+	message_ts=$(jq -r '.version.message_ts // empty' "$out_file")
+	if [[ -z "$message_ts" || "$message_ts" == "null" ]]; then
+		echo "smoke post_message then chat.update:: missing version.message_ts" >&2
+		cat "$out_file" >&2
+		return 1
+	fi
+
+	local update_channel
+	update_channel=$(jq -r 'first((.metadata // [])[] | select(.name == "channel") | .value) // empty' "$out_file")
+	if [[ -z "$update_channel" || "$update_channel" == "null" ]]; then
+		update_channel="$CHANNEL"
+	fi
+
+	jq -n \
+		--arg token "$token" \
+		--arg channel "$update_channel" \
+		--arg dry_run "$dry_run" \
+		--arg message_ts "$message_ts" \
+		'{
+			source: { slack_bot_user_oauth_token: $token },
+			params: {
+				channel: $channel,
+				dry_run: $dry_run,
+				message_ts: $message_ts,
+				text: "smoke test after chat.update",
+				blocks: [
+					{
+						section: {
+							type: "text",
+							text: { type: "mrkdwn", text: "smoke: message after chat.update" }
+						}
+					}
+				]
+			}
+		}' >"$update_payload_file"
+
+	local update_output
+	if ! update_output=$(env SEND_TO_SLACK_OUTPUT="$out_file" "$SEND_TO_SLACK_SCRIPT" <"$update_payload_file" 2>&1); then
+		echo "smoke post_message then chat.update:: second send-to-slack run failed" >&2
+		echo "$update_output" >&2
+		return 1
+	fi
+
+	echo "$update_output" | grep -q "main:: updating existing Slack message via chat.update"
+	echo "$update_output" | grep -q "main:: finished running send-to-slack.sh successfully"
+}
+
+########################################################
 # Parse payload smoke tests
 ########################################################
 
@@ -1299,4 +1453,89 @@ smoke_parse_payload_capture() {
 
 	run send_notification "$parsed_payload"
 	[[ "$status" -eq 0 ]]
+}
+
+########################################################
+# Webhook incompatibility: ephemeral and chat.update
+########################################################
+
+@test "smoke_test:: webhook rejects params.ephemeral_user at parse time" {
+	if [[ -z "${REAL_WEBHOOK_URL:-}" ]]; then
+		skip "SLACK_WEBHOOK_URL not set"
+	fi
+
+	local webhook_url="$REAL_WEBHOOK_URL"
+	local dry_run="true"
+
+	SMOKE_TEST_PAYLOAD_FILE=$(mktemp "${BATS_TEST_TMPDIR}/smoke-tests.webhook-ephemeral-reject.XXXXXX")
+
+	jq -n \
+		--arg url "$webhook_url" \
+		--arg dry_run "$dry_run" \
+		--arg ephemeral_user "U0123456789" \
+		'{
+			source: { webhook_url: $url },
+			params: {
+				dry_run: $dry_run,
+				ephemeral_user: $ephemeral_user,
+				blocks: [
+					{
+						section: {
+							type: "text",
+							text: {
+								type: "plain_text",
+								text: "webhook must not combine with ephemeral_user"
+							}
+						}
+					}
+				]
+			}
+		}' >"$SMOKE_TEST_PAYLOAD_FILE"
+
+	unset SLACK_BOT_USER_OAUTH_TOKEN
+	run parse_payload "$SMOKE_TEST_PAYLOAD_FILE"
+	[[ "$status" -ne 0 ]]
+	echo "$output" | grep -q "load_configuration:: params.ephemeral_user requires API delivery with a bot token, not webhook"
+}
+
+@test "smoke_test:: webhook rejects params.message_ts" {
+	if [[ -z "${REAL_WEBHOOK_URL:-}" ]]; then
+		skip "SLACK_WEBHOOK_URL not set"
+	fi
+
+	local webhook_url="$REAL_WEBHOOK_URL"
+	local dry_run="true"
+	local payload_file
+
+	payload_file=$(mktemp "${BATS_TEST_TMPDIR}/smoke-tests.webhook-update-reject.XXXXXX")
+	trap 'rm -f "$payload_file" 2>/dev/null || true' RETURN
+
+	jq -n \
+		--arg url "$webhook_url" \
+		--arg dry_run "$dry_run" \
+		--arg channel "$CHANNEL" \
+		--arg message_ts "1234567890.000001" \
+		'{
+			source: { webhook_url: $url },
+			params: {
+				channel: $channel,
+				dry_run: $dry_run,
+				message_ts: $message_ts,
+				blocks: [
+					{
+						section: {
+							type: "text",
+							text: {
+								type: "plain_text",
+								text: "webhook must not combine with message_ts"
+							}
+						}
+					}
+				]
+			}
+		}' >"$payload_file"
+
+	run env -u SLACK_BOT_USER_OAUTH_TOKEN "$SEND_TO_SLACK_SCRIPT" <"$payload_file"
+	[[ "$status" -ne 0 ]]
+	echo "$output" | grep -q "main:: params.message_ts requires API delivery, not webhook"
 }

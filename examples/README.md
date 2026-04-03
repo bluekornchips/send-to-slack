@@ -10,6 +10,7 @@ This directory contains complete configuration examples for all supported Slack 
 - [context.yaml](context.yaml) - Context block examples
 - [crosspost.yaml](crosspost.yaml) - Crossposting to multiple channels with full Block Kit support
 - [divider.yaml](divider.yaml) - Divider block examples
+- [ephemeral.yaml](ephemeral.yaml) - `chat.postEphemeral` via `params.ephemeral_user`
 - [file-blocks.yaml](file-blocks.yaml) - File block variations
 - [file-upload.yaml](file-upload.yaml) - File upload examples
 - [header.yaml](header.yaml) - Header block examples
@@ -40,10 +41,11 @@ fly -t <target> set-pipeline \
   -v channel=<channel> \
   -v side_channel=<secondary-or-empty> \
   -v TAG=<image-tag> \
-  -v SLACK_WEBHOOK_URL=<webhook-or-empty>
+  -v SLACK_WEBHOOK_URL=<webhook-or-empty> \
+  -v ephemeral_user=<slack-user-id-or-empty>
 ```
 
-`webhook-slack.yaml` only needs `SLACK_WEBHOOK_URL` and `TAG`. See that file for the exact `((VAR))` names. Pipelines that use the Web API need `SLACK_BOT_USER_OAUTH_TOKEN` and `channel`.
+`webhook-slack.yaml` only needs `SLACK_WEBHOOK_URL` and `TAG`. See that file for the exact `((VAR))` names. Pipelines that use the Web API need `SLACK_BOT_USER_OAUTH_TOKEN` and `channel`. `ephemeral.yaml` also needs `ephemeral_user`, a member user ID such as `U012AB3CD`.
 
 ## Supported Block Types
 

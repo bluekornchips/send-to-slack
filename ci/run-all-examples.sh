@@ -10,6 +10,7 @@
 # Optional environment variables:
 #   SIDE_CHANNEL       Secondary Slack channel, defaults to empty
 #   SLACK_WEBHOOK_URL  Incoming Webhook URL for examples/webhook-slack.yaml, defaults to empty
+#   EPHEMERAL_USER     Slack user ID for examples/ephemeral.yaml, e.g. U012AB3CD, defaults to empty
 #   TAG                Image tag to use, defaults to contents of VERSION file
 #
 
@@ -57,6 +58,7 @@ Environment Variables:
   CHANNEL                     Required. Primary Slack channel name.
   SIDE_CHANNEL                Optional. Secondary Slack channel name.
   SLACK_WEBHOOK_URL           Optional. Webhook URL for webhook-slack example pipeline.
+  EPHEMERAL_USER              Optional. Slack user ID for ephemeral example pipeline.
   TAG                         Optional. Image tag. Defaults to VERSION file contents.
 
 EOF
@@ -176,7 +178,7 @@ login_concourse() {
 #
 # Side Effects:
 # - Calls fly set-pipeline and fly unpause-pipeline for each yaml file
-# - Passes SLACK_WEBHOOK_URL into fly set-pipeline for webhook example pipelines
+# - Passes SLACK_WEBHOOK_URL and ephemeral_user into fly set-pipeline for optional example pipelines
 #
 # Returns:
 # - 0 if all pipelines load successfully
@@ -206,6 +208,7 @@ load_pipelines() {
 			-v channel="${CHANNEL}" \
 			-v side_channel="${SIDE_CHANNEL:-}" \
 			-v SLACK_WEBHOOK_URL="${SLACK_WEBHOOK_URL:-}" \
+			-v ephemeral_user="${EPHEMERAL_USER:-}" \
 			-v TAG="${tag}"; then
 			echo "load_pipelines:: failed to load pipeline: ${pipeline}" >&2
 
@@ -257,6 +260,10 @@ run_all_jobs() {
 	if [[ -z "${SLACK_WEBHOOK_URL:-}" ]]; then
 		effective_skipped+=("webhook-slack/notify-via-slack-webhook")
 		echo "run_all_jobs:: SLACK_WEBHOOK_URL unset, skipping webhook-slack/notify-via-slack-webhook"
+	fi
+	if [[ -z "${EPHEMERAL_USER:-}" ]]; then
+		effective_skipped+=("ephemeral/ephemeral-basic-blocks")
+		echo "run_all_jobs:: EPHEMERAL_USER unset, skipping ephemeral/ephemeral-basic-blocks"
 	fi
 
 	if [[ -n "${start_from}" ]]; then

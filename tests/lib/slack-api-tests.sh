@@ -773,7 +773,7 @@ mock_curl_permalink_failure() {
 
 	grep -q "chat.update" "$url_capture"
 	local got_ts
-	got_ts=$(echo "$RESPONSE" | jq -r '.ts')
+	got_ts=$(echo "${SEND_NOTIFICATION_RESPONSE:-}" | jq -r '.ts')
 	[[ "$got_ts" == "1712000000.000200" ]]
 	rm -f "$url_capture"
 }

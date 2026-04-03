@@ -1101,3 +1101,258 @@ teardown() {
 	send_count=$(echo "$output" | grep -c "send_notification:: message delivered successfully via webhook")
 	[[ "$send_count" -eq 1 ]]
 }
+
+@test "acceptance:: chat.postEphemeral via params.ephemeral_user" {
+	if [[ -z "$REAL_TOKEN" ]]; then
+		skip "REAL_TOKEN is required for acceptance tests"
+	fi
+
+	if [[ -z "${EPHEMERAL_USER:-}" ]]; then
+		skip "EPHEMERAL_USER is required for ephemeral acceptance tests"
+	fi
+
+	local token="$REAL_TOKEN"
+	local dry_run="false"
+	local ephemeral_user="$EPHEMERAL_USER"
+
+	jq -n \
+		--arg token "$token" \
+		--arg channel "$CHANNEL" \
+		--arg dry_run "$dry_run" \
+		--arg ephemeral_user "$ephemeral_user" \
+		'{
+			source: { slack_bot_user_oauth_token: $token },
+			params: {
+				channel: $channel,
+				dry_run: $dry_run,
+				ephemeral_user: $ephemeral_user,
+				text: "acceptance test chat.postEphemeral",
+				blocks: [
+					{
+						section: {
+							type: "text",
+							text: {
+								type: "mrkdwn",
+								text: "acceptance: ephemeral message for one user only"
+							}
+						}
+					}
+				]
+			}
+		}' >"$TEST_PAYLOAD_FILE"
+
+	if ! jq . "$TEST_PAYLOAD_FILE" >/dev/null 2>&1; then
+		echo "Invalid JSON in test payload file" >&2
+		cat "$TEST_PAYLOAD_FILE" >&2
+		return 1
+	fi
+
+	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "version"
+	echo "$output" | grep -q "timestamp"
+	echo "$output" | grep -q "main:: parsing payload"
+	echo "$output" | grep -q "main:: chat.postEphemeral does not support thread replies or crosspost, skipping send_thread_replies and crosspost_notification"
+	echo "$output" | grep -q "main:: creating Concourse metadata"
+	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "send_notification:: message delivered successfully via api"
+	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
+}
+
+@test "acceptance:: post_message then chat.update" {
+	if [[ -z "$REAL_TOKEN" ]]; then
+		skip "REAL_TOKEN is required for acceptance tests"
+	fi
+
+	local token="$REAL_TOKEN"
+	local dry_run="false"
+	local post_payload_file
+	local version_file
+	local update_payload_file
+
+	post_payload_file=$(mktemp "${BATS_TEST_TMPDIR}/acceptance-update-post.XXXXXX")
+	version_file=$(mktemp "${BATS_TEST_TMPDIR}/acceptance-update-version.XXXXXX")
+	update_payload_file=$(mktemp "${BATS_TEST_TMPDIR}/acceptance-update-put.XXXXXX")
+	# EXIT: cleanup when the test subshell exits. RETURN would run when bats `run` returns and delete version_file before jq reads it.
+	trap 'rm -f "$post_payload_file" "$version_file" "$update_payload_file" 2>/dev/null || true' EXIT
+
+	jq -n \
+		--arg token "$token" \
+		--arg channel "$CHANNEL" \
+		--arg dry_run "$dry_run" \
+		'{
+			source: { slack_bot_user_oauth_token: $token },
+			params: {
+				channel: $channel,
+				dry_run: $dry_run,
+				text: "acceptance test post for chat.update",
+				blocks: [
+					{
+						section: {
+							type: "text",
+							text: { type: "mrkdwn", text: "acceptance: before chat.update" }
+						}
+					}
+				]
+			}
+		}' >"$post_payload_file"
+
+	if ! jq . "$post_payload_file" >/dev/null 2>&1; then
+		echo "Invalid JSON in post payload" >&2
+		return 1
+	fi
+
+	if ! env SEND_TO_SLACK_OUTPUT="$version_file" "$SCRIPT" <"$post_payload_file"; then
+		echo "acceptance post_message then chat.update:: first send-to-slack run failed" >&2
+		return 1
+	fi
+
+	local message_ts
+	message_ts=$(jq -r '.version.message_ts // empty' "$version_file")
+	if [[ -z "$message_ts" || "$message_ts" == "null" ]]; then
+		echo "acceptance post_message then chat.update:: missing version.message_ts" >&2
+		cat "$version_file" >&2
+		return 1
+	fi
+
+	local update_channel
+	update_channel=$(jq -r 'first((.metadata // [])[] | select(.name == "channel") | .value) // empty' "$version_file")
+	if [[ -z "$update_channel" || "$update_channel" == "null" ]]; then
+		update_channel="$CHANNEL"
+	fi
+
+	jq -n \
+		--arg token "$token" \
+		--arg channel "$update_channel" \
+		--arg dry_run "$dry_run" \
+		--arg message_ts "$message_ts" \
+		'{
+			source: { slack_bot_user_oauth_token: $token },
+			params: {
+				channel: $channel,
+				dry_run: $dry_run,
+				message_ts: $message_ts,
+				text: "acceptance test after chat.update",
+				blocks: [
+					{
+						section: {
+							type: "text",
+							text: { type: "mrkdwn", text: "acceptance: after chat.update" }
+						}
+					}
+				]
+			}
+		}' >"$update_payload_file"
+
+	if ! jq . "$update_payload_file" >/dev/null 2>&1; then
+		echo "Invalid JSON in update payload" >&2
+		return 1
+	fi
+
+	run env SEND_TO_SLACK_OUTPUT="$version_file" "$SCRIPT" <"$update_payload_file"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "main:: updating existing Slack message via chat.update"
+	echo "$output" | grep -q "version"
+	echo "$output" | grep -q "main:: creating Concourse metadata"
+	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
+
+	local updated_ts
+	updated_ts=$(jq -r '.version.message_ts // empty' "$version_file")
+	if [[ -z "$updated_ts" || "$updated_ts" == "null" ]]; then
+		echo "acceptance post_message then chat.update:: missing version.message_ts after update" >&2
+		cat "$version_file" >&2
+		return 1
+	fi
+}
+
+@test "acceptance:: webhook rejects params.ephemeral_user at parse time" {
+	if [[ -z "${REAL_WEBHOOK_URL:-}" ]]; then
+		skip "SLACK_WEBHOOK_URL is required for webhook acceptance tests"
+	fi
+
+	local webhook_url="$REAL_WEBHOOK_URL"
+	local dry_run="true"
+	local payload_file
+
+	payload_file=$(mktemp "${BATS_TEST_TMPDIR}/acceptance-webhook-ephemeral-reject.XXXXXX")
+	trap 'rm -f "$payload_file" 2>/dev/null || true' RETURN
+
+	jq -n \
+		--arg url "$webhook_url" \
+		--arg dry_run "$dry_run" \
+		--arg ephemeral_user "U0123456789" \
+		'{
+			source: { webhook_url: $url },
+			params: {
+				dry_run: $dry_run,
+				ephemeral_user: $ephemeral_user,
+				blocks: [
+					{
+						section: {
+							type: "text",
+							text: {
+								type: "plain_text",
+								text: "acceptance: webhook cannot use ephemeral_user"
+							}
+						}
+					}
+				]
+			}
+		}' >"$payload_file"
+
+	if ! jq . "$payload_file" >/dev/null 2>&1; then
+		echo "Invalid JSON in test payload file" >&2
+		return 1
+	fi
+
+	run env -u SLACK_BOT_USER_OAUTH_TOKEN "$SCRIPT" <"$payload_file"
+	[[ "$status" -ne 0 ]]
+	echo "$output" | grep -q "load_configuration:: params.ephemeral_user requires API delivery with a bot token, not webhook"
+}
+
+@test "acceptance:: webhook rejects params.message_ts" {
+	if [[ -z "${REAL_WEBHOOK_URL:-}" ]]; then
+		skip "SLACK_WEBHOOK_URL is required for webhook acceptance tests"
+	fi
+
+	local webhook_url="$REAL_WEBHOOK_URL"
+	local dry_run="true"
+	local payload_file
+
+	payload_file=$(mktemp "${BATS_TEST_TMPDIR}/acceptance-webhook-update-reject.XXXXXX")
+	trap 'rm -f "$payload_file" 2>/dev/null || true' RETURN
+
+	jq -n \
+		--arg url "$webhook_url" \
+		--arg dry_run "$dry_run" \
+		--arg channel "$CHANNEL" \
+		--arg message_ts "1234567890.000001" \
+		'{
+			source: { webhook_url: $url },
+			params: {
+				channel: $channel,
+				dry_run: $dry_run,
+				message_ts: $message_ts,
+				blocks: [
+					{
+						section: {
+							type: "text",
+							text: {
+								type: "plain_text",
+								text: "acceptance: webhook cannot use message_ts"
+							}
+						}
+					}
+				]
+			}
+		}' >"$payload_file"
+
+	if ! jq . "$payload_file" >/dev/null 2>&1; then
+		echo "Invalid JSON in test payload file" >&2
+		return 1
+	fi
+
+	run env -u SLACK_BOT_USER_OAUTH_TOKEN "$SCRIPT" <"$payload_file"
+	[[ "$status" -ne 0 ]]
+	echo "$output" | grep -q "main:: params.message_ts requires API delivery, not webhook"
+}

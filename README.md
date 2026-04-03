@@ -365,7 +365,7 @@ Web API example:
 
 Set `params.message_ts` to the Slack message `ts` of an existing message to call [`chat.update`](https://api.slack.com/methods/chat.update) instead of posting a new message. Requires Web API delivery, `params.channel` set in the same JSON payload as the timestamp (the tool reads the raw input file for this path, so `CHANNEL` alone is not enough), and the usual `params.blocks` and optional `params.text`. Thread replies, crosspost, and ephemeral flows are not run on an update invocation. Use the `chat:write` scope. After a successful post or update, Concourse-style output includes `version.message_ts` when the API returns a `ts`. See [examples/update-message.yaml](examples/update-message.yaml).
 
-Set `params.ephemeral_user` to a Slack user ID to send with [`chat.postEphemeral`](https://api.slack.com/methods/chat.postEphemeral) instead of `chat.postMessage`. Only that user sees the message in the channel. Requires Web API delivery with a bot token; it cannot be used with `source.webhook_url` as the only delivery method. Thread replies, crosspost, and permalink metadata are not supported for ephemeral sends. Use the `chat:write` scope.
+Set `params.ephemeral_user` to a Slack user ID to send with [`chat.postEphemeral`](https://api.slack.com/methods/chat.postEphemeral) instead of `chat.postMessage`. Only that user sees the message in the channel. Requires Web API delivery with a bot token; it cannot be used with `source.webhook_url` as the only delivery method. Thread replies, crosspost, and permalink metadata are not supported for ephemeral sends. Use the `chat:write` scope. See [examples/ephemeral.yaml](examples/ephemeral.yaml).
 
 Incoming Webhook example. You may omit `params.channel` when the webhook URL is already bound to a channel in Slack:
 
@@ -669,7 +669,7 @@ make test-smoke      # Run smoke tests only
 make test-acceptance # Run acceptance tests only
 ```
 
-Some smoke and acceptance tests for Incoming Webhooks run only when `SLACK_WEBHOOK_URL` is set in the environment. Without it, those tests are skipped.
+Some smoke and acceptance tests for Incoming Webhooks run only when `SLACK_WEBHOOK_URL` is set in the environment. Without it, those tests are skipped. With it, the suite also checks that webhook delivery rejects `params.ephemeral_user` and `params.message_ts`, since those require the Web API.
 
 ### Local Concourse Development
 

@@ -1,0 +1,37 @@
+# Example Concourse pipeline: chat.postEphemeral via params.ephemeral_user
+#
+# Only the Slack user in ephemeral_user sees the message in the channel.
+# Requires: Web API with bot token, chat:write, channel, and a member user ID, e.g. U012AB3CD.
+# Incompatible with webhook-only delivery, thread replies, crosspost, and permalink metadata.
+
+resource_types:
+  - name: slack-notification
+    type: registry-image
+    source:
+      repository: sunflowersoftware/send-to-slack
+      tag: ((TAG))
+
+resources:
+  - name: slack-notification
+    type: slack-notification
+    source:
+      slack_bot_user_oauth_token: ((SLACK_BOT_USER_OAUTH_TOKEN))
+
+jobs:
+  - name: ephemeral-basic-blocks
+    plan:
+      - put: slack-notification
+        params:
+          channel: ((channel))
+          ephemeral_user: ((ephemeral_user))
+          text: "Testing chat.postEphemeral via params.ephemeral_user"
+          blocks:
+            - header:
+                text:
+                  type: plain_text
+                  text: "Ephemeral message"
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "Only the user in params.ephemeral_user sees this in the channel."
