@@ -1,0 +1,30 @@
+# Example Concourse pipeline: Incoming Webhook without params.channel
+#
+# Webhook URLs are tied to a default channel in Slack. The task therefore does not
+# require params.channel when source.webhook_url is set.
+#
+
+resource_types:
+  - name: slack-notification
+    type: registry-image
+    source:
+      repository: sunflowersoftware/send-to-slack
+      tag: ((TAG))
+
+resources:
+  - name: slack-webhook-notification
+    type: slack-notification
+    source:
+      webhook_url: ((SLACK_WEBHOOK_URL))
+
+jobs:
+  - name: notify-webhook-without-channel
+    plan:
+      - put: slack-webhook-notification
+        params:
+          blocks:
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: ":link: Webhook example with no params.channel"

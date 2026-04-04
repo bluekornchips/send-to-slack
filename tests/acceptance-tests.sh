@@ -1032,6 +1032,53 @@ teardown() {
 	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
 }
 
+@test "acceptance:: webhook posts without params.channel from example yaml" {
+	if [[ -z "${REAL_WEBHOOK_URL:-}" ]]; then
+		skip "SLACK_WEBHOOK_URL is required for webhook acceptance tests"
+	fi
+
+	local webhook_url="$REAL_WEBHOOK_URL"
+	local EXAMPLES_FILE="$GIT_ROOT/examples/webhook-no-channel.yaml"
+	local blocks_json
+	blocks_json=$(yq -o json -r \
+		'.jobs[] | select(.name == "notify-webhook-without-channel") | .plan[0].params.blocks' \
+		"$EXAMPLES_FILE")
+
+	if ! echo "$blocks_json" | jq . >/dev/null 2>&1; then
+		echo "Invalid blocks_json from webhook-no-channel.yaml" >&2
+		echo "$blocks_json" >&2
+		return 1
+	fi
+
+	DRY_RUN="false"
+
+	jq -n \
+		--arg url "$webhook_url" \
+		--arg dry_run "$DRY_RUN" \
+		--argjson blocks "$blocks_json" \
+		'{
+			source: {
+				webhook_url: $url
+			},
+			params: {
+				dry_run: $dry_run,
+				blocks: $blocks
+			}
+		}' >"$TEST_PAYLOAD_FILE"
+
+	if ! jq . "$TEST_PAYLOAD_FILE" >/dev/null 2>&1; then
+		echo "Invalid JSON in test payload file" >&2
+		cat "$TEST_PAYLOAD_FILE" >&2
+		return 1
+	fi
+
+	run env -u SLACK_BOT_USER_OAUTH_TOKEN -u CHANNEL "$SCRIPT" <"$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "load_configuration:: method=webhook"
+	echo "$output" | grep -q "send_notification:: message delivered successfully via webhook"
+	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
+}
+
 @test "acceptance:: webhook skips thread replies and crosspost" {
 	if [[ -z "${REAL_WEBHOOK_URL:-}" ]]; then
 		skip "SLACK_WEBHOOK_URL is required for webhook acceptance tests"
@@ -1192,6 +1239,62 @@ teardown() {
 				username: "Deploy Bot",
 				icon_emoji: ":rocket:",
 				text: "acceptance test bot identity",
+				blocks: $blocks
+			}
+		}' >"$TEST_PAYLOAD_FILE"
+
+	if ! jq . "$TEST_PAYLOAD_FILE" >/dev/null 2>&1; then
+		echo "Invalid JSON in test payload file" >&2
+		cat "$TEST_PAYLOAD_FILE" >&2
+		return 1
+	fi
+
+	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "version"
+	echo "$output" | grep -q "main:: parsing payload"
+	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "send_notification:: message delivered successfully via api"
+	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
+}
+
+@test "acceptance:: bot identity with icon_url from example yaml" {
+	if [[ -z "$REAL_TOKEN" ]]; then
+		skip "REAL_TOKEN is required for acceptance tests"
+	fi
+
+	local token="$REAL_TOKEN"
+	local dry_run="false"
+	local EXAMPLES_FILE="$GIT_ROOT/examples/bot-identity.yaml"
+
+	local blocks_json
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "notify-with-icon-url") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+	local icon_url
+	icon_url=$(yq -o json -r '.jobs[] | select(.name == "notify-with-icon-url") | .plan[0].params.icon_url' "$EXAMPLES_FILE")
+
+	if ! echo "$blocks_json" | jq . >/dev/null 2>&1; then
+		echo "Invalid blocks_json from bot-identity.yaml notify-with-icon-url" >&2
+		echo "$blocks_json" >&2
+		return 1
+	fi
+
+	jq -n \
+		--arg token "$token" \
+		--argjson blocks "$blocks_json" \
+		--arg channel "$CHANNEL" \
+		--arg dry_run "$dry_run" \
+		--arg username "Icon URL Bot" \
+		--arg icon_url "$icon_url" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: $token
+			},
+			params: {
+				channel: $channel,
+				dry_run: $dry_run,
+				username: $username,
+				icon_url: $icon_url,
+				text: "acceptance test bot identity icon_url",
 				blocks: $blocks
 			}
 		}' >"$TEST_PAYLOAD_FILE"

@@ -69,6 +69,8 @@ teardown() {
 
 	[[ -d "${actual_install_root}/lib" ]]
 	[[ -f "${actual_install_root}/lib/parse-payload.sh" ]]
+	[[ -f "${actual_install_root}/lib/parse/payload.sh" ]]
+	[[ -f "${actual_install_root}/lib/parse/blocks.sh" ]]
 	[[ -f "${actual_install_root}/bin/crosspost.sh" ]]
 	[[ -f "${actual_install_root}/bin/replies.sh" ]]
 
@@ -130,6 +132,8 @@ teardown() {
 
 	[[ -d "${actual_install_root}/lib" ]]
 	[[ -f "${actual_install_root}/lib/parse-payload.sh" ]]
+	[[ -f "${actual_install_root}/lib/parse/payload.sh" ]]
+	[[ -f "${actual_install_root}/lib/parse/blocks.sh" ]]
 
 	rm -rf "${actual_install_root}"
 }
@@ -221,11 +225,12 @@ _run_check_dependencies_isolated() {
 	temp_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/send-to-slack-source.XXXXXX")
 	source_dir="${temp_dir}/send-to-slack-main"
 
-	mkdir -p "${source_dir}/bin" "${source_dir}/lib/blocks"
+	mkdir -p "${source_dir}/bin" "${source_dir}/lib/blocks" "${source_dir}/lib/parse"
 
 	cp "${GIT_ROOT}/bin/send-to-slack.sh" "${source_dir}/bin/send-to-slack.sh"
 	cp "${GIT_ROOT}/bin/crosspost.sh" "${GIT_ROOT}/bin/replies.sh" "${source_dir}/bin/"
 	cp "${GIT_ROOT}/lib"/*.sh "${source_dir}/lib/"
+	cp "${GIT_ROOT}/lib/parse"/*.sh "${source_dir}/lib/parse/"
 	cp "${GIT_ROOT}/lib/blocks"/*.sh "${source_dir}/lib/blocks/"
 	if [[ -f "${GIT_ROOT}/VERSION" ]]; then
 		cp "${GIT_ROOT}/VERSION" "${source_dir}/VERSION"
@@ -255,6 +260,8 @@ _run_check_dependencies_isolated() {
 	file_has_signature "${actual_install_root}/send-to-slack"
 	[[ -d "${actual_install_root}/lib" ]]
 	[[ -f "${actual_install_root}/lib/parse-payload.sh" ]]
+	[[ -f "${actual_install_root}/lib/parse/payload.sh" ]]
+	[[ -f "${actual_install_root}/lib/parse/blocks.sh" ]]
 	[[ -f "${actual_install_root}/bin/crosspost.sh" ]]
 	[[ -f "${actual_install_root}/bin/replies.sh" ]]
 	if [[ -f "${source_dir}/VERSION" ]]; then

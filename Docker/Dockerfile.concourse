@@ -33,6 +33,7 @@ RUN chmod +x /opt/resource/check /opt/resource/in /opt/resource/out && \
     chmod +x /opt/resource/bin/crosspost.sh && \
     chmod +x /opt/resource/bin/replies.sh && \
     chmod +x /opt/resource/lib/*.sh && \
+    chmod +x /opt/resource/lib/parse/*.sh && \
     chmod +x /opt/resource/lib/blocks/*.sh
 
 ENTRYPOINT ["/bin/bash"]

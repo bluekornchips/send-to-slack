@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 #
-# Test file for lib/parse-payload.sh
-# Tests the new color-based attachment behavior
+# Tests for Slack payload parsing and block assembly
+# Entry: lib/parse-payload.sh sources lib/parse/payload.sh then lib/parse/blocks.sh
 #
 
 setup_file() {
@@ -11,8 +11,16 @@ setup_file() {
 	fi
 
 	SCRIPT="$GIT_ROOT/lib/parse-payload.sh"
+	PARSE_PAYLOAD_SH="$GIT_ROOT/lib/parse/payload.sh"
+	PARSE_BLOCKS_SH="$GIT_ROOT/lib/parse/blocks.sh"
 	if [[ ! -f "$SCRIPT" ]]; then
 		fail "Script not found: $SCRIPT"
+	fi
+	if [[ ! -f "$PARSE_PAYLOAD_SH" ]]; then
+		fail "Script not found: $PARSE_PAYLOAD_SH"
+	fi
+	if [[ ! -f "$PARSE_BLOCKS_SH" ]]; then
+		fail "Script not found: $PARSE_BLOCKS_SH"
 	fi
 
 	if [[ -n "$SLACK_BOT_USER_OAUTH_TOKEN" ]]; then
@@ -25,6 +33,8 @@ setup_file() {
 
 	export GIT_ROOT
 	export SCRIPT
+	export PARSE_PAYLOAD_SH
+	export PARSE_BLOCKS_SH
 	export RICH_TEXT_EXAMPLES_FILE
 	export BLOCK_FIXTURES_DIR
 
@@ -2924,7 +2934,7 @@ mock_create_block() {
 # _build_slack_payload
 ########################################################
 
-@test "_build_slack_payload:: fails without channel" {
+@test "_build_slack_payload:: fails without channel for API delivery" {
 	local bf af
 	bf=$(mktemp "$_SLACK_WORKSPACE/bsl-b.XXXXXX")
 	af=$(mktemp "$_SLACK_WORKSPACE/bsl-a.XXXXXX")
@@ -2934,10 +2944,29 @@ mock_create_block() {
 	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
 	export INPUT_PAYLOAD
 	unset EPHEMERAL_USER
+	unset DELIVERY_METHOD
 
-	run _build_slack_payload "" "$bf" "$af" "" "" ""
+	run _build_slack_payload "" "$bf" "$af" "" "" "" "api"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "channel is required"
+}
+
+@test "_build_slack_payload:: webhook omits channel when empty" {
+	local bf af
+	bf=$(mktemp "$_SLACK_WORKSPACE/bsl-b.XXXXXX")
+	af=$(mktemp "$_SLACK_WORKSPACE/bsl-a.XXXXXX")
+	echo '[{"type":"section","text":{"type":"plain_text","text":"x"}}]' >"$bf"
+	echo '[]' >"$af"
+	jq -n '{params:{}}' >"$TEST_PAYLOAD_FILE"
+	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
+	export INPUT_PAYLOAD
+	unset EPHEMERAL_USER
+	unset DELIVERY_METHOD
+
+	run _build_slack_payload "" "$bf" "$af" "" "" "" "webhook"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e 'has("channel") | not' >/dev/null
+	echo "$output" | jq -e '.blocks | length == 1' >/dev/null
 }
 
 @test "_build_slack_payload:: minimal payload with blocks" {

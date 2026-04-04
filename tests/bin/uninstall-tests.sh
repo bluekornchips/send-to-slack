@@ -121,15 +121,25 @@ teardown() {
 	temp_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/send-to-slack-source.XXXXXX")
 	source_dir="${temp_dir}/send-to-slack-main"
 
-	mkdir -p "${source_dir}/bin" "${source_dir}/lib/blocks"
+	mkdir -p "${source_dir}/bin" "${source_dir}/lib/blocks" "${source_dir}/lib/parse"
 
 	cp "${GIT_ROOT}/bin/send-to-slack.sh" "${source_dir}/bin/send-to-slack.sh"
 	cp "${GIT_ROOT}/bin/crosspost.sh" "${GIT_ROOT}/bin/replies.sh" "${source_dir}/bin/"
 	cp "${GIT_ROOT}/lib"/*.sh "${source_dir}/lib/"
+	cp "${GIT_ROOT}/lib/parse"/*.sh "${source_dir}/lib/parse/"
 	cp "${GIT_ROOT}/lib/blocks"/*.sh "${source_dir}/lib/blocks/"
 	if [[ -f "${GIT_ROOT}/VERSION" ]]; then
 		cp "${GIT_ROOT}/VERSION" "${source_dir}/VERSION"
 	fi
+
+	for need in \
+		"${source_dir}/lib/parse/payload.sh" \
+		"${source_dir}/lib/parse/blocks.sh" \
+		"${source_dir}/lib/parse-payload.sh"; do
+		if [[ ! -f "$need" ]]; then
+			fail "uninstall fixture missing required file after copy: $need"
+		fi
+	done
 
 	# Install using install_from_source
 	run install_from_source "${source_dir}" "${PREFIX_DIR}" 0

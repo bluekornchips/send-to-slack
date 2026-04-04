@@ -24,7 +24,7 @@ cd python
 export SLACK_BOT_USER_OAUTH_TOKEN="xoxb-your-token-here"
 export SLACK_SIGNING_SECRET="your-signing-secret"
 export PORT=3000
-python3 -m venv .venv && .venv/bin/pip install flask requests && .venv/bin/python server.py
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && .venv/bin/python server.py
 ```
 
 The `make -C python python-server` target creates `.venv` under `python/` and installs dependencies on first run.
@@ -40,7 +40,7 @@ The `make -C python python-server` target creates `.venv` under `python/` and in
 
 ## Dependencies
 
-The server requires the following Python packages (installed by `make -C python python-server`):
+The server requires the Python packages listed in [requirements.txt](requirements.txt). `make -C python python-server` installs them into `python/.venv` with `pip install -r requirements.txt`.
 
 - `flask>=3.0.0` - Web framework for handling HTTP requests
 - `requests>=2.31.0` - HTTP library for Slack API calls

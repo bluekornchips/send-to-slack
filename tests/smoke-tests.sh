@@ -190,6 +190,43 @@ smoke_test_setup_bot_identity() {
 	export SMOKE_TEST_PAYLOAD_FILE
 }
 
+smoke_test_setup_bot_identity_icon_url() {
+	local blocks_json="$1"
+	local username="$2"
+	local icon_url="$3"
+
+	if [[ -z "$REAL_TOKEN" ]]; then
+		skip "SLACK_BOT_USER_OAUTH_TOKEN not set"
+	fi
+
+	local dry_run="false"
+	local channel="$CHANNEL"
+
+	SMOKE_TEST_PAYLOAD_FILE=$(mktemp "${BATS_TEST_TMPDIR}/smoke-tests.smoke-payload-bot-icon-url.XXXXXX")
+
+	jq -n \
+		--argjson blocks "$blocks_json" \
+		--arg channel "$channel" \
+		--arg dry_run "$dry_run" \
+		--arg token "$REAL_TOKEN" \
+		--arg username "$username" \
+		--arg icon_url "$icon_url" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: $token
+			},
+			params: {
+				channel: $channel,
+				username: $username,
+				icon_url: $icon_url,
+				blocks: $blocks,
+				dry_run: $dry_run
+			}
+		}' >"$SMOKE_TEST_PAYLOAD_FILE"
+
+	export SMOKE_TEST_PAYLOAD_FILE
+}
+
 # parse_payload must run in this shell, not in command substitution, so exports from
 # load_configuration stay set for send_notification. Sets SMOKE_PARSED_PAYLOAD on success.
 smoke_parse_payload_capture() {
@@ -1463,6 +1500,35 @@ smoke_parse_payload_capture() {
 	[[ "$status" -eq 0 ]]
 }
 
+@test "smoke_test:: bot identity username and icon_url from example" {
+	local EXAMPLES_FILE="$GIT_ROOT/examples/bot-identity.yaml"
+	local blocks_json
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "notify-with-icon-url") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+	local icon_url
+	icon_url=$(yq -o json -r '.jobs[] | select(.name == "notify-with-icon-url") | .plan[0].params.icon_url' "$EXAMPLES_FILE")
+
+	smoke_test_setup_bot_identity_icon_url "$blocks_json" "Icon URL Bot" "$icon_url"
+
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
+		echo "parse_payload failed" >&2
+		return 1
+	fi
+	local parsed_payload
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
+
+	if [[ -z "$parsed_payload" ]]; then
+		echo "parsed_payload is empty" >&2
+		return 1
+	fi
+
+	echo "$parsed_payload" | jq -e '.username == "Icon URL Bot"' >/dev/null
+	echo "$parsed_payload" | jq -e --arg u "$icon_url" '.icon_url == $u' >/dev/null
+	echo "$parsed_payload" | jq -e 'has("icon_emoji") | not' >/dev/null
+
+	run send_notification "$parsed_payload"
+	[[ "$status" -eq 0 ]]
+}
+
 ########################################################
 # Incoming Webhook smoke tests
 ########################################################
@@ -1517,6 +1583,34 @@ smoke_parse_payload_capture() {
 		echo "parsed_payload is empty" >&2
 		return 1
 	fi
+
+	run send_notification "$parsed_payload"
+	[[ "$status" -eq 0 ]]
+}
+
+@test "smoke_test:: webhook posts blocks from webhook-no-channel example yaml" {
+	local EXAMPLES_FILE="$GIT_ROOT/examples/webhook-no-channel.yaml"
+	local blocks_json
+	blocks_json=$(yq -o json -r \
+		'.jobs[] | select(.name == "notify-webhook-without-channel") | .plan[0].params.blocks' \
+		"$EXAMPLES_FILE")
+
+	smoke_test_setup_webhook "$blocks_json"
+	unset SLACK_BOT_USER_OAUTH_TOKEN
+	unset CHANNEL
+	local parsed_payload
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
+		echo "parse_payload failed" >&2
+		return 1
+	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
+
+	if [[ -z "$parsed_payload" ]]; then
+		echo "parsed_payload is empty" >&2
+		return 1
+	fi
+
+	echo "$parsed_payload" | jq -e 'has("channel") | not' >/dev/null
 
 	run send_notification "$parsed_payload"
 	[[ "$status" -eq 0 ]]

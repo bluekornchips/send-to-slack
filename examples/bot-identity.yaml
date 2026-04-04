@@ -56,3 +56,22 @@ jobs:
                 text:
                   type: mrkdwn
                   text: "This message appears as *Test Bot* with :white_check_mark: as the avatar."
+
+  - name: notify-with-icon-url
+    plan:
+      - put: slack-notification
+        params:
+          channel: ((channel))
+          username: "Icon URL Bot"
+          icon_url: "https://a.slack-edge.com/80588/img/plugins/app/bot_48.png"
+          text: "Bot with custom avatar URL"
+          blocks:
+            - header:
+                text:
+                  type: plain_text
+                  text: "Custom avatar"
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "This message uses *Icon URL Bot* with icon_url instead of icon_emoji."
