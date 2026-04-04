@@ -4,6 +4,10 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-test:
     name: Build and Test (${{ matrix.label }})
@@ -35,6 +39,8 @@ jobs:
         env:
           CHANNEL: ${{ vars.SLACK_CHANNEL || secrets.SLACK_CHANNEL || '#test' }}
           SLACK_BOT_USER_OAUTH_TOKEN: ${{ secrets.SLACK_BOT_USER_OAUTH_TOKEN }}
+          DOCKER_CACHE_FROM: type=gha,scope=${{ matrix.label }}
+          DOCKER_CACHE_TO: type=gha,mode=max,scope=${{ matrix.label }}
         run: |
           set -euo pipefail
           ARGS=(--gha --healthcheck --send-test-message)

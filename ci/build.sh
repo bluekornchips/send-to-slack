@@ -46,6 +46,8 @@ ENVIRONMENT VARIABLES:
   DOCKER_IMAGE_NAME         	Image name (default: send-to-slack)
   DOCKER_IMAGE_TAG          	Image tag (default: local)
   NO_CACHE                  	Disable Docker build cache (default: true)
+  DOCKER_CACHE_FROM         	Optional BuildKit cache-from value, e.g. type=gha,scope=main
+  DOCKER_CACHE_TO           	Optional BuildKit cache-to value, e.g. type=gha,mode=max,scope=main
   CHANNEL                   	Required for --send-test-message
   SLACK_BOT_USER_OAUTH_TOKEN  Required for --send-test-message
   
@@ -297,11 +299,24 @@ build_image() {
 		--build-arg "GITHUB_REF_NAME=${build_branch}"
 	)
 
+	if [[ -n "${DOCKER_CACHE_FROM:-}" ]]; then
+		docker_build_args+=(--cache-from "${DOCKER_CACHE_FROM}")
+		NO_CACHE="false"
+	fi
+	if [[ -n "${DOCKER_CACHE_TO:-}" ]]; then
+		docker_build_args+=(--cache-to "${DOCKER_CACHE_TO}")
+	fi
+
 	if [[ "$NO_CACHE" == "true" ]]; then
 		docker_build_args+=(--no-cache)
 	fi
 
-	if ! docker build "${docker_build_args[@]}" .; then
+	local docker_build_cmd=(docker build)
+	if [[ -n "${DOCKER_CACHE_FROM:-}" ]] || [[ -n "${DOCKER_CACHE_TO:-}" ]]; then
+		docker_build_cmd=(docker buildx build --load)
+	fi
+
+	if ! "${docker_build_cmd[@]}" "${docker_build_args[@]}" .; then
 		echo "build_image:: failed to build Docker image using ${dockerfile_path}" >&2
 		return 1
 	fi

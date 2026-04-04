@@ -3,6 +3,10 @@ name: run-bats-tests
 on:
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   run-bats:
     runs-on: ubuntu-latest
@@ -11,12 +15,22 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Cache yq
+        uses: actions/cache@v4
+        id: cache-yq
+        with:
+          path: /usr/local/bin/yq
+          key: yq-v4.45.1-linux-amd64
+
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y bats jq
-          wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
-          chmod +x /usr/local/bin/yq
+          if [[ "${{ steps.cache-yq.outputs.cache-hit }}" != "true" ]]; then
+            wget -qO /usr/local/bin/yq \
+              https://github.com/mikefarah/yq/releases/download/v4.45.1/yq_linux_amd64
+            chmod +x /usr/local/bin/yq
+          fi
 
       - name: Run shell tests
         env:

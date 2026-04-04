@@ -5,12 +5,23 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Cache shellcheck
+        uses: actions/cache@v4
+        id: cache-shellcheck
+        with:
+          path: /usr/local/bin/shellcheck
+          key: shellcheck-v0.11.0-linux-x86_64
       - name: Install shellcheck
+        if: steps.cache-shellcheck.outputs.cache-hit != 'true'
         run: |
           VERSION=v0.11.0
           wget -qO- "https://github.com/koalaman/shellcheck/releases/download/${VERSION}/shellcheck-${VERSION}.linux.x86_64.tar.xz" \
