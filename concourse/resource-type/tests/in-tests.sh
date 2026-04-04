@@ -9,15 +9,18 @@ SCRIPT="$GIT_ROOT/concourse/resource-type/scripts/in.sh"
 setup() {
 	test_timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 	TEST_PAYLOAD_FILE=$(mktemp -t in-tests.in_payload.XXXXXX)
+	TEST_DEST_DIR=$(mktemp -d -t in-tests.dest.XXXXXX)
 
 	export test_timestamp
 	export TEST_PAYLOAD_FILE
+	export TEST_DEST_DIR
 
 	return 0
 }
 
 teardown() {
 	[[ -f "${TEST_PAYLOAD_FILE:-}" ]] && rm -f "${TEST_PAYLOAD_FILE}"
+	[[ -d "${TEST_DEST_DIR:-}" ]] && rm -rf "${TEST_DEST_DIR}"
 	return 0
 }
 
@@ -50,7 +53,7 @@ create_version_input_with_message_ts() {
 @test "main:: successfully fetches resource with timestamp" {
 	create_version_input
 
-	run "$SCRIPT" <"${TEST_PAYLOAD_FILE}"
+	run "$SCRIPT" "${TEST_DEST_DIR}" <"${TEST_PAYLOAD_FILE}"
 
 	[[ "$status" -eq 0 ]]
 
@@ -62,7 +65,7 @@ create_version_input_with_message_ts() {
 @test "main:: outputs correct JSON format with version" {
 	create_version_input
 
-	run "$SCRIPT" <"${TEST_PAYLOAD_FILE}"
+	run "$SCRIPT" "${TEST_DEST_DIR}" <"${TEST_PAYLOAD_FILE}"
 
 	[[ "$status" -eq 0 ]]
 
@@ -73,7 +76,7 @@ create_version_input_with_message_ts() {
 @test "main:: defaults to none when version.timestamp is missing" {
 	create_empty_version_input
 
-	run "$SCRIPT" <"${TEST_PAYLOAD_FILE}"
+	run "$SCRIPT" "${TEST_DEST_DIR}" <"${TEST_PAYLOAD_FILE}"
 
 	[[ "$status" -eq 0 ]]
 
@@ -85,13 +88,38 @@ create_version_input_with_message_ts() {
 @test "main:: passes through version.message_ts when present" {
 	create_version_input_with_message_ts "${test_timestamp}" "1712000000.000100"
 
-	run "$SCRIPT" <"${TEST_PAYLOAD_FILE}"
+	run "$SCRIPT" "${TEST_DEST_DIR}" <"${TEST_PAYLOAD_FILE}"
 
 	[[ "$status" -eq 0 ]]
 
 	local out_ts
 	out_ts=$(jq -r '.version.message_ts' <<<"${output}")
 	[[ "${out_ts}" == "1712000000.000100" ]]
+	local version_timestamp
+	version_timestamp=$(jq -r '.version.timestamp' <<<"${output}")
+	[[ "${version_timestamp}" == "${test_timestamp}" ]]
+}
+
+@test "main:: writes version file to destination directory" {
+	create_version_input_with_message_ts "${test_timestamp}" "1712000000.000100"
+
+	run "$SCRIPT" "${TEST_DEST_DIR}" <"${TEST_PAYLOAD_FILE}"
+
+	[[ "$status" -eq 0 ]]
+	[[ -f "${TEST_DEST_DIR}/version" ]]
+
+	local file_ts
+	file_ts=$(jq -r '.version.message_ts' "${TEST_DEST_DIR}/version")
+	[[ "${file_ts}" == "1712000000.000100" ]]
+}
+
+@test "main:: does not fail when no destination directory is given" {
+	create_version_input
+
+	run "$SCRIPT" <"${TEST_PAYLOAD_FILE}"
+
+	[[ "$status" -eq 0 ]]
+
 	local version_timestamp
 	version_timestamp=$(jq -r '.version.timestamp' <<<"${output}")
 	[[ "${version_timestamp}" == "${test_timestamp}" ]]

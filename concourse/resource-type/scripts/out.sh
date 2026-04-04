@@ -4,9 +4,6 @@
 # Processes JSON payload from stdin and sends message to Slack
 # Ref: https://concourse-ci.org/implementing-resource-types.html#resource-out
 #
-set -eo pipefail
-set +x
-umask 077
 
 # Redirect stdout to stderr for logging, required for Concourse to capture output.
 exec 3>&1
@@ -93,5 +90,9 @@ main() {
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+	set -eo pipefail
+	set +x
+	umask 077
 	main "$@"
+	exit $?
 fi

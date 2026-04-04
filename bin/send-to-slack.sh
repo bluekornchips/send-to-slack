@@ -599,7 +599,18 @@ main() {
 	rm -f "${parsed_payload_file}"
 
 	local update_ts
+	local message_ts_file
 	update_ts=$(jq -r '.params.message_ts // empty' "${input_payload}")
+	message_ts_file=$(jq -r '.params.message_ts_file // empty' "${input_payload}")
+
+	if [[ -z "$update_ts" ]] && [[ -n "$message_ts_file" ]]; then
+		if [[ ! -f "$message_ts_file" ]]; then
+			echo "main:: params.message_ts_file: file not found: ${message_ts_file}" >&2
+
+			return 1
+		fi
+		update_ts=$(<"$message_ts_file")
+	fi
 
 	if [[ -n "$update_ts" ]]; then
 		echo "main:: updating existing Slack message via chat.update"
