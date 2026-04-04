@@ -177,3 +177,4 @@ make concourse-run-all-examples
 
 - Jobs listed in the hardcoded `SKIPPED_JOBS` array in `ci/run-all-examples.sh` are skipped. That list includes `thread-replies/thread-replies-with-thread-ts`, `blocks-from-file/blocks-from-file-3` and `blocks-from-file/concourse-metadata` (they need a GitHub reachable from the worker), and all `video/*` jobs (Slack unfurl domains and scopes). Keep this README in sync when `SKIPPED_JOBS` changes.
 - When `SLACK_WEBHOOK_URL` is empty, `webhook-slack/notify-via-slack-webhook` is skipped so the suite can still pass.
+- `examples/bot-identity.yaml` (`notify-deploy-bot`, `notify-test-bot`) requires the `chat:write.customize` scope on the bot token. The jobs will fail with a Slack `missing_scope` error if that scope is not granted.

@@ -1159,6 +1159,58 @@ teardown() {
 	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
 }
 
+@test "acceptance:: bot identity username and icon_emoji" {
+	if [[ -z "$REAL_TOKEN" ]]; then
+		skip "REAL_TOKEN is required for acceptance tests"
+	fi
+
+	local token="$REAL_TOKEN"
+	local dry_run="false"
+	local EXAMPLES_FILE="$GIT_ROOT/examples/bot-identity.yaml"
+
+	local blocks_json
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "notify-deploy-bot") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+
+	if ! echo "$blocks_json" | jq . >/dev/null 2>&1; then
+		echo "Invalid blocks_json from bot-identity.yaml" >&2
+		echo "$blocks_json" >&2
+		return 1
+	fi
+
+	jq -n \
+		--arg token "$token" \
+		--argjson blocks "$blocks_json" \
+		--arg channel "$CHANNEL" \
+		--arg dry_run "$dry_run" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: $token
+			},
+			params: {
+				channel: $channel,
+				dry_run: $dry_run,
+				username: "Deploy Bot",
+				icon_emoji: ":rocket:",
+				text: "acceptance test bot identity",
+				blocks: $blocks
+			}
+		}' >"$TEST_PAYLOAD_FILE"
+
+	if ! jq . "$TEST_PAYLOAD_FILE" >/dev/null 2>&1; then
+		echo "Invalid JSON in test payload file" >&2
+		cat "$TEST_PAYLOAD_FILE" >&2
+		return 1
+	fi
+
+	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "version"
+	echo "$output" | grep -q "main:: parsing payload"
+	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "send_notification:: message delivered successfully via api"
+	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
+}
+
 @test "acceptance:: post_message then chat.update" {
 	if [[ -z "$REAL_TOKEN" ]]; then
 		skip "REAL_TOKEN is required for acceptance tests"
@@ -1308,6 +1360,50 @@ teardown() {
 	run env -u SLACK_BOT_USER_OAUTH_TOKEN "$SCRIPT" <"$payload_file"
 	[[ "$status" -ne 0 ]]
 	echo "$output" | grep -q "load_configuration:: params.ephemeral_user requires API delivery with a bot token, not webhook"
+}
+
+@test "acceptance:: webhook rejects params.username at parse time" {
+	if [[ -z "${REAL_WEBHOOK_URL:-}" ]]; then
+		skip "SLACK_WEBHOOK_URL is required for webhook acceptance tests"
+	fi
+
+	local webhook_url="$REAL_WEBHOOK_URL"
+	local dry_run="true"
+	local payload_file
+
+	payload_file=$(mktemp "${BATS_TEST_TMPDIR}/acceptance-webhook-username-reject.XXXXXX")
+	trap 'rm -f "$payload_file" 2>/dev/null || true' RETURN
+
+	jq -n \
+		--arg url "$webhook_url" \
+		--arg dry_run "$dry_run" \
+		'{
+			source: { webhook_url: $url },
+			params: {
+				dry_run: $dry_run,
+				username: "Deploy Bot",
+				blocks: [
+					{
+						section: {
+							type: "text",
+							text: {
+								type: "plain_text",
+								text: "acceptance: webhook cannot use username"
+							}
+						}
+					}
+				]
+			}
+		}' >"$payload_file"
+
+	if ! jq . "$payload_file" >/dev/null 2>&1; then
+		echo "Invalid JSON in test payload file" >&2
+		return 1
+	fi
+
+	run env -u SLACK_BOT_USER_OAUTH_TOKEN "$SCRIPT" <"$payload_file"
+	[[ "$status" -ne 0 ]]
+	echo "$output" | grep -q "load_configuration:: params.username, params.icon_emoji, and params.icon_url require API delivery with a bot token, not webhook"
 }
 
 @test "acceptance:: webhook rejects params.message_ts" {

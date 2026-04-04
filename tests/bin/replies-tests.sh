@@ -211,6 +211,68 @@ mock_curl_success() {
 	rm -f "$outfile"
 }
 
+@test "send_thread_replies:: inherits bot identity from parent params" {
+	SEND_NOTIFICATION_CALL_COUNT=0
+	export SEND_NOTIFICATION_CALL_COUNT
+	FIRST_REPLY_PAYLOAD=""
+	export FIRST_REPLY_PAYLOAD
+
+	send_notification() {
+		SEND_NOTIFICATION_CALL_COUNT=$((SEND_NOTIFICATION_CALL_COUNT + 1))
+		if [[ "$SEND_NOTIFICATION_CALL_COUNT" -eq 1 ]]; then
+			FIRST_REPLY_PAYLOAD="$1"
+		fi
+		return 0
+	}
+	export -f send_notification
+
+	local parsed_payload
+	parsed_payload=$(jq -n '{
+		channel: "#test",
+		blocks: [],
+		thread_replies: [
+			{
+				blocks: [
+					{
+						section: {
+							type: "text",
+							text: { type: "plain_text", text: "Reply 1" }
+						}
+					}
+				]
+			}
+		]
+	}')
+
+	local input_file
+	input_file=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.thread-replies-id.XXXXXX")
+	jq -n \
+		--arg token "$SLACK_BOT_USER_OAUTH_TOKEN" \
+		'{
+			source: {slack_bot_user_oauth_token: $token},
+			params: {
+				username: "Deploy Bot",
+				icon_emoji: ":ship:",
+				icon_url: "https://example.com/icon.png"
+			}
+		}' >"$input_file"
+
+	DRY_RUN="false"
+	export DRY_RUN
+
+	local outfile
+	outfile=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.replies-id-out.XXXXXX")
+	send_thread_replies "$input_file" "1234567890.654321" "$parsed_payload" >"$outfile" 2>&1
+	local status=$?
+	rm -f "$input_file"
+
+	[[ "$status" -eq 0 ]]
+	echo "$FIRST_REPLY_PAYLOAD" | jq -e '.username == "Deploy Bot"' >/dev/null
+	echo "$FIRST_REPLY_PAYLOAD" | jq -e '.icon_emoji == ":ship:"' >/dev/null
+	echo "$FIRST_REPLY_PAYLOAD" | jq -e '.icon_url == "https://example.com/icon.png"' >/dev/null
+	rm -f "$outfile"
+}
+
 @test "send_thread_replies:: continues and returns 0 when parse_payload fails" {
 	parse_payload() {
 		echo "parse_payload:: parse error" >&2

@@ -153,6 +153,43 @@ smoke_test_setup_ephemeral() {
 	export SMOKE_TEST_PAYLOAD_FILE
 }
 
+smoke_test_setup_bot_identity() {
+	local blocks_json="$1"
+	local username="$2"
+	local icon_emoji="$3"
+
+	if [[ -z "$REAL_TOKEN" ]]; then
+		skip "SLACK_BOT_USER_OAUTH_TOKEN not set"
+	fi
+
+	local dry_run="false"
+	local channel="$CHANNEL"
+
+	SMOKE_TEST_PAYLOAD_FILE=$(mktemp "${BATS_TEST_TMPDIR}/smoke-tests.smoke-payload-bot-identity.XXXXXX")
+
+	jq -n \
+		--argjson blocks "$blocks_json" \
+		--arg channel "$channel" \
+		--arg dry_run "$dry_run" \
+		--arg token "$REAL_TOKEN" \
+		--arg username "$username" \
+		--arg icon_emoji "$icon_emoji" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: $token
+			},
+			params: {
+				channel: $channel,
+				username: $username,
+				icon_emoji: $icon_emoji,
+				blocks: $blocks,
+				dry_run: $dry_run
+			}
+		}' >"$SMOKE_TEST_PAYLOAD_FILE"
+
+	export SMOKE_TEST_PAYLOAD_FILE
+}
+
 # parse_payload must run in this shell, not in command substitution, so exports from
 # load_configuration stay set for send_notification. Sets SMOKE_PARSED_PAYLOAD on success.
 smoke_parse_payload_capture() {
@@ -1397,6 +1434,36 @@ smoke_parse_payload_capture() {
 }
 
 ########################################################
+# Bot identity smoke tests
+########################################################
+
+@test "smoke_test:: bot identity username and icon_emoji from example" {
+	local EXAMPLES_FILE="$GIT_ROOT/examples/bot-identity.yaml"
+	local blocks_json
+	blocks_json=$(yq -o json -r '.jobs[] | select(.name == "notify-deploy-bot") | .plan[0].params.blocks' "$EXAMPLES_FILE")
+
+	smoke_test_setup_bot_identity "$blocks_json" "Deploy Bot" ":rocket:"
+
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
+		echo "parse_payload failed" >&2
+		return 1
+	fi
+	local parsed_payload
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
+
+	if [[ -z "$parsed_payload" ]]; then
+		echo "parsed_payload is empty" >&2
+		return 1
+	fi
+
+	echo "$parsed_payload" | jq -e '.username == "Deploy Bot"' >/dev/null
+	echo "$parsed_payload" | jq -e '.icon_emoji == ":rocket:"' >/dev/null
+
+	run send_notification "$parsed_payload"
+	[[ "$status" -eq 0 ]]
+}
+
+########################################################
 # Incoming Webhook smoke tests
 ########################################################
 
@@ -1496,6 +1563,44 @@ smoke_parse_payload_capture() {
 	run parse_payload "$SMOKE_TEST_PAYLOAD_FILE"
 	[[ "$status" -ne 0 ]]
 	echo "$output" | grep -q "load_configuration:: params.ephemeral_user requires API delivery with a bot token, not webhook"
+}
+
+@test "smoke_test:: webhook rejects params.username at parse time" {
+	if [[ -z "${REAL_WEBHOOK_URL:-}" ]]; then
+		skip "SLACK_WEBHOOK_URL not set"
+	fi
+
+	local webhook_url="$REAL_WEBHOOK_URL"
+	local dry_run="true"
+
+	SMOKE_TEST_PAYLOAD_FILE=$(mktemp "${BATS_TEST_TMPDIR}/smoke-tests.webhook-username-reject.XXXXXX")
+
+	jq -n \
+		--arg url "$webhook_url" \
+		--arg dry_run "$dry_run" \
+		'{
+			source: { webhook_url: $url },
+			params: {
+				dry_run: $dry_run,
+				username: "Deploy Bot",
+				blocks: [
+					{
+						section: {
+							type: "text",
+							text: {
+								type: "plain_text",
+								text: "webhook must not combine with username"
+							}
+						}
+					}
+				]
+			}
+		}' >"$SMOKE_TEST_PAYLOAD_FILE"
+
+	unset SLACK_BOT_USER_OAUTH_TOKEN
+	run parse_payload "$SMOKE_TEST_PAYLOAD_FILE"
+	[[ "$status" -ne 0 ]]
+	echo "$output" | grep -q "load_configuration:: params.username, params.icon_emoji, and params.icon_url require API delivery with a bot token, not webhook"
 }
 
 @test "smoke_test:: webhook rejects params.message_ts" {

@@ -316,6 +316,7 @@ Debug mode redacts authentication tokens but still logs the payload structure.
 Slack bot token with appropriate OAuth scopes. Posting, updating, ephemeral sends, and thread replies need `chat:write`; some channels also need `chat:write.public`.
 
 - `chat:write` - Post, update, and thread messages via Web API
+- `chat:write.customize` - Override bot display name and avatar per message via `params.username`, `params.icon_emoji`, `params.icon_url`
 - `channels:read`, `groups:read`, `im:read` - Channel, private channel, and DM access for lookups where used
 - `files:write`, `files:read` - File operations
 - `users:read` - User information for mention resolution and similar features
@@ -423,6 +424,9 @@ Incoming Webhook:
 - `params.blocks` - Array of block configurations
 - `params.message_ts` - Slack message timestamp for `chat.update`; Web API only; requires `params.channel` in the payload; omits new post, thread replies, and crosspost for that run (see Updating messages above)
 - `params.ephemeral_user` - Slack user ID for `chat.postEphemeral`; Web API only, not valid with webhook-only delivery (see Ephemeral messages in the Web API example above)
+- `params.username` - Override the bot display name for this message; Web API only, requires `chat:write.customize` scope, not valid with webhook delivery; thread replies inherit this value automatically
+- `params.icon_emoji` - Override the bot avatar with an emoji for this message (e.g. `:robot_face:`); Web API only, requires `chat:write.customize` scope, not valid with webhook delivery; thread replies inherit this value automatically
+- `params.icon_url` - Override the bot avatar with an image URL for this message; Web API only, requires `chat:write.customize` scope, not valid with webhook delivery; thread replies inherit this value automatically
 
 ### Block Formats
 

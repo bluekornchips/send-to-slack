@@ -34,17 +34,6 @@ Control whether Slack automatically expands URLs in the message into rich link p
 
 ---
 
-### Per-message bot identity
-
-Override the bot's display name and avatar on a per-message basis using `icon_emoji`, `icon_url`, and `username`. Currently the bot always uses the identity configured in the Slack app settings.
-
-- Use case: Pipelines with multiple notification roles, such as a "Deploy Bot" vs a "Test Bot", using a single Slack app token.
-- Params: `params.icon_emoji`, `params.icon_url`, `params.username`
-- Applies to: Web API delivery only. Requires `chat:write.customize` scope.
-- Ref: [chat.postMessage - customization](https://api.slack.com/methods/chat.postMessage)
-
----
-
 ### reactions.add
 
 Add one or more emoji reactions to the sent message after delivery. The message `ts` is already captured from the API response and exposed in Concourse metadata.

@@ -1,0 +1,58 @@
+# Example Concourse pipeline: per-message bot identity via username, icon_emoji, icon_url
+#
+# Override the bot's display name and avatar on a per-message basis. Useful when a single
+# Slack app token serves multiple notification roles, e.g. a "Deploy Bot" vs a "Test Bot".
+# Requires: Web API with bot token and the chat:write.customize scope.
+# Incompatible with webhook-only delivery.
+
+resource_types:
+  - name: slack-notification
+    type: registry-image
+    source:
+      repository: sunflowersoftware/send-to-slack
+      tag: ((TAG))
+
+resources:
+  - name: slack-notification
+    type: slack-notification
+    source:
+      slack_bot_user_oauth_token: ((SLACK_BOT_USER_OAUTH_TOKEN))
+
+jobs:
+  - name: notify-deploy-bot
+    plan:
+      - put: slack-notification
+        params:
+          channel: ((channel))
+          username: "Deploy Bot"
+          icon_emoji: ":rocket:"
+          text: "Deploy Bot notification"
+          blocks:
+            - header:
+                text:
+                  type: plain_text
+                  text: "Deploy complete"
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "This message appears as *Deploy Bot* with :rocket: as the avatar."
+
+  - name: notify-test-bot
+    plan:
+      - put: slack-notification
+        params:
+          channel: ((channel))
+          username: "Test Bot"
+          icon_emoji: ":white_check_mark:"
+          text: "Test Bot notification"
+          blocks:
+            - header:
+                text:
+                  type: plain_text
+                  text: "Tests passed"
+            - section:
+                type: text
+                text:
+                  type: mrkdwn
+                  text: "This message appears as *Test Bot* with :white_check_mark: as the avatar."

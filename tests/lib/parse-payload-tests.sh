@@ -261,6 +261,60 @@ block_output_json() { cat "$CREATE_BLOCK_OUTPUT_FILE"; }
 	echo "$output" | grep -q "params.ephemeral_user requires API delivery"
 }
 
+@test "load_configuration:: fails when params.username is set with webhook delivery" {
+	unset SLACK_BOT_USER_OAUTH_TOKEN
+	unset CHANNEL
+
+	jq -n '{
+		source: {
+			webhook_url: "https://hooks.slack.com/services/test"
+		},
+		params: {
+			username: "Deploy Bot",
+			blocks: [{
+				section: {
+					type: "text",
+					text: { type: "plain_text", text: "x" }
+				}
+			}]
+		}
+	}' >"$TEST_PAYLOAD_FILE"
+
+	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
+	export INPUT_PAYLOAD
+
+	run load_configuration
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "params.username, params.icon_emoji, and params.icon_url require API delivery"
+}
+
+@test "load_configuration:: fails when params.icon_emoji is set with webhook delivery" {
+	unset SLACK_BOT_USER_OAUTH_TOKEN
+	unset CHANNEL
+
+	jq -n '{
+		source: {
+			webhook_url: "https://hooks.slack.com/services/test"
+		},
+		params: {
+			icon_emoji: ":robot_face:",
+			blocks: [{
+				section: {
+					type: "text",
+					text: { type: "plain_text", text: "x" }
+				}
+			}]
+		}
+	}' >"$TEST_PAYLOAD_FILE"
+
+	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
+	export INPUT_PAYLOAD
+
+	run load_configuration
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "params.username, params.icon_emoji, and params.icon_url require API delivery"
+}
+
 @test "load_configuration:: does not set EPHEMERAL_USER when params.ephemeral_user is absent" {
 	export EPHEMERAL_USER="stale-from-environment"
 
@@ -309,6 +363,58 @@ block_output_json() { cat "$CREATE_BLOCK_OUTPUT_FILE"; }
 	payload_output=$(parse_payload "$TEST_PAYLOAD_FILE")
 
 	echo "$payload_output" | jq -e '.user == "U99"' >/dev/null
+}
+
+@test "process_blocks:: merges username icon_emoji icon_url from params" {
+	jq -n '{
+		source: {
+			slack_bot_user_oauth_token: "xoxb-test"
+		},
+		params: {
+			channel: "C123",
+			dry_run: true,
+			username: "Deploy Bot",
+			icon_emoji: ":ship:",
+			icon_url: "https://example.com/icon.png",
+			blocks: [{
+				section: {
+					type: "text",
+					text: { type: "plain_text", text: "Hello" }
+				}
+			}]
+		}
+	}' >"$TEST_PAYLOAD_FILE"
+
+	local payload_output
+	payload_output=$(parse_payload "$TEST_PAYLOAD_FILE")
+
+	echo "$payload_output" | jq -e '.username == "Deploy Bot"' >/dev/null
+	echo "$payload_output" | jq -e '.icon_emoji == ":ship:"' >/dev/null
+	echo "$payload_output" | jq -e '.icon_url == "https://example.com/icon.png"' >/dev/null
+}
+
+@test "process_blocks:: omits identity keys when params omit or use empty strings" {
+	jq -n '{
+		source: {
+			slack_bot_user_oauth_token: "xoxb-test"
+		},
+		params: {
+			channel: "C123",
+			dry_run: true,
+			username: "",
+			blocks: [{
+				section: {
+					type: "text",
+					text: { type: "plain_text", text: "Hello" }
+				}
+			}]
+		}
+	}' >"$TEST_PAYLOAD_FILE"
+
+	local payload_output
+	payload_output=$(parse_payload "$TEST_PAYLOAD_FILE")
+
+	echo "$payload_output" | jq -e 'has("username") | not' >/dev/null
 }
 
 @test "process_blocks:: does not include user field when EPHEMERAL_USER is unset" {
@@ -2608,4 +2714,470 @@ mock_create_block() {
 	payload_output=$(parse_payload "$TEST_PAYLOAD_FILE")
 	echo "$payload_output" | jq -e '.thread_replies | length == 1' >/dev/null
 	echo "$payload_output" | jq -e '.thread_ts == "1234567890.123456"' >/dev/null
+}
+
+########################################################
+# _resolve_block_color
+########################################################
+
+@test "_resolve_block_color:: empty prints empty" {
+	run _resolve_block_color ""
+	[[ "$status" -eq 0 ]]
+	[[ -z "$output" ]]
+}
+
+@test "_resolve_block_color:: hex passes through" {
+	run _resolve_block_color "#aB12Cd"
+	[[ "$status" -eq 0 ]]
+	[[ "$output" == "#aB12Cd" ]]
+}
+
+@test "_resolve_block_color:: danger maps to DANGER_COLOR" {
+	run _resolve_block_color "danger"
+	[[ "$status" -eq 0 ]]
+	[[ "$output" == "$DANGER_COLOR" ]]
+}
+
+@test "_resolve_block_color:: success maps to SUCCESS_COLOR" {
+	run _resolve_block_color "success"
+	[[ "$status" -eq 0 ]]
+	[[ "$output" == "$SUCCESS_COLOR" ]]
+}
+
+@test "_resolve_block_color:: warning maps to WARN_COLOR" {
+	run _resolve_block_color "warning"
+	[[ "$status" -eq 0 ]]
+	[[ "$output" == "$WARN_COLOR" ]]
+}
+
+@test "_resolve_block_color:: unknown maps to DANGER_COLOR" {
+	run _resolve_block_color "not-a-known-name"
+	[[ "$status" -eq 0 ]]
+	[[ "$output" == "$DANGER_COLOR" ]]
+}
+
+########################################################
+# _extract_block_type_and_value
+########################################################
+
+@test "_extract_block_type_and_value:: fails on empty block_item" {
+	run _extract_block_type_and_value ""
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "block_item is required"
+}
+
+@test "_extract_block_type_and_value:: type field format rich-text" {
+	local json
+	json=$(jq -n '{type:"rich-text", elements:[]}')
+
+	if ! _extract_block_type_and_value "$json"; then
+		return 1
+	fi
+	[[ "$_EXTRACT_BLOCK_TYPE" == "rich-text" ]]
+	echo "$_EXTRACT_BLOCK_VALUE" | jq -e 'has("type") | not' >/dev/null
+}
+
+@test "_extract_block_type_and_value:: key-based format" {
+	local json
+	json=$(jq -n '{"rich-text": {elements: []}}')
+
+	if ! _extract_block_type_and_value "$json"; then
+		return 1
+	fi
+	[[ "$_EXTRACT_BLOCK_TYPE" == "rich-text" ]]
+}
+
+@test "_extract_block_type_and_value:: section infers type text from text field" {
+	local json
+	json=$(jq -n '{type:"section", text:{type:"plain_text", text:"x"}}')
+
+	if ! _extract_block_type_and_value "$json"; then
+		return 1
+	fi
+	[[ "$_EXTRACT_BLOCK_TYPE" == "section" ]]
+	echo "$_EXTRACT_BLOCK_VALUE" | jq -e '.type == "text"' >/dev/null
+}
+
+@test "_extract_block_type_and_value:: section infers type fields from fields" {
+	local json
+	json=$(jq -n '{type:"section", fields:[]}')
+
+	if ! _extract_block_type_and_value "$json"; then
+		return 1
+	fi
+	echo "$_EXTRACT_BLOCK_VALUE" | jq -e '.type == "fields"' >/dev/null
+}
+
+@test "_extract_block_type_and_value:: reads color from type field format" {
+	local json
+	json=$(jq -n '{type:"section", color:"success", text:{type:"plain_text", text:"x"}}')
+
+	if ! _extract_block_type_and_value "$json"; then
+		return 1
+	fi
+	[[ "$_EXTRACT_BLOCK_COLOR" == "success" ]]
+}
+
+########################################################
+# _validate_block_counts
+########################################################
+
+@test "_validate_block_counts:: empty arrays succeed" {
+	local bf af
+	bf=$(mktemp "$_SLACK_WORKSPACE/validate-bc-b.XXXXXX")
+	af=$(mktemp "$_SLACK_WORKSPACE/validate-bc-a.XXXXXX")
+	echo '[]' >"$bf"
+	echo '[]' >"$af"
+
+	run _validate_block_counts "$bf" "$af"
+	[[ "$status" -eq 0 ]]
+}
+
+@test "_validate_block_counts:: fails when blocks exceed MAX_BLOCKS" {
+	local bf af
+	bf=$(mktemp "$_SLACK_WORKSPACE/validate-bc-b.XXXXXX")
+	af=$(mktemp "$_SLACK_WORKSPACE/validate-bc-a.XXXXXX")
+	jq -n '[range(51) | {type:"section", text:{type:"plain_text", text:"x"}}]' >"$bf"
+	echo '[]' >"$af"
+
+	run _validate_block_counts "$bf" "$af"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "block count"
+}
+
+@test "_validate_block_counts:: fails when attachments exceed MAX_ATTACHMENTS" {
+	local bf af
+	bf=$(mktemp "$_SLACK_WORKSPACE/validate-bc-b.XXXXXX")
+	af=$(mktemp "$_SLACK_WORKSPACE/validate-bc-a.XXXXXX")
+	echo '[]' >"$bf"
+	jq -n '[range(21) | {color:"#FF0000", blocks:[{type:"section"}]}]' >"$af"
+
+	run _validate_block_counts "$bf" "$af"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "attachment count"
+}
+
+@test "_validate_block_counts:: fails when combined block total exceeds MAX_BLOCKS" {
+	local bf af
+	bf=$(mktemp "$_SLACK_WORKSPACE/validate-bc-b.XXXXXX")
+	af=$(mktemp "$_SLACK_WORKSPACE/validate-bc-a.XXXXXX")
+	jq -n '[range(31) | {type:"section", text:{type:"plain_text", text:"x"}}]' >"$bf"
+	jq -n '[range(20) | {color:"#FF0000", blocks:[{type:"section"}]}]' >"$af"
+
+	run _validate_block_counts "$bf" "$af"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "total block count"
+}
+
+@test "_validate_block_counts:: fails when paths missing" {
+	run _validate_block_counts "" "/tmp/x"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "required"
+}
+
+########################################################
+# _validate_thread_replies
+########################################################
+
+@test "_validate_thread_replies:: empty input succeeds" {
+	run _validate_thread_replies ""
+	[[ "$status" -eq 0 ]]
+}
+
+@test "_validate_thread_replies:: null string succeeds" {
+	run _validate_thread_replies "null"
+	[[ "$status" -eq 0 ]]
+}
+
+@test "_validate_thread_replies:: not an array fails" {
+	run _validate_thread_replies '"x"'
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "thread.replies must be an array"
+}
+
+@test "_validate_thread_replies:: missing blocks fails" {
+	local raw
+	raw=$(jq -n '[{text: "no blocks"}]')
+
+	run _validate_thread_replies "$raw"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "thread.replies\[0\].blocks"
+}
+
+@test "_validate_thread_replies:: empty blocks array fails" {
+	local raw
+	raw=$(jq -n '[{blocks: []}]')
+
+	run _validate_thread_replies "$raw"
+	[[ "$status" -eq 1 ]]
+}
+
+@test "_validate_thread_replies:: valid replies succeed" {
+	local raw
+	raw=$(jq -n '[{blocks: [{section: {type: "text", text: {type: "plain_text", text: "r"}}}]}]')
+
+	run _validate_thread_replies "$raw"
+	[[ "$status" -eq 0 ]]
+}
+
+########################################################
+# _build_slack_payload
+########################################################
+
+@test "_build_slack_payload:: fails without channel" {
+	local bf af
+	bf=$(mktemp "$_SLACK_WORKSPACE/bsl-b.XXXXXX")
+	af=$(mktemp "$_SLACK_WORKSPACE/bsl-a.XXXXXX")
+	echo '[]' >"$bf"
+	echo '[]' >"$af"
+	jq -n '{params:{}}' >"$TEST_PAYLOAD_FILE"
+	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
+	export INPUT_PAYLOAD
+	unset EPHEMERAL_USER
+
+	run _build_slack_payload "" "$bf" "$af" "" "" ""
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "channel is required"
+}
+
+@test "_build_slack_payload:: minimal payload with blocks" {
+	local bf af
+	bf=$(mktemp "$_SLACK_WORKSPACE/bsl-b.XXXXXX")
+	af=$(mktemp "$_SLACK_WORKSPACE/bsl-a.XXXXXX")
+	echo '[{"type":"section","text":{"type":"plain_text","text":"hi"}}]' >"$bf"
+	echo '[]' >"$af"
+	jq -n '{params:{}}' >"$TEST_PAYLOAD_FILE"
+	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
+	export INPUT_PAYLOAD
+	unset EPHEMERAL_USER
+
+	run _build_slack_payload "C123" "$bf" "$af" "" "" ""
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.channel == "C123"' >/dev/null
+	echo "$output" | jq -e '.blocks | length == 1' >/dev/null
+	echo "$output" | jq -e 'has("thread_ts") | not' >/dev/null
+}
+
+@test "_build_slack_payload:: includes thread_ts when set" {
+	local bf af
+	bf=$(mktemp "$_SLACK_WORKSPACE/bsl-b.XXXXXX")
+	af=$(mktemp "$_SLACK_WORKSPACE/bsl-a.XXXXXX")
+	echo '[]' >"$bf"
+	echo '[]' >"$af"
+	jq -n '{params:{}}' >"$TEST_PAYLOAD_FILE"
+	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
+	export INPUT_PAYLOAD
+
+	run _build_slack_payload "C1" "$bf" "$af" "1234567890.123456" "" ""
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.thread_ts == "1234567890.123456"' >/dev/null
+}
+
+@test "_build_slack_payload:: includes user when EPHEMERAL_USER set" {
+	local bf af
+	bf=$(mktemp "$_SLACK_WORKSPACE/bsl-b.XXXXXX")
+	af=$(mktemp "$_SLACK_WORKSPACE/bsl-a.XXXXXX")
+	echo '[]' >"$bf"
+	echo '[]' >"$af"
+	jq -n '{params:{}}' >"$TEST_PAYLOAD_FILE"
+	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
+	export INPUT_PAYLOAD
+	EPHEMERAL_USER="U99"
+	export EPHEMERAL_USER
+
+	run _build_slack_payload "C1" "$bf" "$af" "" "" ""
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.user == "U99"' >/dev/null
+	unset EPHEMERAL_USER
+}
+
+@test "_build_slack_payload:: text over MAX_TEXT_LENGTH fails" {
+	local bf af long_text
+	bf=$(mktemp "$_SLACK_WORKSPACE/bsl-b.XXXXXX")
+	af=$(mktemp "$_SLACK_WORKSPACE/bsl-a.XXXXXX")
+	echo '[]' >"$bf"
+	echo '[]' >"$af"
+	long_text=$(awk 'BEGIN {for(i=0;i<40001;i++) printf "a"}')
+	jq -n '{params:{}}' >"$TEST_PAYLOAD_FILE"
+	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
+	export INPUT_PAYLOAD
+
+	run _build_slack_payload "C1" "$bf" "$af" "" "$long_text" ""
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "text field length"
+}
+
+@test "_build_slack_payload:: thread_replies merged when non-empty" {
+	local bf af raw
+	bf=$(mktemp "$_SLACK_WORKSPACE/bsl-b.XXXXXX")
+	af=$(mktemp "$_SLACK_WORKSPACE/bsl-a.XXXXXX")
+	echo '[]' >"$bf"
+	echo '[]' >"$af"
+	jq -n '{params:{}}' >"$TEST_PAYLOAD_FILE"
+	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
+	export INPUT_PAYLOAD
+	raw=$(jq -n '[{blocks: [{section: {type: "text", text: {type: "plain_text", text: "r"}}}]}]')
+
+	run _build_slack_payload "C1" "$bf" "$af" "" "" "$raw"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.thread_replies | length == 1' >/dev/null
+}
+
+########################################################
+# _resolve_delivery_method
+########################################################
+
+@test "_resolve_delivery_method:: api when token in payload" {
+	jq -n '{source:{slack_bot_user_oauth_token:"xoxb-payload"}}' >"$TEST_PAYLOAD_FILE"
+	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
+	export INPUT_PAYLOAD
+	unset SLACK_BOT_USER_OAUTH_TOKEN WEBHOOK_URL DELIVERY_METHOD
+
+	if ! _resolve_delivery_method; then
+		return 1
+	fi
+	[[ "$DELIVERY_METHOD" == "api" ]]
+	[[ "$SLACK_BOT_USER_OAUTH_TOKEN" == "xoxb-payload" ]]
+}
+
+@test "_resolve_delivery_method:: webhook when webhook_url in payload" {
+	jq -n '{source:{webhook_url:"https://hooks.slack.com/x"}}' >"$TEST_PAYLOAD_FILE"
+	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
+	export INPUT_PAYLOAD
+	unset SLACK_BOT_USER_OAUTH_TOKEN WEBHOOK_URL DELIVERY_METHOD
+
+	if ! _resolve_delivery_method; then
+		return 1
+	fi
+	[[ "$DELIVERY_METHOD" == "webhook" ]]
+}
+
+@test "_resolve_delivery_method:: fails when neither token nor webhook" {
+	jq -n '{source:{}}' >"$TEST_PAYLOAD_FILE"
+	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
+	export INPUT_PAYLOAD
+	unset SLACK_BOT_USER_OAUTH_TOKEN WEBHOOK_URL DELIVERY_METHOD
+
+	run _resolve_delivery_method
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "either source.slack_bot_user_oauth_token"
+}
+
+########################################################
+# _resolve_channel
+########################################################
+
+@test "_resolve_channel:: api requires channel from env when missing in payload" {
+	jq -n '{source:{slack_bot_user_oauth_token:"t"}, params:{}}' >"$TEST_PAYLOAD_FILE"
+	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
+	export INPUT_PAYLOAD
+	DELIVERY_METHOD="api"
+	export DELIVERY_METHOD
+	CHANNEL="C-from-env"
+	export CHANNEL
+
+	if ! _resolve_channel; then
+		return 1
+	fi
+	[[ "$CHANNEL" == "C-from-env" ]]
+}
+
+@test "_resolve_channel:: api fails when channel missing everywhere" {
+	jq -n '{source:{slack_bot_user_oauth_token:"t"}, params:{}}' >"$TEST_PAYLOAD_FILE"
+	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
+	export INPUT_PAYLOAD
+	DELIVERY_METHOD="api"
+	export DELIVERY_METHOD
+	unset CHANNEL
+
+	run _resolve_channel
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "params.channel is required for API delivery"
+}
+
+@test "_resolve_channel:: webhook allows empty channel" {
+	jq -n '{source:{webhook_url:"https://hooks.slack.com/x"}, params:{}}' >"$TEST_PAYLOAD_FILE"
+	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
+	export INPUT_PAYLOAD
+	DELIVERY_METHOD="webhook"
+	export DELIVERY_METHOD
+	unset CHANNEL
+
+	if ! _resolve_channel; then
+		return 1
+	fi
+}
+
+########################################################
+# _load_raw_params
+########################################################
+
+@test "_load_raw_params:: no-op when params.raw absent" {
+	jq -n '{params:{channel:"x"}}' >"$TEST_PAYLOAD_FILE"
+	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
+	export INPUT_PAYLOAD
+
+	run _load_raw_params
+	[[ "$status" -eq 0 ]]
+	[[ "$(jq -r '.params.channel' "$TEST_PAYLOAD_FILE")" == "x" ]]
+}
+
+@test "_load_raw_params:: invalid JSON fails" {
+	jq -n '{params:{raw:"not json"}}' >"$TEST_PAYLOAD_FILE"
+	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
+	export INPUT_PAYLOAD
+
+	run _load_raw_params
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "raw payload is not valid JSON"
+}
+
+@test "_load_raw_params:: valid raw replaces params" {
+	local raw_compact
+	raw_compact=$(jq -c -n '{channel:"raw-ch", blocks:[]}')
+
+	jq -n --arg raw "$raw_compact" '{source:{slack_bot_user_oauth_token:"t"}, params:{raw:$raw}}' >"$TEST_PAYLOAD_FILE"
+	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
+	export INPUT_PAYLOAD
+
+	run _load_raw_params
+	[[ "$status" -eq 0 ]]
+	[[ "$(jq -r '.params.channel' "$TEST_PAYLOAD_FILE")" == "raw-ch" ]]
+}
+
+########################################################
+# _load_from_file_params
+########################################################
+
+@test "_load_from_file_params:: no-op when from_file absent" {
+	jq -n '{params:{channel:"x"}}' >"$TEST_PAYLOAD_FILE"
+	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
+	export INPUT_PAYLOAD
+
+	run _load_from_file_params
+	[[ "$status" -eq 0 ]]
+}
+
+@test "_load_from_file_params:: fails when file missing" {
+	jq -n '{params:{from_file:"/nonexistent/params.json"}}' >"$TEST_PAYLOAD_FILE"
+	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
+	export INPUT_PAYLOAD
+
+	run _load_from_file_params
+	[[ "$status" -eq 1 ]]
+}
+
+@test "_load_from_file_params:: loads valid JSON file into params" {
+	local pf
+	pf=$(mktemp "$_SLACK_WORKSPACE/from-file-params.XXXXXX")
+	jq -n '{channel:"file-ch", blocks:[]}' >"$pf"
+
+	jq -n --arg f "$pf" '{source:{slack_bot_user_oauth_token:"t"}, params:{from_file:$f}}' >"$TEST_PAYLOAD_FILE"
+	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
+	export INPUT_PAYLOAD
+
+	run _load_from_file_params
+	[[ "$status" -eq 0 ]]
+	[[ "$(jq -r '.params.channel' "$TEST_PAYLOAD_FILE")" == "file-ch" ]]
+	rm -f "$pf"
 }

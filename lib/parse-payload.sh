@@ -312,6 +312,88 @@ _load_block_item_from_file() {
 	return 0
 }
 
+# Load params from params.raw when present
+#
+# Uses global variable: INPUT_PAYLOAD, modified in place
+#
+# Side Effects:
+#   May replace .params with parsed JSON from params.raw
+#
+# Returns:
+#   0 on success or when params.raw is absent
+#   1 if raw string is not valid JSON
+_load_raw_params() {
+	local raw_params
+	raw_params=$(jq -r '.params.raw // empty' "$INPUT_PAYLOAD")
+	if [[ -z "$raw_params" ]]; then
+		return 0
+	fi
+
+	echo "load_input_payload_params:: loading params from params.raw" >&2
+	if ! echo "$raw_params" | jq . >/dev/null 2>&1; then
+		echo "parse_payload:: raw payload is not valid JSON" >&2
+		return 1
+	fi
+
+	local parsed_params
+	parsed_params=$(echo "$raw_params" | jq '.')
+
+	local parsed_params_file
+	parsed_params_file=$(mktemp "$_SLACK_WORKSPACE/load_payload_params.raw.XXXXXX")
+	echo "$parsed_params" >"$parsed_params_file"
+
+	local updated_payload
+	updated_payload=$(jq --slurpfile parsed_params "$parsed_params_file" '.params = $parsed_params[0]' "$INPUT_PAYLOAD")
+	echo "$updated_payload" >"$INPUT_PAYLOAD"
+	local param_keys
+	param_keys=$(echo "$parsed_params" | jq -r 'keys | join(", ")')
+	echo "load_input_payload_params:: loaded from params.raw, keys: ${param_keys}" >&2
+
+	return 0
+}
+
+# Load params from params.from_file when present
+#
+# Uses global variable: INPUT_PAYLOAD, modified in place
+#
+# Side Effects:
+#   May replace .params with JSON read from resolved file path
+#
+# Returns:
+#   0 on success or when params.from_file is absent
+#   1 if path invalid, file missing, or file contains invalid JSON
+_load_from_file_params() {
+	if ! jq -e '.params.from_file' "$INPUT_PAYLOAD" >/dev/null 2>&1; then
+		return 0
+	fi
+
+	local source_file_path
+	source_file_path=$(jq -r '.params.from_file' "$INPUT_PAYLOAD")
+	source_file_path=$(_resolve_from_file_path "$source_file_path") || return 1
+	echo "load_input_payload_params:: loading params from file: ${source_file_path}" >&2
+
+	if ! jq . "$source_file_path" >/dev/null 2>&1; then
+		echo "parse_payload:: payload file contains invalid JSON: $source_file_path" >&2
+		return 1
+	fi
+
+	local file_params
+	file_params=$(jq '.' "$source_file_path")
+
+	local file_params_file
+	file_params_file=$(mktemp "$_SLACK_WORKSPACE/load_payload_params.from_file.XXXXXX")
+	echo "$file_params" >"$file_params_file"
+
+	local updated_payload
+	updated_payload=$(jq --slurpfile file_params "$file_params_file" '.params = $file_params[0]' "$INPUT_PAYLOAD")
+	echo "$updated_payload" >"$INPUT_PAYLOAD"
+	local param_keys
+	param_keys=$(jq -r '.params | keys | join(", ")' "$INPUT_PAYLOAD")
+	echo "load_input_payload_params:: loaded from params.from_file: ${source_file_path}, keys: ${param_keys}" >&2
+
+	return 0
+}
+
 # Load input payload params conditionally, raw params or from_file
 #
 # Uses global variable: INPUT_PAYLOAD, modified in place
@@ -323,78 +405,24 @@ _load_block_item_from_file() {
 #   0 on success
 #   1 if source file not found or invalid JSON
 load_input_payload_params() {
-	local raw_params
-	raw_params=$(jq -r '.params.raw // empty' "$INPUT_PAYLOAD")
-	if [[ -n "$raw_params" ]]; then
-		echo "load_input_payload_params:: loading params from params.raw" >&2
-		if ! echo "$raw_params" | jq . >/dev/null 2>&1; then
-			echo "parse_payload:: raw payload is not valid JSON" >&2
-			return 1
-		fi
-
-		# Parse raw string as JSON and use it directly as params
-		local parsed_params
-		parsed_params=$(echo "$raw_params" | jq '.')
-
-		local parsed_params_file
-		parsed_params_file=$(mktemp "$_SLACK_WORKSPACE/load_payload_params.raw.XXXXXX")
-		echo "$parsed_params" >"$parsed_params_file"
-
-		local updated_payload
-		updated_payload=$(jq --slurpfile parsed_params "$parsed_params_file" '.params = $parsed_params[0]' "$INPUT_PAYLOAD")
-		echo "$updated_payload" >"$INPUT_PAYLOAD"
-		local param_keys
-		param_keys=$(echo "$parsed_params" | jq -r 'keys | join(", ")')
-		echo "load_input_payload_params:: loaded from params.raw, keys: ${param_keys}" >&2
-	fi
-
-	local source_file_path
-	if jq -e '.params.from_file' "$INPUT_PAYLOAD" >/dev/null 2>&1; then
-		source_file_path=$(jq -r '.params.from_file' "$INPUT_PAYLOAD")
-		source_file_path=$(_resolve_from_file_path "$source_file_path") || return 1
-		echo "load_input_payload_params:: loading params from file: ${source_file_path}" >&2
-
-		if ! jq . "$source_file_path" >/dev/null 2>&1; then
-			echo "parse_payload:: payload file contains invalid JSON: $source_file_path" >&2
-			return 1
-		fi
-
-		# Read file content and use it directly as params
-		local file_params
-		file_params=$(jq '.' "$source_file_path")
-
-		local file_params_file
-		file_params_file=$(mktemp "$_SLACK_WORKSPACE/load_payload_params.from_file.XXXXXX")
-		echo "$file_params" >"$file_params_file"
-
-		local updated_payload
-		updated_payload=$(jq --slurpfile file_params "$file_params_file" '.params = $file_params[0]' "$INPUT_PAYLOAD")
-		echo "$updated_payload" >"$INPUT_PAYLOAD"
-		local param_keys
-		param_keys=$(jq -r '.params | keys | join(", ")' "$INPUT_PAYLOAD")
-		echo "load_input_payload_params:: loaded from params.from_file: ${source_file_path}, keys: ${param_keys}" >&2
-	fi
+	_load_raw_params || return 1
+	_load_from_file_params || return 1
 
 	return 0
 }
 
-# Load configuration values from payload and environment variables
+# Resolve delivery method from payload token or webhook_url and environment
 #
 # Uses global variable: INPUT_PAYLOAD
 #
 # Side Effects:
-#   Exports SLACK_BOT_USER_OAUTH_TOKEN, WEBHOOK_URL, CHANNEL, DRY_RUN, DELIVERY_METHOD
-#   Sets and exports EPHEMERAL_USER when params.ephemeral_user is set, otherwise unsets EPHEMERAL_USER
+#   May set SLACK_BOT_USER_OAUTH_TOKEN and WEBHOOK_URL from payload source keys
+#   Sets DELIVERY_METHOD to api or webhook
 #
 # Returns:
 #   0 on success
-#   1 if required fields are missing
-load_configuration() {
-	local source_exists="false"
-	if jq -e '.source' "$INPUT_PAYLOAD" >/dev/null 2>&1; then
-		source_exists="true"
-	fi
-
+#   1 when neither token nor webhook_url is available after merge
+_resolve_delivery_method() {
 	local token_from_payload
 	local webhook_from_payload
 	token_from_payload=$(jq -r '.source.slack_bot_user_oauth_token // empty' "$INPUT_PAYLOAD")
@@ -415,6 +443,26 @@ load_configuration() {
 	else
 		echo "load_configuration:: either source.slack_bot_user_oauth_token or source.webhook_url is required" >&2
 		return 1
+	fi
+
+	return 0
+}
+
+# Resolve CHANNEL from params and environment
+#
+# Uses global variable: INPUT_PAYLOAD
+# Uses global variable: DELIVERY_METHOD, must be set first
+#
+# Side Effects:
+#   Sets CHANNEL from params, with environment fallback when allowed
+#
+# Returns:
+#   0 on success
+#   1 when API delivery requires channel and none is set
+_resolve_channel() {
+	local source_exists="false"
+	if jq -e '.source' "$INPUT_PAYLOAD" >/dev/null 2>&1; then
+		source_exists="true"
 	fi
 
 	local env_channel_value="${CHANNEL:-}"
@@ -439,6 +487,45 @@ load_configuration() {
 		fi
 	fi
 
+	return 0
+}
+
+# Reject bot identity params when not using API delivery
+#
+# Uses global variable: INPUT_PAYLOAD, DELIVERY_METHOD
+#
+# Returns:
+#   0 when valid or identity params absent
+#   1 when identity params are set with webhook delivery
+_validate_bot_identity_params() {
+	local bot_identity_username_param
+	local bot_identity_icon_emoji_param
+	local bot_identity_icon_url_param
+	bot_identity_username_param=$(jq -r '.params.username // empty' "$INPUT_PAYLOAD")
+	bot_identity_icon_emoji_param=$(jq -r '.params.icon_emoji // empty' "$INPUT_PAYLOAD")
+	bot_identity_icon_url_param=$(jq -r '.params.icon_url // empty' "$INPUT_PAYLOAD")
+
+	if [[ -n "$bot_identity_username_param" || -n "$bot_identity_icon_emoji_param" || -n "$bot_identity_icon_url_param" ]]; then
+		if [[ "$DELIVERY_METHOD" != "api" ]]; then
+			echo "load_configuration:: params.username, params.icon_emoji, and params.icon_url require API delivery with a bot token, not webhook" >&2
+			return 1
+		fi
+	fi
+
+	return 0
+}
+
+# Resolve EPHEMERAL_USER from params when using API delivery
+#
+# Uses global variable: INPUT_PAYLOAD, DELIVERY_METHOD
+#
+# Side Effects:
+#   Unsets EPHEMERAL_USER when absent, exports when set with API delivery
+#
+# Returns:
+#   0 on success
+#   1 when ephemeral_user is set with webhook delivery
+_resolve_ephemeral_user() {
 	unset EPHEMERAL_USER 2>/dev/null || true
 	local ephemeral_user_param
 	ephemeral_user_param=$(jq -r '.params.ephemeral_user // empty' "$INPUT_PAYLOAD")
@@ -451,6 +538,19 @@ load_configuration() {
 		export EPHEMERAL_USER
 	fi
 
+	return 0
+}
+
+# Resolve DRY_RUN from params, environment, or default
+#
+# Uses global variable: INPUT_PAYLOAD
+#
+# Side Effects:
+#   Sets DRY_RUN
+#
+# Returns:
+#   0 always
+_resolve_dry_run() {
 	local params_dry_run
 	params_dry_run=$(jq -r '.params.dry_run // empty' "$INPUT_PAYLOAD")
 	if [[ -n "$params_dry_run" ]]; then
@@ -458,6 +558,39 @@ load_configuration() {
 	elif [[ -z "${DRY_RUN:-}" ]]; then
 		DRY_RUN="$DEFAULT_DRY_RUN"
 	fi
+
+	return 0
+}
+
+# Load configuration values from payload and environment variables
+#
+# Uses global variable: INPUT_PAYLOAD
+#
+# Side Effects:
+#   Exports SLACK_BOT_USER_OAUTH_TOKEN, WEBHOOK_URL, CHANNEL, DRY_RUN, DELIVERY_METHOD
+#   Sets and exports EPHEMERAL_USER when params.ephemeral_user is set, otherwise unsets EPHEMERAL_USER
+#
+# Returns:
+#   0 on success
+#   1 if required fields are missing
+load_configuration() {
+	if ! _resolve_delivery_method; then
+		return 1
+	fi
+
+	if ! _resolve_channel; then
+		return 1
+	fi
+
+	if ! _validate_bot_identity_params; then
+		return 1
+	fi
+
+	if ! _resolve_ephemeral_user; then
+		return 1
+	fi
+
+	_resolve_dry_run
 
 	export DRY_RUN
 	export SLACK_BOT_USER_OAUTH_TOKEN
@@ -475,6 +608,183 @@ load_configuration() {
 	[[ -z "${WEBHOOK_URL:-}" ]] && webhook_preview="empty"
 	[[ -n "${EPHEMERAL_USER:-}" ]] && ephemeral_preview="set"
 	echo "load_configuration:: method=${DELIVERY_METHOD} channel=${CHANNEL:-none} dry_run=${DRY_RUN} token=${token_preview} webhook=${webhook_preview} ephemeral=${ephemeral_preview}" >&2
+
+	return 0
+}
+
+# Validate block and attachment counts against Slack limits
+#
+# Arguments:
+#   $1 - blocks_file: path to JSON array file of blocks
+#   $2 - attachments_file: path to JSON array file of attachments
+#
+# Returns:
+#   0 when within limits
+#   1 when a limit is exceeded
+_validate_block_counts() {
+	local blocks_file="$1"
+	local attachments_file="$2"
+
+	if [[ -z "$blocks_file" ]] || [[ -z "$attachments_file" ]]; then
+		echo "_validate_block_counts:: blocks_file and attachments_file are required" >&2
+		return 1
+	fi
+
+	local block_count
+	block_count=$(jq '. | length' "$blocks_file")
+	if ((block_count > MAX_BLOCKS)); then
+		echo "parse_payload:: block count ($block_count) exceeds Slack's maximum of $MAX_BLOCKS blocks per message" >&2
+		echo "parse_payload:: See block limits: $DOC_URL_BLOCK_KIT_BLOCKS" >&2
+		return 1
+	fi
+
+	local attachment_count
+	attachment_count=$(jq '. | length' "$attachments_file")
+	if ((attachment_count > MAX_ATTACHMENTS)); then
+		echo "parse_payload:: attachment count ($attachment_count) exceeds Slack's maximum of $MAX_ATTACHMENTS attachments per message" >&2
+		echo "parse_payload:: See attachment limits: $DOC_URL_LEGACY_ATTACHMENTS" >&2
+		return 1
+	fi
+
+	local attachment_block_count=0
+	if ((attachment_count > 0)); then
+		attachment_block_count=$(jq '[.[] | .blocks | length] | add' "$attachments_file")
+	fi
+	local total_block_count=$((block_count + attachment_block_count))
+	if ((total_block_count > MAX_BLOCKS)); then
+		echo "parse_payload:: total block count ($total_block_count) exceeds Slack's maximum of $MAX_BLOCKS blocks per message" >&2
+		echo "parse_payload:: See block limits: $DOC_URL_BLOCK_KIT_BLOCKS" >&2
+		return 1
+	fi
+
+	return 0
+}
+
+# Validate params.thread.replies structure when present
+#
+# Arguments:
+#   $1 - thread_replies_raw: JSON from .params.thread.replies or empty
+#
+# Returns:
+#   0 when absent, empty, or structurally valid
+#   1 when invalid
+_validate_thread_replies() {
+	local thread_replies_raw="$1"
+
+	if [[ -z "$thread_replies_raw" || "$thread_replies_raw" == "null" ]]; then
+		return 0
+	fi
+
+	if ! echo "$thread_replies_raw" | jq -e 'type == "array"' >/dev/null 2>&1; then
+		echo "parse_payload:: thread.replies must be an array" >&2
+		return 1
+	fi
+
+	local reply_count
+	reply_count=$(echo "$thread_replies_raw" | jq 'length')
+	local ri
+	local reply_blocks
+	for ((ri = 0; ri < reply_count; ri++)); do
+		reply_blocks=$(echo "$thread_replies_raw" | jq ".[$ri].blocks // empty")
+		if [[ -z "$reply_blocks" || "$reply_blocks" == "null" ]]; then
+			echo "parse_payload:: thread.replies[$ri].blocks is required and must be non-empty" >&2
+			return 1
+		fi
+
+		if ! echo "$reply_blocks" | jq -e 'type == "array" and length > 0' >/dev/null 2>&1; then
+			echo "parse_payload:: thread.replies[$ri].blocks is required and must be non-empty" >&2
+			return 1
+		fi
+	done
+
+	return 0
+}
+
+# Build Slack API payload JSON from channel, block files, and optional fields
+#
+# Arguments:
+#   $1 - channel: channel id or name
+#   $2 - blocks_file: path to JSON array of blocks
+#   $3 - attachments_file: path to JSON array of attachments
+#   $4 - thread_ts: converted thread timestamp or empty
+#   $5 - text_field: params.text value or empty
+#   $6 - thread_replies_raw: JSON array string for thread replies or empty
+#
+# Uses global variables: INPUT_PAYLOAD, EPHEMERAL_USER when set
+#
+# Outputs:
+#   Writes complete Slack API payload JSON to stdout
+#
+# Returns:
+#   0 on success
+#   1 if text length exceeds MAX_TEXT_LENGTH
+_build_slack_payload() {
+	local channel="$1"
+	local blocks_file="$2"
+	local attachments_file="$3"
+	local thread_ts="$4"
+	local text_field="$5"
+	local thread_replies_raw="$6"
+
+	if [[ -z "$channel" ]]; then
+		echo "_build_slack_payload:: channel is required" >&2
+		return 1
+	fi
+
+	if [[ -z "$blocks_file" ]] || [[ -z "$attachments_file" ]]; then
+		echo "_build_slack_payload:: blocks_file and attachments_file are required" >&2
+		return 1
+	fi
+
+	local payload
+	payload=$(jq -n \
+		--arg channel "$channel" \
+		--slurpfile blocks "$blocks_file" \
+		--slurpfile attachments "$attachments_file" \
+		'{ "channel": $channel, "blocks": $blocks[0], "attachments": $attachments[0] }')
+
+	if [[ -n "${EPHEMERAL_USER:-}" ]]; then
+		payload=$(jq --arg user "$EPHEMERAL_USER" '. + {user: $user}' <<<"$payload")
+	fi
+
+	if [[ -n "$thread_ts" && "$thread_ts" != "null" && "$thread_ts" != "empty" ]]; then
+		payload=$(jq --arg thread_ts "$thread_ts" '. + {thread_ts: $thread_ts}' <<<"$payload")
+	fi
+
+	if [[ -n "$thread_replies_raw" && "$thread_replies_raw" != "null" ]]; then
+		local thread_replies_len
+		thread_replies_len=$(echo "$thread_replies_raw" | jq 'length')
+		if ((thread_replies_len > 0)); then
+			payload=$(jq --argjson replies "$thread_replies_raw" '. + {thread_replies: $replies}' <<<"$payload")
+		fi
+	fi
+
+	if [[ -n "$text_field" && "$text_field" != "null" && "$text_field" != "empty" ]]; then
+		local text_length=${#text_field}
+		if ((text_length > MAX_TEXT_LENGTH)); then
+			echo "parse_payload:: text field length ($text_length) exceeds Slack's maximum of $MAX_TEXT_LENGTH characters" >&2
+			return 1
+		fi
+		payload=$(jq --arg text "$text_field" '. + {text: $text}' <<<"$payload")
+	fi
+
+	local bot_identity_username
+	local bot_identity_icon_emoji
+	local bot_identity_icon_url
+	bot_identity_username=$(jq -r '.params.username // empty' "$INPUT_PAYLOAD")
+	bot_identity_icon_emoji=$(jq -r '.params.icon_emoji // empty' "$INPUT_PAYLOAD")
+	bot_identity_icon_url=$(jq -r '.params.icon_url // empty' "$INPUT_PAYLOAD")
+	if [[ -n "$bot_identity_username" ]]; then
+		payload=$(jq --arg username "$bot_identity_username" '. + {username: $username}' <<<"$payload")
+	fi
+	if [[ -n "$bot_identity_icon_emoji" ]]; then
+		payload=$(jq --arg icon_emoji "$bot_identity_icon_emoji" '. + {icon_emoji: $icon_emoji}' <<<"$payload")
+	fi
+	if [[ -n "$bot_identity_icon_url" ]]; then
+		payload=$(jq --arg icon_url "$bot_identity_icon_url" '. + {icon_url: $icon_url}' <<<"$payload")
+	fi
+
+	echo "$payload"
 
 	return 0
 }
@@ -546,44 +856,13 @@ process_blocks() {
 	attachment_count_debug=$(jq '. | length' "$ATTACHMENTS_FILE")
 	echo "process_blocks:: completed: ${block_count_debug} blocks, ${attachment_count_debug} attachments" >&2
 
-	# Validate block count against Slack's limit of 50 blocks per message
-	# Ref: https://docs.slack.dev/reference/block-kit/blocks
-	local block_count
-	block_count=$(jq '. | length' "$BLOCKS_FILE")
-	if ((block_count > MAX_BLOCKS)); then
-		echo "parse_payload:: block count ($block_count) exceeds Slack's maximum of $MAX_BLOCKS blocks per message" >&2
-		echo "parse_payload:: See block limits: $DOC_URL_BLOCK_KIT_BLOCKS" >&2
+	if ! _validate_block_counts "$BLOCKS_FILE" "$ATTACHMENTS_FILE"; then
 		return 1
 	fi
 
-	# Validate attachment count against Slack's limit of 20 attachments per message
-	# Ref: https://api.slack.com/reference/messaging/payload#legacy
-	# Note: While not deprecated, legacy attachments may change in future Slack updates
-	local attachment_count
-	attachment_count=$(jq '. | length' "$ATTACHMENTS_FILE")
-	if ((attachment_count > MAX_ATTACHMENTS)); then
-		echo "parse_payload:: attachment count ($attachment_count) exceeds Slack's maximum of $MAX_ATTACHMENTS attachments per message" >&2
-		echo "parse_payload:: See attachment limits: $DOC_URL_LEGACY_ATTACHMENTS" >&2
-		return 1
-	fi
-
-	# Count blocks in attachments (each attachment can contain blocks)
-	local attachment_block_count=0
-	if ((attachment_count > 0)); then
-		attachment_block_count=$(jq '[.[] | .blocks | length] | add' "$ATTACHMENTS_FILE")
-	fi
-	local total_block_count=$((block_count + attachment_block_count))
-	if ((total_block_count > MAX_BLOCKS)); then
-		echo "parse_payload:: total block count ($total_block_count) exceeds Slack's maximum of $MAX_BLOCKS blocks per message" >&2
-		echo "parse_payload:: See block limits: $DOC_URL_BLOCK_KIT_BLOCKS" >&2
-		return 1
-	fi
-
-	# Read thread_ts from params
 	local thread_ts
 	thread_ts=$(jq -r '.params.thread_ts // ""' "$INPUT_PAYLOAD")
 
-	# Convert thread_ts if it's a permalink
 	if [[ -n "$thread_ts" && "$thread_ts" != "null" && "$thread_ts" != "empty" ]]; then
 		local converted_ts
 		converted_ts=$(convert_thread_ts "$thread_ts")
@@ -595,73 +874,99 @@ process_blocks() {
 		thread_ts="$converted_ts"
 	fi
 
-	# Validate thread.replies if present
 	local thread_replies_raw
 	thread_replies_raw=$(jq '.params.thread.replies // empty' "$INPUT_PAYLOAD")
-	if [[ -n "$thread_replies_raw" && "$thread_replies_raw" != "null" ]]; then
-		if ! echo "$thread_replies_raw" | jq -e 'type == "array"' >/dev/null 2>&1; then
-			echo "parse_payload:: thread.replies must be an array" >&2
-			return 1
-		fi
-
-		local reply_count
-		reply_count=$(echo "$thread_replies_raw" | jq 'length')
-		for ((ri = 0; ri < reply_count; ri++)); do
-			local reply_blocks
-			reply_blocks=$(echo "$thread_replies_raw" | jq ".[$ri].blocks // empty")
-			if [[ -z "$reply_blocks" || "$reply_blocks" == "null" ]]; then
-				echo "parse_payload:: thread.replies[$ri].blocks is required and must be non-empty" >&2
-				return 1
-			fi
-
-			if ! echo "$reply_blocks" | jq -e 'type == "array" and length > 0' >/dev/null 2>&1; then
-				echo "parse_payload:: thread.replies[$ri].blocks is required and must be non-empty" >&2
-				return 1
-			fi
-		done
+	if ! _validate_thread_replies "$thread_replies_raw"; then
+		return 1
 	fi
 
-	local payload
-	payload=$(jq -n \
-		--arg channel "$CHANNEL" \
-		--slurpfile blocks "$BLOCKS_FILE" \
-		--slurpfile attachments "$ATTACHMENTS_FILE" \
-		'{ "channel": $channel, "blocks": $blocks[0], "attachments": $attachments[0] }')
-
-	# Add user for chat.postEphemeral when params.ephemeral_user was set in load_configuration
-	if [[ -n "${EPHEMERAL_USER:-}" ]]; then
-		payload=$(jq --arg user "$EPHEMERAL_USER" '. + {user: $user}' <<<"$payload")
-	fi
-
-	# Add thread_ts to payload if provided and not empty
-	if [[ -n "$thread_ts" && "$thread_ts" != "null" && "$thread_ts" != "empty" ]]; then
-		payload=$(jq --arg thread_ts "$thread_ts" '. + {thread_ts: $thread_ts}' <<<"$payload")
-	fi
-
-	# Pass thread.replies through to parsed output for main to process
-	if [[ -n "$thread_replies_raw" && "$thread_replies_raw" != "null" ]]; then
-		local thread_replies_len
-		thread_replies_len=$(echo "$thread_replies_raw" | jq 'length')
-		if ((thread_replies_len > 0)); then
-			payload=$(jq --argjson replies "$thread_replies_raw" '. + {thread_replies: $replies}' <<<"$payload")
-		fi
-	fi
-
-	# Validate message text field if present, max 40,000 characters
-	# Ref: https://api.slack.com/changelog/2018-04-truncating-really-long-messages
 	local text_field
 	text_field=$(jq -r '.params.text // empty' "$INPUT_PAYLOAD")
-	if [[ -n "$text_field" && "$text_field" != "null" && "$text_field" != "empty" ]]; then
-		local text_length=${#text_field}
-		if ((text_length > MAX_TEXT_LENGTH)); then
-			echo "parse_payload:: text field length ($text_length) exceeds Slack's maximum of $MAX_TEXT_LENGTH characters" >&2
-			return 1
-		fi
-		# Add text field to payload if provided
-		payload=$(jq --arg text "$text_field" '. + {text: $text}' <<<"$payload")
+
+	local payload
+	if ! payload=$(_build_slack_payload "$CHANNEL" "$BLOCKS_FILE" "$ATTACHMENTS_FILE" "$thread_ts" "$text_field" "$thread_replies_raw"); then
+		return 1
 	fi
 
 	echo "$payload"
+
+	return 0
+}
+
+# Resolve named or invalid color strings to hex for legacy attachments
+#
+# Arguments:
+#   $1 - block_color: color string, may be empty, hex, or named token
+#
+# Outputs:
+#   Writes resolved hex color or empty string to stdout
+#
+# Returns:
+#   0 always
+_resolve_block_color() {
+	local block_color="$1"
+
+	if [[ -z "$block_color" ]]; then
+		echo ""
+		return 0
+	fi
+
+	if [[ "$block_color" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
+		echo "$block_color"
+		return 0
+	fi
+
+	case "$block_color" in
+	"danger") echo "$DANGER_COLOR" ;;
+	"success") echo "$SUCCESS_COLOR" ;;
+	"warning") echo "$WARN_COLOR" ;;
+	*) echo "$DANGER_COLOR" ;;
+	esac
+
+	return 0
+}
+
+# Parse block_item JSON into type, value, and optional color
+#
+# Arguments:
+#   $1 - block_item: JSON object in type-field or single-key format
+#
+# Side Effects:
+#   Sets globals _EXTRACT_BLOCK_TYPE, _EXTRACT_BLOCK_VALUE, _EXTRACT_BLOCK_COLOR
+#   Caller should copy these to locals immediately
+#
+# Returns:
+#   0 on success
+#   1 if block_item is empty
+_extract_block_type_and_value() {
+	local block_item="$1"
+
+	if [[ -z "$block_item" ]]; then
+		echo "_extract_block_type_and_value:: block_item is required" >&2
+		return 1
+	fi
+
+	if jq -e '.type' <<<"$block_item" >/dev/null 2>&1; then
+		_EXTRACT_BLOCK_TYPE=$(jq -r '.type' <<<"$block_item")
+		_EXTRACT_BLOCK_VALUE=$(jq 'del(.type, .color)' <<<"$block_item")
+		_EXTRACT_BLOCK_COLOR=$(jq -r '.color // empty' <<<"$block_item")
+
+		if [[ "$_EXTRACT_BLOCK_TYPE" == "section" ]]; then
+			if ! jq -e '.type' <<<"$_EXTRACT_BLOCK_VALUE" >/dev/null 2>&1; then
+				if jq -e '.text' <<<"$_EXTRACT_BLOCK_VALUE" >/dev/null 2>&1; then
+					_EXTRACT_BLOCK_VALUE=$(jq '. + {type: "text"}' <<<"$_EXTRACT_BLOCK_VALUE")
+				elif jq -e '.fields' <<<"$_EXTRACT_BLOCK_VALUE" >/dev/null 2>&1; then
+					_EXTRACT_BLOCK_VALUE=$(jq '. + {type: "fields"}' <<<"$_EXTRACT_BLOCK_VALUE")
+				fi
+			fi
+		fi
+	else
+		local block_entry
+		block_entry=$(jq -c 'to_entries[0]' <<<"$block_item")
+		_EXTRACT_BLOCK_TYPE=$(jq -r '.key' <<<"$block_entry")
+		_EXTRACT_BLOCK_VALUE=$(jq '.value | del(.color)' <<<"$block_entry")
+		_EXTRACT_BLOCK_COLOR=$(jq -r '.value.color // empty' <<<"$block_entry")
+	fi
 
 	return 0
 }
@@ -691,10 +996,17 @@ _process_blocks_append_block() {
 		return 1
 	fi
 
+	if ! _extract_block_type_and_value "$block_item"; then
+		return 1
+	fi
+
 	local block_type
 	local block_value
 	local block_color
 	local dest
+	block_type="$_EXTRACT_BLOCK_TYPE"
+	block_value="$_EXTRACT_BLOCK_VALUE"
+	block_color="$_EXTRACT_BLOCK_COLOR"
 
 	# Allocate a per-block output file and set CREATE_BLOCK_OUTPUT_FILE for create_block
 	local create_block_out
@@ -705,29 +1017,6 @@ _process_blocks_append_block() {
 	# Allocate a temp file for in-place jq updates to BLOCKS_FILE / ATTACHMENTS_FILE
 	local merge_tmp
 	merge_tmp=$(mktemp "$_SLACK_WORKSPACE/process_blocks.merge_tmp.XXXXXX")
-
-	# Check if block uses the "type" field format (Slack API format) or the key-based format
-	if jq -e '.type' <<<"$block_item" >/dev/null 2>&1; then
-		block_type=$(jq -r '.type' <<<"$block_item")
-		block_value=$(jq 'del(.type, .color)' <<<"$block_item")
-		block_color=$(jq -r '.color // empty' <<<"$block_item")
-
-		if [[ "$block_type" == "section" ]]; then
-			if ! jq -e '.type' <<<"$block_value" >/dev/null 2>&1; then
-				if jq -e '.text' <<<"$block_value" >/dev/null 2>&1; then
-					block_value=$(jq '. + {type: "text"}' <<<"$block_value")
-				elif jq -e '.fields' <<<"$block_value" >/dev/null 2>&1; then
-					block_value=$(jq '. + {type: "fields"}' <<<"$block_value")
-				fi
-			fi
-		fi
-	else
-		local block_entry
-		block_entry=$(jq -c 'to_entries[0]' <<<"$block_item")
-		block_type=$(jq -r '.key' <<<"$block_entry")
-		block_value=$(jq '.value | del(.color)' <<<"$block_entry")
-		block_color=$(jq -r '.value.color // empty' <<<"$block_entry")
-	fi
 
 	if ! _validate_block_input_size "$block_value" "$block_type"; then
 		echo "_process_blocks_append_block:: block input too large for type '$block_type'" >&2
@@ -765,12 +1054,7 @@ _process_blocks_append_block() {
 
 	if [[ -n "$block_color" ]] || [[ "$block_type" == "table" ]]; then
 		if [[ -n "$block_color" ]] && [[ ! "$block_color" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
-			case "$block_color" in
-			"danger") block_color="$DANGER_COLOR" ;;
-			"success") block_color="$SUCCESS_COLOR" ;;
-			"warning") block_color="$WARN_COLOR" ;;
-			*) block_color="$DANGER_COLOR" ;;
-			esac
+			block_color=$(_resolve_block_color "$block_color")
 		fi
 		jq --slurpfile block "$CREATE_BLOCK_OUTPUT_FILE" \
 			--arg color "${block_color:-}" \
