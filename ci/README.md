@@ -1,5 +1,25 @@
 # CI Scripts
 
+## GitHub Actions
+
+Scripts here and the root `Makefile` are wired into three workflows under [.github/workflows/](../.github/workflows/):
+
+| Workflow                                            | When it runs                                     | Role                                                                          |
+| --------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------- |
+| [lint.yaml](../.github/workflows/lint.yaml)         | `pull_request`, push to `main`                   | Install shellcheck v0.11.0, then `make lint`                                  |
+| [run-bats.yaml](../.github/workflows/run-bats.yaml) | `pull_request`                                   | Install `bats`, `jq`, and pinned `yq` v4.45.1, then `./ci/run-bats.sh`        |
+| [build.yaml](../.github/workflows/build.yaml)       | `pull_request` opened, synchronized, or reopened | Matrix of Docker builds via `./ci/build.sh` with healthcheck and test message |
+
+### Concurrency
+
+Each workflow sets `concurrency.group` to the workflow name plus `github.ref` and `cancel-in-progress: true`, so a newer push cancels in-flight runs for the same ref.
+
+### Caching
+
+- Lint: `actions/cache@v4` on `/usr/local/bin/shellcheck` with key `shellcheck-v0.11.0-linux-x86_64`. The release tarball install runs only when the cache misses.
+- Bats: `actions/cache@v4` on `/usr/local/bin/yq` with key `yq-v4.45.1-linux-amd64`. The `wget` install for `yq` runs only when the cache misses. Checkout uses `fetch-depth: 0` so `run-bats.sh` can diff against the PR base branch.
+- Build: The build job exports `DOCKER_CACHE_FROM` and `DOCKER_CACHE_TO` as BuildKit `type=gha` backends with `mode=max` for export and a `scope` per matrix label (`main`, `concourse`, `test`, `remote`) so each Dockerfile keeps its own cache. See the [build.sh](#buildsh) section for how `ci/build.sh` consumes those variables.
+
 ## run-bats.sh
 
 Detects changed shell files and runs corresponding bats tests.
@@ -16,7 +36,7 @@ Detects changed shell files and runs corresponding bats tests.
 
 #### GitHub Actions
 
-The workflow [.github/workflows/run-bats.yaml](../.github/workflows/run-bats.yaml) runs this script on pull requests with `GITHUB_BASE_REF` set from the event. Linting uses [.github/workflows/lint.yaml](../.github/workflows/lint.yaml) and runs `make lint` (shellcheck on all shell files), not `run-bats.sh`.
+On pull requests, [.github/workflows/run-bats.yaml](../.github/workflows/run-bats.yaml) runs this script with `GITHUB_BASE_REF` taken from the event. Linting is a separate workflow, [.github/workflows/lint.yaml](../.github/workflows/lint.yaml), which runs `make lint` over all shell files. Workflow-level caching and concurrency are described in [GitHub Actions](#github-actions).
 
 #### Local Development
 
@@ -50,6 +70,8 @@ If `tests/smoke-tests.sh` changes, the script runs that test file directly.
 ## build.sh
 
 Builds the send-to-slack Docker image and optionally runs checks.
+
+On GitHub Actions, [.github/workflows/build.yaml](../.github/workflows/build.yaml) invokes this script with `--gha`, optional `--dockerfile`, and GHA Docker layer cache environment variables. See [GitHub Actions](#github-actions).
 
 ### Behavior
 
@@ -92,6 +114,9 @@ GitHub Actions mode:
 - `DOCKER_IMAGE_NAME` (default: send-to-slack)
 - `DOCKER_IMAGE_TAG` (default: local)
 - `NO_CACHE` (default: true)
+- `DOCKER_CACHE_FROM` (optional): BuildKit `--cache-from` value, for example `type=gha,scope=main`. When set, `NO_CACHE` is forced off for that build so layers can be reused.
+- `DOCKER_CACHE_TO` (optional): BuildKit `--cache-to` value, for example `type=gha,mode=max,scope=main`
+- When either `DOCKER_CACHE_FROM` or `DOCKER_CACHE_TO` is set, the script runs `docker buildx build --load` instead of `docker build` so GHA cache backends work with the Buildx instance from the workflow.
 - `CHANNEL`, `SLACK_BOT_USER_OAUTH_TOKEN` (required for `--send-test-message`)
 
 ### GitHub Actions variables, used with `--gha`
