@@ -4,8 +4,6 @@
 # For notification resources, we emit the packaged VERSION so downstream succeeds
 # Ref: https://concourse-ci.org/implementing-resource-types.html#resource-check
 #
-set -eo pipefail
-umask 077
 
 # Redirect stdout to stderr for logging, required for Concourse to capture output.
 exec 3>&1
@@ -64,5 +62,8 @@ main() {
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+	set -eo pipefail
+	umask 077
 	main "$@"
+	exit $?
 fi
