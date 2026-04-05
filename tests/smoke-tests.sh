@@ -292,7 +292,7 @@ smoke_parse_payload_capture() {
 }
 
 @test "smoke_test:: accepts 100x20 table without hitting ARG_MAX" {
-	source "$GIT_ROOT/lib/blocks/table.sh"
+	source "$GIT_ROOT/lib/block-kit/blocks/table.sh"
 
 	local table_output_file
 	table_output_file=$(mktemp "$_SLACK_WORKSPACE/table-argmax.XXXXXX")

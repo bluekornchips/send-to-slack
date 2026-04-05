@@ -9,7 +9,7 @@ setup_file() {
 		fail "Failed to get git root"
 	fi
 
-	SCRIPT="$GIT_ROOT/lib/blocks/video.sh"
+	SCRIPT="$GIT_ROOT/lib/block-kit/blocks/video.sh"
 	EXAMPLES_FILE="$GIT_ROOT/examples/video.yaml"
 
 	if [[ ! -f "$SCRIPT" ]]; then

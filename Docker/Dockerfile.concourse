@@ -30,6 +30,7 @@ RUN chmod +x /opt/resource/check /opt/resource/in /opt/resource/out && \
     chmod +x /opt/resource/send-to-slack && \
     chmod +x /opt/resource/lib/*.sh && \
     chmod +x /opt/resource/lib/parse/*.sh && \
-    chmod +x /opt/resource/lib/blocks/*.sh
+    chmod +x /opt/resource/lib/block-kit/create-blocks.sh && \
+    chmod +x /opt/resource/lib/block-kit/blocks/*.sh
 
 ENTRYPOINT ["/bin/bash"]

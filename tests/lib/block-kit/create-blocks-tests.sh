@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 #
-# Tests for lib/create-blocks.sh
+# Tests for lib/block-kit/create-blocks.sh
 #
 
 setup_file() {
@@ -9,7 +9,7 @@ setup_file() {
 		fail "setup_file:: Failed to get git root"
 	fi
 
-	SCRIPT="$GIT_ROOT/lib/create-blocks.sh"
+	SCRIPT="$GIT_ROOT/lib/block-kit/create-blocks.sh"
 	if [[ ! -f "$SCRIPT" ]]; then
 		fail "setup_file:: Script not found: $SCRIPT"
 	fi

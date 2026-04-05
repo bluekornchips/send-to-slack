@@ -512,7 +512,7 @@ parse_payload() {
 
 	local _lib_dir
 	_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-	source "${_lib_dir}/create-blocks.sh"
+	source "${_lib_dir}/block-kit/create-blocks.sh"
 
 	INPUT_PAYLOAD="$payload_file"
 	export INPUT_PAYLOAD

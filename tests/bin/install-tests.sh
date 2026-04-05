@@ -71,6 +71,8 @@ teardown() {
 	[[ -f "${actual_install_root}/lib/parse-payload.sh" ]]
 	[[ -f "${actual_install_root}/lib/parse/payload.sh" ]]
 	[[ -f "${actual_install_root}/lib/parse/blocks.sh" ]]
+	[[ -f "${actual_install_root}/lib/block-kit/create-blocks.sh" ]]
+	[[ -f "${actual_install_root}/lib/block-kit/blocks/table.sh" ]]
 	[[ -f "${actual_install_root}/lib/crosspost.sh" ]]
 	[[ -f "${actual_install_root}/lib/replies.sh" ]]
 
@@ -134,6 +136,8 @@ teardown() {
 	[[ -f "${actual_install_root}/lib/parse-payload.sh" ]]
 	[[ -f "${actual_install_root}/lib/parse/payload.sh" ]]
 	[[ -f "${actual_install_root}/lib/parse/blocks.sh" ]]
+	[[ -f "${actual_install_root}/lib/block-kit/create-blocks.sh" ]]
+	[[ -f "${actual_install_root}/lib/block-kit/blocks/table.sh" ]]
 
 	rm -rf "${actual_install_root}"
 }
@@ -225,12 +229,13 @@ _run_check_dependencies_isolated() {
 	temp_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/send-to-slack-source.XXXXXX")
 	source_dir="${temp_dir}/send-to-slack-main"
 
-	mkdir -p "${source_dir}/bin" "${source_dir}/lib/blocks" "${source_dir}/lib/parse"
+	mkdir -p "${source_dir}/bin" "${source_dir}/lib/block-kit/blocks" "${source_dir}/lib/parse"
 
 	cp "${GIT_ROOT}/bin/send-to-slack.sh" "${source_dir}/bin/send-to-slack.sh"
 	cp "${GIT_ROOT}/lib"/*.sh "${source_dir}/lib/"
 	cp "${GIT_ROOT}/lib/parse"/*.sh "${source_dir}/lib/parse/"
-	cp "${GIT_ROOT}/lib/blocks"/*.sh "${source_dir}/lib/blocks/"
+	cp "${GIT_ROOT}/lib/block-kit/create-blocks.sh" "${source_dir}/lib/block-kit/"
+	cp "${GIT_ROOT}/lib/block-kit/blocks"/*.sh "${source_dir}/lib/block-kit/blocks/"
 	if [[ -f "${GIT_ROOT}/VERSION" ]]; then
 		cp "${GIT_ROOT}/VERSION" "${source_dir}/VERSION"
 	fi
@@ -261,6 +266,8 @@ _run_check_dependencies_isolated() {
 	[[ -f "${actual_install_root}/lib/parse-payload.sh" ]]
 	[[ -f "${actual_install_root}/lib/parse/payload.sh" ]]
 	[[ -f "${actual_install_root}/lib/parse/blocks.sh" ]]
+	[[ -f "${actual_install_root}/lib/block-kit/create-blocks.sh" ]]
+	[[ -f "${actual_install_root}/lib/block-kit/blocks/table.sh" ]]
 	[[ -f "${actual_install_root}/lib/crosspost.sh" ]]
 	[[ -f "${actual_install_root}/lib/replies.sh" ]]
 	if [[ -f "${source_dir}/VERSION" ]]; then

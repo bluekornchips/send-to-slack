@@ -11,7 +11,7 @@ setup_file() {
 		fail "Failed to get git root"
 	fi
 
-	SCRIPT="$GIT_ROOT/lib/blocks/header.sh"
+	SCRIPT="$GIT_ROOT/lib/block-kit/blocks/header.sh"
 	EXAMPLES_FILE="$GIT_ROOT/examples/header.yaml"
 
 	if [[ ! -f "$SCRIPT" ]]; then

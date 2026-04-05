@@ -212,8 +212,13 @@ install_from_source() {
 		return 1
 	fi
 
-	if [[ ! -d "${source_dir}/lib/blocks" ]]; then
-		echo "install_from_source:: missing lib/blocks directory" >&2
+	if [[ ! -d "${source_dir}/lib/block-kit/blocks" ]]; then
+		echo "install_from_source:: missing lib/block-kit/blocks directory" >&2
+		return 1
+	fi
+
+	if [[ ! -f "${source_dir}/lib/block-kit/create-blocks.sh" ]]; then
+		echo "install_from_source:: missing lib/block-kit/create-blocks.sh" >&2
 		return 1
 	fi
 
@@ -244,7 +249,7 @@ install_from_source() {
 		fi
 	fi
 
-	if ! install -d -m 755 "${install_root}/lib/blocks" "${install_root}/lib/parse" "$(dirname "$target_binary")"; then
+	if ! install -d -m 755 "${install_root}/lib/block-kit/blocks" "${install_root}/lib/parse" "$(dirname "$target_binary")"; then
 		echo "install_from_source:: failed to create installation directories" >&2
 		return 1
 	fi
@@ -269,8 +274,13 @@ install_from_source() {
 		return 1
 	fi
 
-	if ! cp "${source_dir}/lib/blocks"/*.sh "${install_root}/lib/blocks/"; then
-		echo "install_from_source:: failed to copy lib/blocks files" >&2
+	if ! cp "${source_dir}/lib/block-kit/create-blocks.sh" "${install_root}/lib/block-kit/"; then
+		echo "install_from_source:: failed to copy lib/block-kit/create-blocks.sh" >&2
+		return 1
+	fi
+
+	if ! cp "${source_dir}/lib/block-kit/blocks"/*.sh "${install_root}/lib/block-kit/blocks/"; then
+		echo "install_from_source:: failed to copy lib/block-kit/blocks files" >&2
 		return 1
 	fi
 

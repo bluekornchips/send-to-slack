@@ -12,16 +12,16 @@ WARN_COLOR="#FFC107"    # Yellow
 # Files
 ########################################################
 
-RICH_TEXT_BLOCK_FILE="lib/blocks/rich-text.sh"
-TABLE_BLOCK_FILE="lib/blocks/table.sh"
-SECTION_BLOCK_FILE="lib/blocks/section.sh"
-HEADER_BLOCK_FILE="lib/blocks/header.sh"
-CONTEXT_BLOCK_FILE="lib/blocks/context.sh"
-DIVIDER_BLOCK_FILE="lib/blocks/divider.sh"
-MARKDOWN_BLOCK_FILE="lib/blocks/markdown.sh"
-ACTIONS_BLOCK_FILE="lib/blocks/actions.sh"
-IMAGE_BLOCK_FILE="lib/blocks/image.sh"
-VIDEO_BLOCK_FILE="lib/blocks/video.sh"
+RICH_TEXT_BLOCK_FILE="lib/block-kit/blocks/rich-text.sh"
+TABLE_BLOCK_FILE="lib/block-kit/blocks/table.sh"
+SECTION_BLOCK_FILE="lib/block-kit/blocks/section.sh"
+HEADER_BLOCK_FILE="lib/block-kit/blocks/header.sh"
+CONTEXT_BLOCK_FILE="lib/block-kit/blocks/context.sh"
+DIVIDER_BLOCK_FILE="lib/block-kit/blocks/divider.sh"
+MARKDOWN_BLOCK_FILE="lib/block-kit/blocks/markdown.sh"
+ACTIONS_BLOCK_FILE="lib/block-kit/blocks/actions.sh"
+IMAGE_BLOCK_FILE="lib/block-kit/blocks/image.sh"
+VIDEO_BLOCK_FILE="lib/block-kit/blocks/video.sh"
 
 # Other scripts
 FILE_UPLOAD_SCRIPT="lib/file-upload.sh"

@@ -9,7 +9,7 @@ setup_file() {
 		fail "Failed to get git root"
 	fi
 
-	SCRIPT="$GIT_ROOT/lib/blocks/rich-text.sh"
+	SCRIPT="$GIT_ROOT/lib/block-kit/blocks/rich-text.sh"
 	EXAMPLES_FILE="$GIT_ROOT/examples/rich-text.yaml"
 	SEND_TO_SLACK_SCRIPT="$GIT_ROOT/bin/send-to-slack.sh"
 
