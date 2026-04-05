@@ -29,6 +29,7 @@ setup_file() {
 setup() {
 	source "$GIT_ROOT/lib/slack/api.sh"
 	source "$GIT_ROOT/lib/metadata.sh"
+	source "$GIT_ROOT/lib/health-check.sh"
 	source "$SCRIPT"
 
 	# Source lib/parse/payload.sh for parse_payload and process_blocks
@@ -482,7 +483,7 @@ create_test_payload() {
 
 	run "$SCRIPT" -file
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "process_input_to_file::"
+	echo "$output" | grep -q "parse_main_args::"
 	echo "$output" | grep -q "requires a file path argument"
 }
 
@@ -490,7 +491,7 @@ create_test_payload() {
 
 	run "$SCRIPT" --file
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "process_input_to_file::"
+	echo "$output" | grep -q "parse_main_args::"
 	echo "$output" | grep -q "requires a file path argument"
 }
 
@@ -544,7 +545,7 @@ create_test_payload() {
 
 	run "$SCRIPT" -file "$TEST_PAYLOAD_FILE" -file "$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "process_input_to_file::"
+	echo "$output" | grep -q "parse_main_args::"
 	echo "$output" | grep -q "can only be specified once"
 }
 
@@ -552,7 +553,7 @@ create_test_payload() {
 
 	run "$SCRIPT" --unknown-option
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "process_input_to_file::"
+	echo "$output" | grep -q "parse_main_args::"
 	echo "$output" | grep -q "unknown option"
 }
 

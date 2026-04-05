@@ -20,7 +20,7 @@ COPY . /tmp/send-to-slack
 RUN set -euo pipefail; \
         install -d -m 755 /usr/local/send-to-slack/lib/slack/utils /usr/local/send-to-slack/lib/slack/block-kit/blocks /usr/local/send-to-slack/lib/parse /usr/local/bin; \
         install -m 755 /tmp/send-to-slack/bin/send-to-slack.sh /usr/local/send-to-slack/send-to-slack; \
-        install -m 755 /tmp/send-to-slack/lib/metadata.sh /usr/local/send-to-slack/lib/; \
+        install -m 755 /tmp/send-to-slack/lib/metadata.sh /tmp/send-to-slack/lib/health-check.sh /tmp/send-to-slack/lib/get-version.sh /usr/local/send-to-slack/lib/; \
         install -m 755 /tmp/send-to-slack/lib/parse/*.sh /usr/local/send-to-slack/lib/parse/; \
         install -m 755 /tmp/send-to-slack/lib/slack/api.sh /tmp/send-to-slack/lib/slack/crosspost.sh /tmp/send-to-slack/lib/slack/replies.sh /usr/local/send-to-slack/lib/slack/; \
         install -m 755 /tmp/send-to-slack/lib/slack/utils/*.sh /usr/local/send-to-slack/lib/slack/utils/; \

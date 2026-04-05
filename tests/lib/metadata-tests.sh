@@ -128,3 +128,50 @@ setup() {
 	echo "$METADATA" | jq -e '.[] | select(.name == "payload") | .value | fromjson | .blocks | length > 0' >/dev/null
 	echo "$METADATA" | jq -e '[.[] | .name] | contains(["payload_note"]) | not' >/dev/null
 }
+
+########################################################
+# emit_concourse_output
+########################################################
+
+@test "emit_concourse_output:: stdout JSON has version timestamp only when message ts empty" {
+	METADATA='[]'
+
+	run emit_concourse_output "2026-04-05T12:00:00Z" ""
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.version | has("timestamp")' >/dev/null
+	echo "$output" | jq -e '.version | has("message_ts") | not' >/dev/null
+	echo "$output" | jq -e '.metadata == []' >/dev/null
+}
+
+@test "emit_concourse_output:: stdout JSON includes message_ts when provided" {
+	METADATA='[{"name":"x","value":"y"}]'
+
+	run emit_concourse_output "2026-04-05T12:00:00Z" "123.456"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.version.timestamp == "2026-04-05T12:00:00Z"' >/dev/null
+	echo "$output" | jq -e '.version.message_ts == "123.456"' >/dev/null
+	echo "$output" | jq -e '.metadata | length == 1' >/dev/null
+}
+
+@test "emit_concourse_output:: writes to SEND_TO_SLACK_OUTPUT when set" {
+	METADATA='[]'
+	local out_file
+	out_file=$(mktemp)
+	export SEND_TO_SLACK_OUTPUT="$out_file"
+
+	run emit_concourse_output "2026-04-05T12:00:00Z" ""
+	[[ "$status" -eq 0 ]]
+	[[ -f "$out_file" ]]
+	jq -e '.version.timestamp == "2026-04-05T12:00:00Z"' "$out_file" >/dev/null
+	echo "$output" | grep -q "emit_concourse_output:: output written to ${out_file}"
+
+	rm -f "$out_file"
+	unset SEND_TO_SLACK_OUTPUT
+}
+
+@test "emit_concourse_output:: returns 1 when METADATA is not valid JSON" {
+	METADATA='not json'
+
+	run emit_concourse_output "2026-04-05T12:00:00Z" ""
+	[[ "$status" -eq 1 ]]
+}
