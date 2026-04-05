@@ -43,6 +43,7 @@ See the [examples/](../examples/) directory for complete Concourse pipeline exam
 - File uploads
 - Thread replies (multiple messages in a thread)
 - Updating an existing message with `params.message_ts` and `chat.update` ([update-message.yaml](../examples/update-message.yaml))
+- Per-message bot display name and avatar ([bot-identity.yaml](../examples/bot-identity.yaml))
 - Incoming Webhooks ([webhook-slack.yaml](../examples/webhook-slack.yaml))
 - Interactive components
 
@@ -75,10 +76,12 @@ export CHANNEL="#your-channel"
 export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/<workspace-id>/<app-id>/<token>"
 # Optional secondary channel for pipelines that reference side_channel.
 export SIDE_CHANNEL=""
+# Optional Slack user ID for examples/ephemeral.yaml.
+export EPHEMERAL_USER=""
 make concourse-load-examples
 ```
 
-`make concourse-load-examples` passes `SLACK_BOT_USER_OAUTH_TOKEN`, `CHANNEL`, `SIDE_CHANNEL`, `SLACK_WEBHOOK_URL`, and `TAG` into `fly set-pipeline -v` for each `examples/*.yaml` file. `TAG` defaults to the value in the repo `VERSION` file when you do not export `TAG`.
+`make concourse-load-examples` passes `SLACK_BOT_USER_OAUTH_TOKEN`, `CHANNEL`, `SIDE_CHANNEL`, `SLACK_WEBHOOK_URL`, `EPHEMERAL_USER`, and `TAG` into `fly set-pipeline -v` for each `examples/*.yaml` file. `TAG` defaults to the value in the repo `VERSION` file when you do not export `TAG`.
 
 To run every example pipeline end-to-end in one go, use `make concourse-run-all-examples`; see [ci/README.md](../ci/README.md). If `SLACK_WEBHOOK_URL` is unset, the webhook example job is skipped automatically.
 

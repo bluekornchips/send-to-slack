@@ -202,6 +202,16 @@ install_from_source() {
 		return 1
 	fi
 
+	if [[ ! -f "${source_dir}/lib/parse/payload.sh" ]]; then
+		echo "install_from_source:: missing lib/parse/payload.sh" >&2
+		return 1
+	fi
+
+	if [[ ! -f "${source_dir}/lib/parse/blocks.sh" ]]; then
+		echo "install_from_source:: missing lib/parse/blocks.sh" >&2
+		return 1
+	fi
+
 	if [[ ! -d "${source_dir}/lib/blocks" ]]; then
 		echo "install_from_source:: missing lib/blocks directory" >&2
 		return 1
@@ -234,7 +244,7 @@ install_from_source() {
 		fi
 	fi
 
-	if ! install -d -m 755 "${install_root}/lib/blocks" "${install_root}/bin" "$(dirname "$target_binary")"; then
+	if ! install -d -m 755 "${install_root}/lib/blocks" "${install_root}/lib/parse" "${install_root}/bin" "$(dirname "$target_binary")"; then
 		echo "install_from_source:: failed to create installation directories" >&2
 		return 1
 	fi
@@ -251,6 +261,11 @@ install_from_source() {
 
 	if ! cp "${source_dir}/lib"/*.sh "${install_root}/lib/"; then
 		echo "install_from_source:: failed to copy lib files" >&2
+		return 1
+	fi
+
+	if ! cp "${source_dir}/lib/parse"/*.sh "${install_root}/lib/parse/"; then
+		echo "install_from_source:: failed to copy lib/parse files" >&2
 		return 1
 	fi
 

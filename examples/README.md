@@ -6,6 +6,7 @@ This directory contains complete configuration examples for all supported Slack 
 
 - [acceptance.yaml](acceptance.yaml) - Acceptance test examples
 - [blocks-from-file.yaml](blocks-from-file.yaml) - Load individual blocks from JSON files
+- [bot-identity.yaml](bot-identity.yaml) - Per-message `username`, `icon_emoji`, and `icon_url`; requires `chat:write.customize` scope
 - [actions.yaml](actions.yaml) - Interactive action blocks
 - [context.yaml](context.yaml) - Context block examples
 - [crosspost.yaml](crosspost.yaml) - Crossposting to multiple channels with full Block Kit support

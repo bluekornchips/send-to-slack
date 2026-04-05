@@ -462,7 +462,7 @@ update_message() {
 	if ! update_body=$(echo "$payload" | jq \
 		--arg ch "$channel" \
 		--arg ts "$message_ts" \
-		'del(.thread_ts) | .channel = $ch | .ts = $ts' 2>/dev/null); then
+		'del(.thread_ts, .username, .icon_emoji, .icon_url) | .channel = $ch | .ts = $ts' 2>/dev/null); then
 		echo "update_message:: failed to build chat.update JSON body" >&2
 		return 1
 	fi

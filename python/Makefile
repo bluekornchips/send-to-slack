@@ -16,5 +16,5 @@ python-server: check-python-deps
 	if [ ! -d .venv ]; then \
 		python3 -m venv .venv; \
 	fi && \
-	.venv/bin/pip install flask requests || exit 1 && \
+	.venv/bin/pip install -r requirements.txt || exit 1 && \
 	.venv/bin/python server.py

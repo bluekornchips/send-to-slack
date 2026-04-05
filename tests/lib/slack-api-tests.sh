@@ -777,3 +777,38 @@ mock_curl_permalink_failure() {
 	[[ "$got_ts" == "1712000000.000200" ]]
 	rm -f "$url_capture"
 }
+
+@test "update_message:: strips bot identity fields from chat.update request body" {
+	DRY_RUN="false"
+
+	local body_capture
+	body_capture=$(mktemp "${BATS_TEST_TMPDIR}/slack-api-tests.update-body.XXXXXX")
+
+	curl() {
+		local prev=""
+		for arg in "$@"; do
+			if [[ "$prev" == "-d" ]] && [[ "$arg" == @* ]]; then
+				local f="${arg#@}"
+				cat "$f" >"$body_capture"
+			fi
+			prev="$arg"
+		done
+		if [[ "$*" == *"chat.getPermalink"* ]]; then
+			printf '%s\n' '{"ok": true, "permalink": "https://example.com/p"}'
+			return 0
+		fi
+		printf '%s\n' '{"ok": true, "channel": "C111", "ts": "1712000000.000200"}'
+		printf '%s\n' '200'
+		return 0
+	}
+	export -f curl
+
+	update_message "C111" "1712000000.000100" \
+		'{"text":"updated","username":"Deploy Bot","icon_emoji":":ship:","icon_url":"https://example.com/i.png"}'
+
+	jq -e 'has("username") | not' "$body_capture" >/dev/null
+	jq -e 'has("icon_emoji") | not' "$body_capture" >/dev/null
+	jq -e 'has("icon_url") | not' "$body_capture" >/dev/null
+	jq -e '.channel == "C111" and .ts == "1712000000.000100"' "$body_capture" >/dev/null
+	rm -f "$body_capture"
+}

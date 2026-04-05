@@ -70,15 +70,19 @@ send_thread_replies() {
 		jq -n \
 			--slurpfile source "$reply_source_file" \
 			--slurpfile blocks "$reply_blocks_file" \
+			--slurpfile parent "$input_payload_file" \
 			--arg channel "$channel" \
 			--arg thread_ts "$thread_ts" \
-			'{
+			'
+			($parent[0].params // {}) as $pp
+			| {
 				"source": $source[0],
-				"params": {
-					"channel": $channel,
-					"thread_ts": $thread_ts,
-					"blocks": $blocks[0]
-				}
+				"params": (
+					{"channel": $channel, "thread_ts": $thread_ts, "blocks": $blocks[0]}
+					| if (($pp.username | type) == "string") and (($pp.username | length) > 0) then . + {username: $pp.username} else . end
+					| if (($pp.icon_emoji | type) == "string") and (($pp.icon_emoji | length) > 0) then . + {icon_emoji: $pp.icon_emoji} else . end
+					| if (($pp.icon_url | type) == "string") and (($pp.icon_url | length) > 0) then . + {icon_url: $pp.icon_url} else . end
+				)
 			}' >"$reply_payload_file"
 
 		rm -f "$reply_source_file" "$reply_blocks_file"

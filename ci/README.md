@@ -75,8 +75,8 @@ On GitHub Actions, [.github/workflows/build.yaml](../.github/workflows/build.yam
 
 ### Behavior
 
-- Builds `Docker/Dockerfile` for `linux/amd64`
-- Optional healthcheck using `./bin/send-to-slack.sh --health-check`
+- Default build uses `Docker/Dockerfile` for `linux/amd64`; `--dockerfile concourse|test|remote` selects the matching file under `Docker/`, and `--dockerfile all` builds all four in sequence
+- Optional healthcheck: `--healthcheck` runs `./bin/send-to-slack.sh --health-check` after the build
 - Optional test message via `./bin/send-to-slack.sh --file <payload>`
 - Supports GitHub Actions mode (`--gha`) to extract repo/branch metadata
 
@@ -104,7 +104,7 @@ GitHub Actions mode:
 
 - `--gha` Enable GitHub Actions metadata extraction
 - `--no-cache` Disable Docker build cache
-- `--healthcheck` Run local health check after build
+- `--healthcheck` Run `./bin/send-to-slack.sh --health-check` after build
 - `--send-test-message` Send a test message after build (requires CHANNEL and SLACK_BOT_USER_OAUTH_TOKEN)
 - `--dockerfile <name>` Which Dockerfile to build: `concourse`, `test`, `remote`, or `all` (default: `Docker/Dockerfile`)
 - `-h, --help` Show help
@@ -171,9 +171,11 @@ make concourse-run-all-examples
 - `CHANNEL`, required: Primary Slack channel for pipeline variables
 - `SIDE_CHANNEL`, optional: Secondary Slack channel, defaults to empty
 - `SLACK_WEBHOOK_URL`, optional: Incoming Webhook URL for `examples/webhook-slack.yaml`. When unset, `webhook-slack/notify-via-slack-webhook` is skipped so the suite can still pass without a webhook
+- `EPHEMERAL_USER`, optional: Slack user ID for `examples/ephemeral.yaml`, e.g. `U012AB3CD`, defaults to empty
 - `TAG`, optional: Docker image tag for the resource type, defaults to contents of `VERSION` file
 
 ### Notes
 
 - Jobs listed in the hardcoded `SKIPPED_JOBS` array in `ci/run-all-examples.sh` are skipped. That list includes `thread-replies/thread-replies-with-thread-ts`, `blocks-from-file/blocks-from-file-3` and `blocks-from-file/concourse-metadata` (they need a GitHub reachable from the worker), and all `video/*` jobs (Slack unfurl domains and scopes). Keep this README in sync when `SKIPPED_JOBS` changes.
 - When `SLACK_WEBHOOK_URL` is empty, `webhook-slack/notify-via-slack-webhook` is skipped so the suite can still pass.
+- `examples/bot-identity.yaml` (`notify-deploy-bot`, `notify-test-bot`) requires the `chat:write.customize` scope on the bot token. The jobs will fail with a Slack `missing_scope` error if that scope is not granted.

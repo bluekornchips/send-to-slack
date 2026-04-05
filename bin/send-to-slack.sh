@@ -520,6 +520,13 @@ main() {
 		return 1
 	fi
 
+	if [[ -f "${root_dir}/lib/resolve-mentions.sh" ]]; then
+		source "${root_dir}/lib/resolve-mentions.sh"
+	else
+		echo "main:: cannot locate resolve-mentions.sh at ${root_dir}/lib/resolve-mentions.sh" >&2
+		return 1
+	fi
+
 	export METADATA
 	export SHOW_METADATA
 	export SHOW_PAYLOAD
@@ -627,7 +634,16 @@ main() {
 			return 1
 		fi
 
-		if ! update_message "$update_channel" "$update_ts" "$parsed_payload"; then
+		local update_channel_resolved
+		update_channel_resolved="$update_channel"
+		if [[ "${DRY_RUN:-}" != "true" ]]; then
+			if ! update_channel_resolved=$(resolve_channel_id "$update_channel"); then
+				echo "main:: failed to resolve params.channel for chat.update, channel ID is required" >&2
+				return 1
+			fi
+		fi
+
+		if ! update_message "$update_channel_resolved" "$update_ts" "$parsed_payload"; then
 			echo "main:: failed to update Slack message" >&2
 			return 1
 		fi

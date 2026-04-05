@@ -114,21 +114,27 @@ docker pull sunflowersoftware/send-to-slack
 
 ### Building Images
 
-Two Dockerfiles are provided in the `Docker/` directory:
+Four Dockerfiles live under `Docker/`:
 
-- `Docker/Dockerfile`: CI image that copies the repository into `/usr/local/send-to-slack` and exposes `send-to-slack` on `PATH`
+- `Docker/Dockerfile`: default image that copies the repository into `/usr/local/send-to-slack` and exposes `send-to-slack` on `PATH`
 - `Docker/Dockerfile.concourse`: Concourse resource-type image with only the runtime dependencies needed by the `check`, `in`, and `out` scripts
+- `Docker/Dockerfile.test`: Alpine image with the resource scripts, `send-to-slack`, `bats`, `shellcheck`, `shfmt`, and `yq` for running the test suite in a container
+- `Docker/Dockerfile.remote`: minimal image that installs `send-to-slack` via the remote `curl | bash` installer from the default branch
+
+GitHub Actions PR builds invoke [ci/build.sh](ci/build.sh) once per matrix label `main`, `concourse`, `test`, and `remote`. See [ci/README.md](ci/README.md) for script flags and BuildKit cache variables.
 
 Build examples (run from repo root):
 
 ```bash
 docker build -f Docker/Dockerfile -t send-to-slack-ci:local .
-docker build -f Docker/Dockerfile.concourse -t send-to-slack-concourse .
+docker build -f Docker/Dockerfile.concourse -t send-to-slack-concourse:local .
+docker build -f Docker/Dockerfile.test -t send-to-slack-test:local .
+docker build -f Docker/Dockerfile.remote -t send-to-slack-remote:local .
 ```
 
 ### CI Build Helper
 
-`ci/build.sh` builds the Docker image and can optionally run a healthcheck and send a test message using the local script:
+`ci/build.sh` builds a selected Dockerfile and can optionally run a post-build health check and send a test message. The flag `--healthcheck` runs `./bin/send-to-slack.sh --health-check`; the CLI accepts `--health-check` only, not `--healthcheck`.
 
 ```bash
 # Build only
@@ -294,6 +300,7 @@ Debug mode redacts authentication tokens but still logs the payload structure.
 - Legacy attachments for colored blocks and tables where Slack allows
 - Interactive button components with the optional Python server
 - Concourse CI resource type support for pipeline notifications
+- Per-message bot display name and avatar via `params.username`, `params.icon_emoji`, and `params.icon_url`; see [examples/bot-identity.yaml](examples/bot-identity.yaml)
 
 ## Requirements
 
@@ -307,8 +314,7 @@ Debug mode redacts authentication tokens but still logs the payload structure.
 ### Interactive Components Dependencies
 
 - Python 3.9 or later (for interactive button handling)
-- Flask 3.0.0 or later (for web server)
-- requests 2.31.0 or later (for HTTP requests to Slack API)
+- Flask 3.0.0 or later and requests 2.31.0 or later, declared in [python/requirements.txt](python/requirements.txt) and installed by `make -C python python-server`
 - Docker (optional, for running ngrok in a container as documented under `python/`)
 
 ### Slack Configuration
@@ -316,6 +322,7 @@ Debug mode redacts authentication tokens but still logs the payload structure.
 Slack bot token with appropriate OAuth scopes. Posting, updating, ephemeral sends, and thread replies need `chat:write`; some channels also need `chat:write.public`.
 
 - `chat:write` - Post, update, and thread messages via Web API
+- `chat:write.customize` - Override bot display name and avatar per message via `params.username`, `params.icon_emoji`, `params.icon_url`
 - `channels:read`, `groups:read`, `im:read` - Channel, private channel, and DM access for lookups where used
 - `files:write`, `files:read` - File operations
 - `users:read` - User information for mention resolution and similar features
@@ -423,6 +430,9 @@ Incoming Webhook:
 - `params.blocks` - Array of block configurations
 - `params.message_ts` - Slack message timestamp for `chat.update`; Web API only; requires `params.channel` in the payload; omits new post, thread replies, and crosspost for that run (see Updating messages above)
 - `params.ephemeral_user` - Slack user ID for `chat.postEphemeral`; Web API only, not valid with webhook-only delivery (see Ephemeral messages in the Web API example above)
+- `params.username` - Override the bot display name for this message; Web API only, requires `chat:write.customize` scope, not valid with webhook delivery; thread replies inherit this value automatically; see [examples/bot-identity.yaml](examples/bot-identity.yaml)
+- `params.icon_emoji` - Override the bot avatar with an emoji for this message (e.g. `:robot_face:`); Web API only, requires `chat:write.customize` scope, not valid with webhook delivery; thread replies inherit this value automatically
+- `params.icon_url` - Override the bot avatar with an image URL for this message; Web API only, requires `chat:write.customize` scope, not valid with webhook delivery; thread replies inherit this value automatically
 
 ### Block Formats
 
@@ -486,7 +496,7 @@ Provide `thread_ts` with the parent message timestamp. Extract from the permalin
 
 ### Creating New Threads
 
-Set `create_thread: true` with multiple blocks. First block sent as regular message, remaining blocks sent as thread reply.
+Set `create_thread: true` with at least two blocks in `params.blocks`. The first block is sent as the channel message; each additional block is sent as a reply in the new thread.
 
 ```json
 {
@@ -497,6 +507,10 @@ Set `create_thread: true` with multiple blocks. First block sent as regular mess
       {
         "type": "section",
         "text": { "type": "plain_text", "text": "Parent message" }
+      },
+      {
+        "type": "section",
+        "text": { "type": "plain_text", "text": "First reply in the thread" }
       }
     ]
   }
@@ -667,6 +681,7 @@ make test            # Run all tests
 make test-all        # Run all tests (with smoke and acceptance flags)
 make test-smoke      # Run smoke tests only
 make test-acceptance # Run acceptance tests only
+make test-in-docker  # Run `make test` inside Docker/Dockerfile.test via tests/run-tests-in-docker.sh
 ```
 
 Some smoke and acceptance tests for Incoming Webhooks run only when `SLACK_WEBHOOK_URL` is set in the environment. Without it, those tests are skipped. With it, the suite also checks that webhook delivery rejects `params.ephemeral_user` and `params.message_ts`, since those require the Web API.
@@ -686,6 +701,7 @@ Environment variables for `make concourse-load-examples`, each passed to `fly se
 - `CHANNEL` - Primary Slack channel for examples that need `channel`
 - `SIDE_CHANNEL` - Secondary channel for examples that use `side_channel`, may be empty
 - `SLACK_WEBHOOK_URL` - Incoming Webhook URL for [examples/webhook-slack.yaml](examples/webhook-slack.yaml), may be empty if you skip that pipeline
+- `EPHEMERAL_USER` - Slack user ID for [examples/ephemeral.yaml](examples/ephemeral.yaml), e.g. `U012AB3CD`, may be empty if you skip that pipeline
 
 ### Development Dependencies
 
