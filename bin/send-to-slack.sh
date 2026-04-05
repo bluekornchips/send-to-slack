@@ -10,9 +10,12 @@
 ########################################################
 SHOW_METADATA="true"
 SHOW_PAYLOAD="true"
+GITHUB_URL="https://github.com/bluekornchips/send-to-slack"
 
 # Paths relative to repo or install root, sourced in order by _load_libs
 SEND_TO_SLACK_LIB_FILES=(
+	lib/get-version.sh
+	lib/health-check.sh
 	lib/slack/api.sh
 	lib/metadata.sh
 	lib/slack/utils/resolve-mentions.sh
@@ -21,13 +24,6 @@ SEND_TO_SLACK_LIB_FILES=(
 	lib/slack/replies.sh
 )
 
-# Display usage information
-#
-# Side Effects:
-# - Outputs usage message to stdout
-#
-# Returns:
-# - 0 always
 usage() {
 	cat <<EOF
 Usage: send-to-slack [OPTIONS]
@@ -45,6 +41,35 @@ EOF
 	return 0
 }
 
+# Source Slack helper libraries listed in SEND_TO_SLACK_LIB_FILES
+#
+# Inputs:
+# - $1 - root_dir: repository or install root
+#
+# Side Effects:
+# - SEND_TO_SLACK_ROOT must already be set and exported before calling
+#
+# Returns:
+# - 0 on success
+# - 1 if a required file is missing
+_load_libs() {
+	local root_dir="$1"
+	[[ -z "$root_dir" ]] && return 1
+
+	local rel
+	for rel in "${SEND_TO_SLACK_LIB_FILES[@]}"; do
+		local path
+		path="${root_dir}/${rel}"
+		if [[ ! -f "$path" ]]; then
+			echo "_load_libs:: cannot locate required library at ${path}" >&2
+			return 1
+		fi
+		source "$path"
+	done
+
+	return 0
+}
+
 # Resolve commit from git metadata when available
 #
 # Inputs:
@@ -57,22 +82,29 @@ EOF
 # - 0 on success, 1 on missing
 get_commit() {
 	local root_path="$1"
-	local commit_value
+	[[ -z "$root_path" ]] && return 1
 
-	if [[ -z "$root_path" ]]; then
+	local commit_value
+	if ! command -v git >/dev/null 2>&1; then
 		return 1
 	fi
 
-	if command -v git >/dev/null 2>&1 && [[ -d "${root_path}/.git" ]]; then
-		if commit_value=$(git -C "$root_path" rev-parse --short HEAD 2>/dev/null); then
-			if [[ -n "$commit_value" ]]; then
-				echo "$commit_value"
-				return 0
-			fi
-		fi
+	if [[ ! -d "${root_path}/.git" ]]; then
+		return 1
 	fi
 
-	return 1
+	if ! commit_value=$(git -C "$root_path" rev-parse --short HEAD 2>/dev/null); then
+		return 1
+	fi
+
+	if [[ -z "$commit_value" ]]; then
+		echo "get_commit:: failed to get commit" >&2
+		return 1
+	fi
+
+	echo "$commit_value"
+
+	return 0
 }
 
 # Print version information for CLI output
@@ -84,24 +116,26 @@ get_commit() {
 # - Writes version info to stdout
 #
 # Returns:
-# - 0 always
+# - 0 on success, 1 if root_path is empty
 print_version() {
 	local root_path="$1"
-	local version
-	local commit
-	local github_url="https://github.com/bluekornchips/send-to-slack"
+	[[ -z "$root_path" ]] && return 1
 
+	local version
 	if ! version=$(get_version "$root_path"); then
 		version="unknown"
 	fi
 
+	local commit
 	if ! commit=$(get_commit "$root_path"); then
 		commit="unknown"
 	fi
 
-	echo "send-to-slack, (${github_url})"
-	echo "version: ${version}"
-	echo "commit: ${commit}"
+	cat <<EOF
+send-to-slack, (${GITHUB_URL})
+version: ${version}
+commit: ${commit}
+EOF
 
 	return 0
 }
@@ -125,75 +159,6 @@ check_dependencies() {
 		echo "check_dependencies:: missing required dependencies: ${missing_deps[*]}" >&2
 		echo "check_dependencies:: please install missing dependencies and try again" >&2
 		return 1
-	fi
-
-	return 0
-}
-
-# Process input from stdin or from SEND_TO_SLACK_CLI_INPUT_FILE
-#
-# Arguments:
-#   $1 - output_file: Path to write the input payload to
-#
-# Inputs:
-# - SEND_TO_SLACK_CLI_INPUT_FILE: when set to a non-empty path, read that file
-#
-# Side Effects:
-# - Writes input payload to output_file
-# - May export SEND_TO_SLACK_INPUT_SOURCE=stdin
-#
-# Returns:
-# - 0 on success
-# - 1 on validation or read failure
-process_input_to_file() {
-	local output_file="$1"
-	local input_file="${SEND_TO_SLACK_CLI_INPUT_FILE:-}"
-	local use_stdin="false"
-
-	if ! { touch "${output_file}" && chmod 0600 "${output_file}"; }; then
-		echo "process_input_to_file:: failed to secure output file ${output_file}" >&2
-		return 1
-	fi
-
-	if [[ -n "${input_file}" ]]; then
-		if [[ ! -f "${input_file}" ]]; then
-			echo "process_input_to_file:: input file does not exist: ${input_file}" >&2
-			return 1
-		fi
-		use_stdin="false"
-	else
-		if [[ -t 0 ]]; then
-			echo "process_input_to_file:: no input provided: use -f|--file <path> or provide input via stdin" >&2
-			return 1
-		fi
-		use_stdin="true"
-	fi
-
-	echo "process_input_to_file:: reading input into ${output_file}" >&2
-
-	if [[ "${use_stdin}" == "true" ]]; then
-		if ! cat >"${output_file}"; then
-			echo "process_input_to_file:: failed to read from stdin" >&2
-			return 1
-		fi
-		if [[ ! -s "${output_file}" ]]; then
-			echo "process_input_to_file:: no input received on stdin" >&2
-			return 1
-		fi
-	else
-		if ! cat -- "${input_file}" >"${output_file}"; then
-			echo "process_input_to_file:: failed to read input file: ${input_file}" >&2
-			ls -l "${input_file}" >&2
-			return 1
-		fi
-		if [[ ! -s "${output_file}" ]]; then
-			echo "process_input_to_file:: input file is empty: ${input_file}" >&2
-			return 1
-		fi
-	fi
-
-	if [[ "${use_stdin}" == "true" ]]; then
-		export SEND_TO_SLACK_INPUT_SOURCE="stdin"
 	fi
 
 	return 0
@@ -286,7 +251,7 @@ parse_main_args() {
 	SEND_TO_SLACK_CLI_INPUT_FILE=""
 
 	while [[ $# -gt 0 ]]; do
-		case $1 in
+		case "$1" in
 		-v | --version)
 			local root_dir
 			if ! root_dir=$(find_root_dir); then
@@ -317,7 +282,7 @@ parse_main_args() {
 			shift 2
 			;;
 		*)
-			echo "parse_main_args:: unknown option: $1" >&2
+			echo "parse_main_args:: unknown option: ${1}" >&2
 			echo "parse_main_args:: use -h for usage" >&2
 			return 1
 			;;
@@ -325,6 +290,77 @@ parse_main_args() {
 	done
 
 	export SEND_TO_SLACK_CLI_INPUT_FILE
+
+	return 0
+}
+
+# Process input from stdin or from SEND_TO_SLACK_CLI_INPUT_FILE
+#
+# Arguments:
+#   $1 - output_file: Path to write the input payload to
+#
+# Inputs:
+# - SEND_TO_SLACK_CLI_INPUT_FILE: when set to a non-empty path, read that file
+#
+# Side Effects:
+# - Writes input payload to output_file
+# - May export SEND_TO_SLACK_INPUT_SOURCE=stdin
+#
+# Returns:
+# - 0 on success
+# - 1 on validation or read failure
+process_input_to_file() {
+	local output_file="$1"
+	if ! { touch "${output_file}" && chmod 0600 "${output_file}"; }; then
+		echo "process_input_to_file:: failed to secure output file ${output_file}" >&2
+		return 1
+	fi
+
+	local use_stdin="false"
+	local input_file="${SEND_TO_SLACK_CLI_INPUT_FILE:-}"
+	if [[ -n "${input_file}" ]]; then
+		if [[ ! -f "${input_file}" ]]; then
+			echo "process_input_to_file:: input file does not exist: ${input_file}" >&2
+			return 1
+		fi
+		use_stdin="false"
+	else
+		if [[ -t 0 ]]; then
+			echo "process_input_to_file:: no input provided: use -f|--file <path> or provide input via stdin" >&2
+			return 1
+		fi
+		use_stdin="true"
+	fi
+
+	echo "process_input_to_file:: reading input into ${output_file}" >&2
+
+	if [[ "${use_stdin}" == "true" ]]; then
+		if ! cat >"${output_file}"; then
+			echo "process_input_to_file:: failed to read from stdin" >&2
+			return 1
+		fi
+
+		if [[ ! -s "${output_file}" ]]; then
+			echo "process_input_to_file:: no input received on stdin" >&2
+			return 1
+		fi
+	else
+		if ! cat -- "${input_file}" >"${output_file}"; then
+			echo "process_input_to_file:: failed to read input file: ${input_file}" >&2
+			ls -l "${input_file}" >&2
+			return 1
+		fi
+
+		if [[ ! -s "${output_file}" ]]; then
+			echo "process_input_to_file:: input file is empty: ${input_file}" >&2
+			return 1
+		fi
+	fi
+
+	if [[ "${use_stdin}" == "true" ]]; then
+		SEND_TO_SLACK_INPUT_SOURCE="stdin"
+		export SEND_TO_SLACK_INPUT_SOURCE
+	fi
 
 	return 0
 }
@@ -344,7 +380,9 @@ init_slack_workspace() {
 		echo "init_slack_workspace:: mktemp failed" >&2
 		return 1
 	fi
+
 	export _SLACK_WORKSPACE
+
 	trap 'rm -rf "$_SLACK_WORKSPACE"' EXIT ERR
 
 	return 0
@@ -359,7 +397,6 @@ init_slack_workspace() {
 # - 0 always
 get_timestamp_utc() {
 	date -u +%Y-%m-%dT%H:%M:%SZ
-
 	return 0
 }
 
@@ -372,47 +409,21 @@ get_timestamp_utc() {
 # - May set SHOW_METADATA, SHOW_PAYLOAD, LOG_VERBOSE
 #
 # Returns:
-# - 0 always
+# - 0 on success, 1 if input_payload path is empty
 apply_debug_from_payload() {
 	local input_payload="$1"
-	local debug_enabled
+	[[ -z "$input_payload" ]] && return 1
 
+	local debug_enabled
 	debug_enabled=$(jq -r '.params.debug // false' "${input_payload}")
 	if [[ "$debug_enabled" == "true" ]]; then
 		SHOW_METADATA="true"
 		SHOW_PAYLOAD="true"
+		LOG_VERBOSE="true"
 		export SHOW_METADATA
 		export SHOW_PAYLOAD
-		export LOG_VERBOSE="true"
+		export LOG_VERBOSE
 	fi
-
-	return 0
-}
-
-# Source Slack helper libraries listed in SEND_TO_SLACK_LIB_FILES
-#
-# Inputs:
-# - $1 - root_dir: repository or install root
-#
-# Side Effects:
-# - SEND_TO_SLACK_ROOT must already be set and exported before calling
-#
-# Returns:
-# - 0 on success
-# - 1 if a required file is missing
-_load_libs() {
-	local root_dir="$1"
-	local path
-	local rel
-
-	for rel in "${SEND_TO_SLACK_LIB_FILES[@]}"; do
-		path="${root_dir}/${rel}"
-		if [[ ! -f "$path" ]]; then
-			echo "main:: cannot locate required library at ${path}" >&2
-			return 1
-		fi
-		source "$path"
-	done
 
 	return 0
 }
@@ -441,11 +452,13 @@ main() {
 		return 1
 	fi
 
-	if [[ ! -f "${root_dir}/lib/get-version.sh" ]]; then
-		echo "main:: cannot locate get-version.sh at ${root_dir}/lib/get-version.sh" >&2
+	# Install root for lib helpers, lib/parse/payload.sh and Block Kit expect this before load
+	SEND_TO_SLACK_ROOT="$root_dir"
+	export SEND_TO_SLACK_ROOT
+
+	if ! _load_libs "${root_dir}"; then
 		return 1
 	fi
-	source "${root_dir}/lib/get-version.sh"
 
 	parse_result=0
 	parse_main_args "$@" || parse_result=$?
@@ -459,13 +472,6 @@ main() {
 		return 1
 	fi
 
-	if [[ ! -f "${root_dir}/lib/health-check.sh" ]]; then
-		echo "main:: cannot locate health-check.sh at ${root_dir}/lib/health-check.sh" >&2
-		return 1
-	fi
-	# shellcheck disable=SC1091
-	source "${root_dir}/lib/health-check.sh"
-
 	local version
 	if ! version=$(get_version "$root_dir"); then
 		version="unknown"
@@ -477,14 +483,6 @@ main() {
 			return 1
 		fi
 		return 0
-	fi
-
-	# Install root for lib helpers, lib/parse/payload.sh and Block Kit expect this before load
-	SEND_TO_SLACK_ROOT="$root_dir"
-	export SEND_TO_SLACK_ROOT
-
-	if ! _load_libs "${root_dir}"; then
-		return 1
 	fi
 
 	export METADATA

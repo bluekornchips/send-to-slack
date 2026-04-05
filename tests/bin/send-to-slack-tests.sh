@@ -11,7 +11,7 @@ setup_file() {
 
 	SCRIPT="$GIT_ROOT/bin/send-to-slack.sh"
 	if [[ ! -f "$SCRIPT" ]]; then
-		fail "Script not found: $SCRIPT"
+		fail "Script not found: ${SCRIPT}"
 	fi
 
 	if [[ -n "$SLACK_BOT_USER_OAUTH_TOKEN" ]]; then
@@ -102,7 +102,61 @@ create_test_payload() {
 }
 
 ########################################################
-# Debug mode override tests
+# version and health_check
+########################################################
+
+@test "version:: --version prints version and exits" {
+	run "$SCRIPT" --version
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "^send-to-slack, (https://github.com/"
+	echo "$output" | grep -q "^version: "
+	echo "$output" | grep -q "^commit: "
+	echo "$output" | grep -v -q "main::"
+}
+
+@test "version:: -v prints version and exits" {
+	run "$SCRIPT" -v
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "^send-to-slack, (https://github.com/"
+	echo "$output" | grep -q "^version: "
+	echo "$output" | grep -q "^commit: "
+	echo "$output" | grep -v -q "main::"
+}
+
+@test "health_check:: passes when dependencies are available" {
+	unset SLACK_BOT_USER_OAUTH_TOKEN
+	run health_check
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "jq found"
+	echo "$output" | grep -q "curl found"
+	echo "$output" | grep -q "Health check passed"
+}
+
+@test "health_check:: skips API check when token not set" {
+	unset SLACK_BOT_USER_OAUTH_TOKEN
+	run health_check
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "SLACK_BOT_USER_OAUTH_TOKEN not set, skipping API connectivity check"
+}
+
+@test "health_check:: tests API connectivity when token is set" {
+	SLACK_BOT_USER_OAUTH_TOKEN="test-token"
+	export SLACK_BOT_USER_OAUTH_TOKEN
+
+	run health_check
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "Testing Slack API connectivity"
+}
+
+@test "health_check:: --health-check flag works" {
+	unset SLACK_BOT_USER_OAUTH_TOKEN
+	run "$SCRIPT" --health-check
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "health_check"
+}
+
+########################################################
+# main: debug and delivery
 ########################################################
 
 @test "main:: params.debug=true overrides SHOW_METADATA to true" {
@@ -351,7 +405,7 @@ create_test_payload() {
 	rm -f "$input_file"
 }
 
-@test "send_notification:: skips thread_replies and crosspost for ephemeral messages" {
+@test "main:: skips thread_replies and crosspost for ephemeral messages" {
 	local test_payload
 	test_payload=$(jq -n '{
 		source: {
@@ -403,60 +457,7 @@ create_test_payload() {
 }
 
 ########################################################
-# Health Check Tests
-########################################################
-
-@test "version:: --version prints version and exits" {
-	run "$SCRIPT" --version
-	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "^send-to-slack, (https://github.com/"
-	echo "$output" | grep -q "^version: "
-	echo "$output" | grep -q "^commit: "
-	echo "$output" | grep -v -q "main::"
-}
-
-@test "version:: -v prints version and exits" {
-	run "$SCRIPT" -v
-	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "^send-to-slack, (https://github.com/"
-	echo "$output" | grep -q "^version: "
-	echo "$output" | grep -q "^commit: "
-	echo "$output" | grep -v -q "main::"
-}
-
-@test "health_check:: passes when dependencies are available" {
-	unset SLACK_BOT_USER_OAUTH_TOKEN
-	run health_check
-	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "jq found"
-	echo "$output" | grep -q "curl found"
-	echo "$output" | grep -q "Health check passed"
-}
-
-@test "health_check:: skips API check when token not set" {
-	unset SLACK_BOT_USER_OAUTH_TOKEN
-	run health_check
-	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "SLACK_BOT_USER_OAUTH_TOKEN not set, skipping API connectivity check"
-}
-
-@test "health_check:: tests API connectivity when token is set" {
-	SLACK_BOT_USER_OAUTH_TOKEN="test-token"
-	export SLACK_BOT_USER_OAUTH_TOKEN
-
-	run health_check
-	echo "$output" | grep -q "Testing Slack API connectivity"
-}
-
-@test "health_check:: --health-check flag works" {
-	unset SLACK_BOT_USER_OAUTH_TOKEN
-	run "$SCRIPT" --health-check
-	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "health_check"
-}
-
-########################################################
-# Input options
+# main: CLI input and validation
 ########################################################
 
 @test "main:: accepts -file option with valid file" {
