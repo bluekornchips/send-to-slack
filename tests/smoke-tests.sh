@@ -40,6 +40,7 @@ setup() {
 	source "$GIT_ROOT/lib/slack/api.sh"
 	source "$GIT_ROOT/lib/metadata.sh"
 	source "$GIT_ROOT/lib/parse/payload.sh"
+	source "$GIT_ROOT/lib/parse/blocks.sh"
 	source "$SEND_TO_SLACK_SCRIPT"
 
 	_SLACK_WORKSPACE=$(mktemp -d "${BATS_TEST_TMPDIR}/smoke-tests.workspace.XXXXXX")
@@ -874,7 +875,7 @@ smoke_parse_payload_capture() {
 	local EXAMPLES_FILE="$GIT_ROOT/examples/rich-text.yaml"
 	local line_text="This is some test content that will exceed the 4000 character limit for rich text blocks."
 	local long_text_file
-	long_text_file=$(mktemp smoke-tests.oversize-rich-text.XXXXXX.txt)
+	long_text_file=$(mktemp "${BATS_TEST_TMPDIR}/smoke-tests.oversize-rich-text.XXXXXX.txt")
 	trap 'rm -f "$long_text_file" 2>/dev/null || true' EXIT
 	for i in {1..450}; do
 		echo "$i: $line_text" >>"$long_text_file"
@@ -916,7 +917,7 @@ smoke_parse_payload_capture() {
 
 @test "smoke_test:: uploads hello world file" {
 	local hello_world_file
-	hello_world_file=$(mktemp smoke-tests.hello-world.XXXXXX)
+	hello_world_file=$(mktemp "${BATS_TEST_TMPDIR}/smoke-tests.hello-world.XXXXXX")
 	trap 'rm -f "$hello_world_file" 2>/dev/null || true' EXIT
 	echo "hello world" >"$hello_world_file"
 
@@ -950,7 +951,7 @@ smoke_parse_payload_capture() {
 
 @test "smoke_test:: downloads Slack logo PNG and uploads it" {
 	local slack_logo_file
-	slack_logo_file=$(mktemp smoke-tests.slack-logo.XXXXXX.png)
+	slack_logo_file=$(mktemp "${BATS_TEST_TMPDIR}/smoke-tests.slack-logo.XXXXXX.png")
 	trap 'rm -f "$slack_logo_file" 2>/dev/null || true' EXIT
 
 	if ! curl -s -o "$slack_logo_file" "https://docs.slack.dev/img/logos/slack-developers-white.png"; then
@@ -996,8 +997,8 @@ smoke_parse_payload_capture() {
 @test "smoke_test:: multiple file blocks in blocks array" {
 	local file1
 	local file2
-	file1=$(mktemp smoke-tests.file1.XXXXXX)
-	file2=$(mktemp smoke-tests.file2.XXXXXX)
+	file1=$(mktemp "${BATS_TEST_TMPDIR}/smoke-tests.file1.XXXXXX")
+	file2=$(mktemp "${BATS_TEST_TMPDIR}/smoke-tests.file2.XXXXXX")
 	trap 'rm -f "$file1" "$file2" 2>/dev/null || true' EXIT
 	echo "File 1 content" >"$file1"
 	echo "File 2 content" >"$file2"
@@ -1038,7 +1039,7 @@ smoke_parse_payload_capture() {
 
 @test "smoke_test:: file block without title uses filename" {
 	local test_file
-	test_file=$(mktemp smoke-tests.test-file.XXXXXX.txt)
+	test_file=$(mktemp "${BATS_TEST_TMPDIR}/smoke-tests.test-file.XXXXXX.txt")
 	trap 'rm -f "$test_file" 2>/dev/null || true' EXIT
 	echo "Test content" >"$test_file"
 
@@ -1072,7 +1073,7 @@ smoke_parse_payload_capture() {
 
 @test "smoke_test:: file block mixed with other blocks" {
 	local test_file
-	test_file=$(mktemp smoke-tests.test-file.XXXXXX)
+	test_file=$(mktemp "${BATS_TEST_TMPDIR}/smoke-tests.test-file.XXXXXX")
 	trap 'rm -f "$test_file" 2>/dev/null || true' EXIT
 	echo "Report content" >"$test_file"
 
@@ -1113,7 +1114,7 @@ smoke_parse_payload_capture() {
 
 @test "smoke_test:: file permissions debug after upload" {
 	local test_file
-	test_file=$(mktemp smoke-tests.test-file.XXXXXX.txt)
+	test_file=$(mktemp "${BATS_TEST_TMPDIR}/smoke-tests.test-file.XXXXXX.txt")
 	trap 'rm -f "$test_file" 2>/dev/null || true' EXIT
 	echo "Permission test content" >"$test_file"
 
@@ -1331,7 +1332,7 @@ smoke_parse_payload_capture() {
 
 @test "smoke_test:: params.from_file" {
 	local payload_file
-	payload_file=$(mktemp smoke-tests.params-file.XXXXXX)
+	payload_file=$(mktemp "${BATS_TEST_TMPDIR}/smoke-tests.params-file.XXXXXX")
 	trap 'rm -f "$payload_file" 2>/dev/null || true' EXIT
 
 	jq -n --arg channel "$CHANNEL" \

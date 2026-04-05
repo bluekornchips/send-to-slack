@@ -31,6 +31,7 @@ setup() {
 	source "$GIT_ROOT/lib/slack/api.sh"
 	source "$SCRIPT"
 	source "$GIT_ROOT/lib/parse/payload.sh"
+	source "$GIT_ROOT/lib/parse/blocks.sh"
 	source "$GIT_ROOT/lib/slack/replies.sh"
 
 	SLACK_BOT_USER_OAUTH_TOKEN="test-token"

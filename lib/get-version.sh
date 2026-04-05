@@ -16,16 +16,12 @@
 # - 0 on success, 1 on missing
 get_version() {
 	local root_path="$1"
-	local version_path
-	local version_value
+	[[ -z "$root_path" ]] && return 1
 
-	if [[ -z "$root_path" ]]; then
-		return 1
-	fi
-
-	version_path="${root_path}/VERSION"
+	local version_path="${root_path}/VERSION"
 
 	if [[ -f "$version_path" ]]; then
+		local version_value
 		version_value=$(tr -d '\r' <"$version_path" | tr -d '\n')
 		if [[ -n "$version_value" ]]; then
 			echo "$version_value"

@@ -35,6 +35,26 @@ setup() {
 }
 
 ########################################################
+# _get_safe_payload_size
+########################################################
+
+@test "_get_safe_payload_size:: prints positive integer" {
+	run _get_safe_payload_size
+	[[ "$status" -eq 0 ]]
+	[[ "$output" =~ ^[0-9]+$ ]]
+	((output > 0))
+}
+
+@test "_get_safe_payload_size:: matches quarter of ARG_MAX or default cap" {
+	local expected
+	expected=$(($(getconf ARG_MAX 2>/dev/null || echo 262144) / 4))
+
+	run _get_safe_payload_size
+	[[ "$status" -eq 0 ]]
+	[[ "$output" == "$expected" ]]
+}
+
+########################################################
 # create_metadata
 ########################################################
 
@@ -102,7 +122,7 @@ setup() {
 	local huge_payload
 	safe_size=$(($(getconf ARG_MAX 2>/dev/null || echo 262144) / 4))
 	local big_text_file
-	big_text_file=$(mktemp)
+	big_text_file=$(mktemp -t send-to-slack-metadata-test.XXXXXX)
 	head -c "$((safe_size + 1024))" /dev/zero | tr '\0' 'A' >"$big_text_file"
 	huge_payload=$(jq -n \
 		--rawfile big_text "$big_text_file" \
@@ -156,7 +176,7 @@ setup() {
 @test "emit_concourse_output:: writes to SEND_TO_SLACK_OUTPUT when set" {
 	METADATA='[]'
 	local out_file
-	out_file=$(mktemp)
+	out_file=$(mktemp -t send-to-slack-metadata-out.XXXXXX)
 	export SEND_TO_SLACK_OUTPUT="$out_file"
 
 	run emit_concourse_output "2026-04-05T12:00:00Z" ""

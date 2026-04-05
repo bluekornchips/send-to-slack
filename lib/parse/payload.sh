@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Payload loading, sanitization, validation, and delivery configuration
-# Sources lib/parse/blocks.sh at end of file for process_blocks and full parse flow
+# For process_blocks and full parse flow, load lib/parse/blocks.sh after this file, see bin/send-to-slack.sh _load_libs
 # SEND_TO_SLACK_ROOT is set by bin/send-to-slack.sh before this file is sourced
 #
 
@@ -488,7 +488,8 @@ load_configuration() {
 	[[ -z "${SLACK_BOT_USER_OAUTH_TOKEN:-}" ]] && token_preview="empty"
 	[[ -z "${WEBHOOK_URL:-}" ]] && webhook_preview="empty"
 	[[ -n "${EPHEMERAL_USER:-}" ]] && ephemeral_preview="set"
-	echo "load_configuration:: method=${DELIVERY_METHOD} channel=${CHANNEL:-none} dry_run=${DRY_RUN} token=${token_preview} webhook=${webhook_preview} ephemeral=${ephemeral_preview}" >&2
+	echo "load_configuration:: method=${DELIVERY_METHOD} channel=${CHANNEL:-none} dry_run=${DRY_RUN}" >&2
+	echo "load_configuration:: token=${token_preview} webhook=${webhook_preview} ephemeral=${ephemeral_preview}" >&2
 
 	return 0
 }
@@ -540,7 +541,3 @@ parse_payload() {
 
 	return 0
 }
-
-# Block assembly, Slack limits, legacy attachments, Block Kit via create_block
-# shellcheck disable=SC1091
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/blocks.sh"

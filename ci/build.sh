@@ -253,25 +253,6 @@ build_image() {
 		return 1
 	fi
 
-	# Get repo and branch from env vars, git, or defaults
-	local build_repo="${GITHUB_REPOSITORY:-}"
-	local build_branch="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-}}"
-
-	if [[ -z "$build_repo" ]] && command -v git >/dev/null 2>&1; then
-		local git_url
-		git_url=$(git config --get remote.origin.url 2>/dev/null || echo '')
-		if [[ "$git_url" =~ github\.com[:/]([^/]+/[^/]+) ]]; then
-			build_repo="${BASH_REMATCH[1]}"
-		fi
-	fi
-
-	if [[ -z "$build_branch" ]] && command -v git >/dev/null 2>&1; then
-		build_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')
-	fi
-
-	build_repo="${build_repo:-bluekornchips/send-to-slack}"
-	build_branch="${build_branch:-main}"
-
 	local dockerfile_path
 	case "$DOCKERFILE_CHOICE" in
 	concourse)
@@ -295,8 +276,6 @@ build_image() {
 		--platform linux/amd64
 		-t "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
 		-f "$dockerfile_path"
-		--build-arg "GITHUB_REPOSITORY=${build_repo}"
-		--build-arg "GITHUB_REF_NAME=${build_branch}"
 	)
 
 	if [[ -n "${DOCKER_CACHE_FROM:-}" ]]; then
@@ -311,9 +290,13 @@ build_image() {
 		docker_build_args+=(--no-cache)
 	fi
 
-	local docker_build_cmd=(docker build)
-	if [[ -n "${DOCKER_CACHE_FROM:-}" ]] || [[ -n "${DOCKER_CACHE_TO:-}" ]]; then
+	# Prefer Buildx when present. Without buildx, disable BuildKit so docker build does not require
+	# the buildx plugin, see Docker Engine behavior when BuildKit is enabled without buildx.
+	local docker_build_cmd
+	if docker buildx version >/dev/null 2>&1; then
 		docker_build_cmd=(docker buildx build --load)
+	else
+		docker_build_cmd=(env DOCKER_BUILDKIT=0 docker build)
 	fi
 
 	if ! "${docker_build_cmd[@]}" "${docker_build_args[@]}" .; then
@@ -414,6 +397,7 @@ send_test_message() {
 
 	payload_file=$(mktemp /tmp/build-sh.payload.XXXXXX)
 	chmod 0600 "$payload_file"
+	trap 'rm -f "$payload_file"' RETURN ERR
 
 	# Always use table format
 	# Try to get branch and commit from git if not available from CI metadata
@@ -540,12 +524,10 @@ send_test_message() {
 		}' >"$payload_file"
 
 	if ! "$script_path" --file "$payload_file"; then
-		rm -f "$payload_file"
 		echo "send_test_message:: failed to send test message" >&2
 		return 1
 	fi
 
-	rm -f "$payload_file"
 	echo "send_test_message:: test message sent"
 	return 0
 }

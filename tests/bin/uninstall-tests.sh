@@ -27,7 +27,7 @@ setup_file() {
 	INSTALL_BASENAME_VALUE="$INSTALL_BASENAME"
 
 	# Export functions so they're available in test subshells
-	export -f uninstall_binary normalize_prefix file_has_signature validate_prefix install_from_source
+	export -f uninstall_binary normalize_prefix file_has_signature validate_prefix _install_lib_rel_paths install_from_source
 
 	export GIT_ROOT
 	export INSTALL_SCRIPT
