@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 #
-# Tests for lib/slack-api.sh
+# Tests for lib/slack/api.sh
 #
 
 setup_file() {
@@ -9,7 +9,7 @@ setup_file() {
 		fail "Failed to get git root"
 	fi
 
-	SCRIPT="$GIT_ROOT/lib/slack-api.sh"
+	SCRIPT="$GIT_ROOT/lib/slack/api.sh"
 	if [[ ! -f "$SCRIPT" ]]; then
 		fail "Script not found: $SCRIPT"
 	fi

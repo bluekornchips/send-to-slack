@@ -9,7 +9,7 @@ setup_file() {
 		fail "Failed to get git root"
 	fi
 
-	SCRIPT="$GIT_ROOT/lib/block-kit/blocks/markdown.sh"
+	SCRIPT="$GIT_ROOT/lib/slack/block-kit/blocks/markdown.sh"
 	EXAMPLES_FILE="$GIT_ROOT/examples/markdown.yaml"
 
 	if [[ ! -f "$SCRIPT" ]]; then

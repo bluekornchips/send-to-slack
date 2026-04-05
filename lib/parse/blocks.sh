@@ -2,7 +2,7 @@
 #
 # Block processing, Slack limits, and legacy attachment routing
 # Sourced from lib/parse/payload.sh after payload helpers, uses _resolve_from_file_path and convert_thread_ts
-# Sources lib/block-kit/create-block.sh for create_block and Block Kit documentation URLs
+# Sources lib/slack/block-kit/create-block.sh for create_block and Block Kit documentation URLs
 #
 
 DANGER_COLOR="#F44336"  # Red
@@ -15,8 +15,8 @@ WARN_COLOR="#FFC107"    # Yellow
 
 DOC_URL_LEGACY_ATTACHMENTS="https://api.slack.com/reference/messaging/payload#legacy"
 
-_blocks_lib_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# shellcheck source=../block-kit/create-block.sh
+_blocks_lib_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../slack" && pwd)"
+# shellcheck source=../slack/block-kit/create-block.sh
 source "${_blocks_lib_root}/block-kit/create-block.sh"
 
 MAX_TEXT_LENGTH=40000

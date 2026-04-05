@@ -506,10 +506,10 @@ main() {
 	SEND_TO_SLACK_BIN_DIR="$root_dir"
 	export SEND_TO_SLACK_BIN_DIR
 
-	if [[ -f "${root_dir}/lib/slack-api.sh" ]]; then
-		source "${root_dir}/lib/slack-api.sh"
+	if [[ -f "${root_dir}/lib/slack/api.sh" ]]; then
+		source "${root_dir}/lib/slack/api.sh"
 	else
-		echo "main:: cannot locate slack-api.sh at ${root_dir}/lib/slack-api.sh" >&2
+		echo "main:: cannot locate slack api at ${root_dir}/lib/slack/api.sh" >&2
 		return 1
 	fi
 
@@ -520,10 +520,10 @@ main() {
 		return 1
 	fi
 
-	if [[ -f "${root_dir}/lib/resolve-mentions.sh" ]]; then
-		source "${root_dir}/lib/resolve-mentions.sh"
+	if [[ -f "${root_dir}/lib/slack/utils/resolve-mentions.sh" ]]; then
+		source "${root_dir}/lib/slack/utils/resolve-mentions.sh"
 	else
-		echo "main:: cannot locate resolve-mentions.sh at ${root_dir}/lib/resolve-mentions.sh" >&2
+		echo "main:: cannot locate resolve-mentions.sh at ${root_dir}/lib/slack/utils/resolve-mentions.sh" >&2
 		return 1
 	fi
 
@@ -581,17 +581,17 @@ main() {
 		return 1
 	fi
 
-	if [[ -f "${root_dir}/lib/crosspost.sh" ]]; then
-		source "${root_dir}/lib/crosspost.sh"
+	if [[ -f "${root_dir}/lib/slack/crosspost.sh" ]]; then
+		source "${root_dir}/lib/slack/crosspost.sh"
 	else
-		echo "main:: cannot locate crosspost.sh at ${root_dir}/lib/crosspost.sh" >&2
+		echo "main:: cannot locate crosspost.sh at ${root_dir}/lib/slack/crosspost.sh" >&2
 		return 1
 	fi
 
-	if [[ -f "${root_dir}/lib/replies.sh" ]]; then
-		source "${root_dir}/lib/replies.sh"
+	if [[ -f "${root_dir}/lib/slack/replies.sh" ]]; then
+		source "${root_dir}/lib/slack/replies.sh"
 	else
-		echo "main:: cannot locate replies.sh at ${root_dir}/lib/replies.sh" >&2
+		echo "main:: cannot locate replies.sh at ${root_dir}/lib/slack/replies.sh" >&2
 		return 1
 	fi
 

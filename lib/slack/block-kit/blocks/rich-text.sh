@@ -7,7 +7,7 @@
 BLOCK_TYPE="rich_text"
 MAX_RICH_TEXT_CHARS=4000
 
-UPLOAD_FILE_SCRIPT="${UPLOAD_FILE_SCRIPT:-lib/file-upload.sh}"
+UPLOAD_FILE_SCRIPT="${UPLOAD_FILE_SCRIPT:-lib/slack/utils/file-upload.sh}"
 
 ########################################################
 # Documentation URLs

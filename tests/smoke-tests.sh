@@ -37,7 +37,7 @@ setup_file() {
 }
 
 setup() {
-	source "$GIT_ROOT/lib/slack-api.sh"
+	source "$GIT_ROOT/lib/slack/api.sh"
 	source "$GIT_ROOT/lib/metadata.sh"
 	source "$GIT_ROOT/lib/parse/payload.sh"
 	source "$SEND_TO_SLACK_SCRIPT"
@@ -292,7 +292,7 @@ smoke_parse_payload_capture() {
 }
 
 @test "smoke_test:: accepts 100x20 table without hitting ARG_MAX" {
-	source "$GIT_ROOT/lib/block-kit/blocks/table.sh"
+	source "$GIT_ROOT/lib/slack/block-kit/blocks/table.sh"
 
 	local table_output_file
 	table_output_file=$(mktemp "$_SLACK_WORKSPACE/table-argmax.XXXXXX")

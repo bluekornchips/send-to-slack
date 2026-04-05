@@ -9,7 +9,7 @@ setup_file() {
 		fail "Failed to get git root"
 	fi
 
-	SCRIPT="$GIT_ROOT/lib/block-kit/blocks/table.sh"
+	SCRIPT="$GIT_ROOT/lib/slack/block-kit/blocks/table.sh"
 
 	if [[ ! -f "$SCRIPT" ]]; then
 		fail "Script not found: $SCRIPT"

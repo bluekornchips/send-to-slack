@@ -207,23 +207,43 @@ install_from_source() {
 		return 1
 	fi
 
-	if [[ ! -d "${source_dir}/lib/block-kit/blocks" ]]; then
-		echo "install_from_source:: missing lib/block-kit/blocks directory" >&2
+	if [[ ! -f "${source_dir}/lib/metadata.sh" ]]; then
+		echo "install_from_source:: missing lib/metadata.sh" >&2
 		return 1
 	fi
 
-	if [[ ! -f "${source_dir}/lib/block-kit/create-block.sh" ]]; then
-		echo "install_from_source:: missing lib/block-kit/create-block.sh" >&2
+	if [[ ! -f "${source_dir}/lib/slack/api.sh" ]]; then
+		echo "install_from_source:: missing lib/slack/api.sh" >&2
 		return 1
 	fi
 
-	if [[ ! -f "${source_dir}/lib/crosspost.sh" ]]; then
-		echo "install_from_source:: missing lib/crosspost.sh" >&2
+	if [[ ! -f "${source_dir}/lib/slack/crosspost.sh" ]]; then
+		echo "install_from_source:: missing lib/slack/crosspost.sh" >&2
 		return 1
 	fi
 
-	if [[ ! -f "${source_dir}/lib/replies.sh" ]]; then
-		echo "install_from_source:: missing lib/replies.sh" >&2
+	if [[ ! -f "${source_dir}/lib/slack/replies.sh" ]]; then
+		echo "install_from_source:: missing lib/slack/replies.sh" >&2
+		return 1
+	fi
+
+	if [[ ! -f "${source_dir}/lib/slack/utils/resolve-mentions.sh" ]]; then
+		echo "install_from_source:: missing lib/slack/utils/resolve-mentions.sh" >&2
+		return 1
+	fi
+
+	if [[ ! -f "${source_dir}/lib/slack/utils/file-upload.sh" ]]; then
+		echo "install_from_source:: missing lib/slack/utils/file-upload.sh" >&2
+		return 1
+	fi
+
+	if [[ ! -d "${source_dir}/lib/slack/block-kit/blocks" ]]; then
+		echo "install_from_source:: missing lib/slack/block-kit/blocks directory" >&2
+		return 1
+	fi
+
+	if [[ ! -f "${source_dir}/lib/slack/block-kit/create-block.sh" ]]; then
+		echo "install_from_source:: missing lib/slack/block-kit/create-block.sh" >&2
 		return 1
 	fi
 
@@ -244,7 +264,12 @@ install_from_source() {
 		fi
 	fi
 
-	if ! install -d -m 755 "${install_root}/lib/block-kit/blocks" "${install_root}/lib/parse" "$(dirname "$target_binary")"; then
+	if ! install -d -m 755 \
+		"${install_root}/lib/slack" \
+		"${install_root}/lib/slack/utils" \
+		"${install_root}/lib/slack/block-kit/blocks" \
+		"${install_root}/lib/parse" \
+		"$(dirname "$target_binary")"; then
 		echo "install_from_source:: failed to create installation directories" >&2
 		return 1
 	fi
@@ -259,8 +284,8 @@ install_from_source() {
 		return 1
 	fi
 
-	if ! cp "${source_dir}/lib"/*.sh "${install_root}/lib/"; then
-		echo "install_from_source:: failed to copy lib files" >&2
+	if ! cp "${source_dir}/lib/metadata.sh" "${install_root}/lib/"; then
+		echo "install_from_source:: failed to copy lib/metadata.sh" >&2
 		return 1
 	fi
 
@@ -269,13 +294,23 @@ install_from_source() {
 		return 1
 	fi
 
-	if ! cp "${source_dir}/lib/block-kit/create-block.sh" "${install_root}/lib/block-kit/"; then
-		echo "install_from_source:: failed to copy lib/block-kit/create-block.sh" >&2
+	if ! cp "${source_dir}/lib/slack/api.sh" "${source_dir}/lib/slack/crosspost.sh" "${source_dir}/lib/slack/replies.sh" "${install_root}/lib/slack/"; then
+		echo "install_from_source:: failed to copy lib/slack scripts" >&2
 		return 1
 	fi
 
-	if ! cp "${source_dir}/lib/block-kit/blocks"/*.sh "${install_root}/lib/block-kit/blocks/"; then
-		echo "install_from_source:: failed to copy lib/block-kit/blocks files" >&2
+	if ! cp "${source_dir}/lib/slack/utils"/*.sh "${install_root}/lib/slack/utils/"; then
+		echo "install_from_source:: failed to copy lib/slack/utils files" >&2
+		return 1
+	fi
+
+	if ! cp "${source_dir}/lib/slack/block-kit/create-block.sh" "${install_root}/lib/slack/block-kit/"; then
+		echo "install_from_source:: failed to copy lib/slack/block-kit/create-block.sh" >&2
+		return 1
+	fi
+
+	if ! cp "${source_dir}/lib/slack/block-kit/blocks"/*.sh "${install_root}/lib/slack/block-kit/blocks/"; then
+		echo "install_from_source:: failed to copy lib/slack/block-kit/blocks files" >&2
 		return 1
 	fi
 

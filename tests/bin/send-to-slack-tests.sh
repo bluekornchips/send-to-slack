@@ -27,7 +27,7 @@ setup_file() {
 }
 
 setup() {
-	source "$GIT_ROOT/lib/slack-api.sh"
+	source "$GIT_ROOT/lib/slack/api.sh"
 	source "$GIT_ROOT/lib/metadata.sh"
 	source "$SCRIPT"
 

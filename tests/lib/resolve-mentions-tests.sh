@@ -1,10 +1,10 @@
 #!/usr/bin/env bats
 #
-# Test suite for resolve-mentions.sh
+# Test suite for lib/slack/utils/resolve-mentions.sh
 # Tests user, channel, group, and DM resolution with real Slack API calls
 #
 GIT_ROOT="$(git rev-parse --show-toplevel || echo "")"
-RESOLVE_SCRIPT="$GIT_ROOT/lib/resolve-mentions.sh"
+RESOLVE_SCRIPT="$GIT_ROOT/lib/slack/utils/resolve-mentions.sh"
 
 [[ ! -f "$RESOLVE_SCRIPT" ]] && echo "Script not found: $RESOLVE_SCRIPT" >&2 && return 1
 

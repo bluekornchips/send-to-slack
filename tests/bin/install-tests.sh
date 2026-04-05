@@ -68,12 +68,13 @@ teardown() {
 	actual_install_root=$(dirname "$symlink_target")
 
 	[[ -d "${actual_install_root}/lib" ]]
+	[[ -f "${actual_install_root}/lib/metadata.sh" ]]
 	[[ -f "${actual_install_root}/lib/parse/payload.sh" ]]
 	[[ -f "${actual_install_root}/lib/parse/blocks.sh" ]]
-	[[ -f "${actual_install_root}/lib/block-kit/create-block.sh" ]]
-	[[ -f "${actual_install_root}/lib/block-kit/blocks/table.sh" ]]
-	[[ -f "${actual_install_root}/lib/crosspost.sh" ]]
-	[[ -f "${actual_install_root}/lib/replies.sh" ]]
+	[[ -f "${actual_install_root}/lib/slack/block-kit/create-block.sh" ]]
+	[[ -f "${actual_install_root}/lib/slack/block-kit/blocks/table.sh" ]]
+	[[ -f "${actual_install_root}/lib/slack/crosspost.sh" ]]
+	[[ -f "${actual_install_root}/lib/slack/replies.sh" ]]
 
 	rm -rf "${actual_install_root}"
 }
@@ -134,8 +135,8 @@ teardown() {
 	[[ -d "${actual_install_root}/lib" ]]
 	[[ -f "${actual_install_root}/lib/parse/payload.sh" ]]
 	[[ -f "${actual_install_root}/lib/parse/blocks.sh" ]]
-	[[ -f "${actual_install_root}/lib/block-kit/create-block.sh" ]]
-	[[ -f "${actual_install_root}/lib/block-kit/blocks/table.sh" ]]
+	[[ -f "${actual_install_root}/lib/slack/block-kit/create-block.sh" ]]
+	[[ -f "${actual_install_root}/lib/slack/block-kit/blocks/table.sh" ]]
 
 	rm -rf "${actual_install_root}"
 }
@@ -227,13 +228,15 @@ _run_check_dependencies_isolated() {
 	temp_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/send-to-slack-source.XXXXXX")
 	source_dir="${temp_dir}/send-to-slack-main"
 
-	mkdir -p "${source_dir}/bin" "${source_dir}/lib/block-kit/blocks" "${source_dir}/lib/parse"
+	mkdir -p "${source_dir}/bin" "${source_dir}/lib/slack/block-kit/blocks" "${source_dir}/lib/slack/utils" "${source_dir}/lib/parse"
 
 	cp "${GIT_ROOT}/bin/send-to-slack.sh" "${source_dir}/bin/send-to-slack.sh"
-	cp "${GIT_ROOT}/lib"/*.sh "${source_dir}/lib/"
+	cp "${GIT_ROOT}/lib/metadata.sh" "${source_dir}/lib/"
 	cp "${GIT_ROOT}/lib/parse"/*.sh "${source_dir}/lib/parse/"
-	cp "${GIT_ROOT}/lib/block-kit/create-block.sh" "${source_dir}/lib/block-kit/"
-	cp "${GIT_ROOT}/lib/block-kit/blocks"/*.sh "${source_dir}/lib/block-kit/blocks/"
+	cp "${GIT_ROOT}/lib/slack/api.sh" "${GIT_ROOT}/lib/slack/crosspost.sh" "${GIT_ROOT}/lib/slack/replies.sh" "${source_dir}/lib/slack/"
+	cp "${GIT_ROOT}/lib/slack/utils"/*.sh "${source_dir}/lib/slack/utils/"
+	cp "${GIT_ROOT}/lib/slack/block-kit/create-block.sh" "${source_dir}/lib/slack/block-kit/"
+	cp "${GIT_ROOT}/lib/slack/block-kit/blocks"/*.sh "${source_dir}/lib/slack/block-kit/blocks/"
 	if [[ -f "${GIT_ROOT}/VERSION" ]]; then
 		cp "${GIT_ROOT}/VERSION" "${source_dir}/VERSION"
 	fi
@@ -261,12 +264,13 @@ _run_check_dependencies_isolated() {
 	# Function already verifies signature, so if it succeeded, signature is there
 	file_has_signature "${actual_install_root}/send-to-slack"
 	[[ -d "${actual_install_root}/lib" ]]
+	[[ -f "${actual_install_root}/lib/metadata.sh" ]]
 	[[ -f "${actual_install_root}/lib/parse/payload.sh" ]]
 	[[ -f "${actual_install_root}/lib/parse/blocks.sh" ]]
-	[[ -f "${actual_install_root}/lib/block-kit/create-block.sh" ]]
-	[[ -f "${actual_install_root}/lib/block-kit/blocks/table.sh" ]]
-	[[ -f "${actual_install_root}/lib/crosspost.sh" ]]
-	[[ -f "${actual_install_root}/lib/replies.sh" ]]
+	[[ -f "${actual_install_root}/lib/slack/block-kit/create-block.sh" ]]
+	[[ -f "${actual_install_root}/lib/slack/block-kit/blocks/table.sh" ]]
+	[[ -f "${actual_install_root}/lib/slack/crosspost.sh" ]]
+	[[ -f "${actual_install_root}/lib/slack/replies.sh" ]]
 	if [[ -f "${source_dir}/VERSION" ]]; then
 		[[ -f "${actual_install_root}/VERSION" ]]
 	fi

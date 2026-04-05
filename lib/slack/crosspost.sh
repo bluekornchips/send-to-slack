@@ -2,7 +2,7 @@
 #
 # Crosspost notification handler
 # Sends a message to additional channels using the same params as a regular message.
-# Depends on: send_notification from lib/slack-api.sh, parse_payload, _SLACK_WORKSPACE, NOTIFICATION_PERMALINK
+# Depends on: send_notification from lib/slack/api.sh, parse_payload, _SLACK_WORKSPACE, NOTIFICATION_PERMALINK
 #
 
 # Send crosspost notifications to additional channels

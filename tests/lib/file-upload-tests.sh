@@ -9,7 +9,7 @@ setup_file() {
 		fail "Failed to get git root"
 	fi
 
-	SCRIPT="$GIT_ROOT/lib/file-upload.sh"
+	SCRIPT="$GIT_ROOT/lib/slack/utils/file-upload.sh"
 	SEND_TO_SLACK_SCRIPT="$GIT_ROOT/bin/send-to-slack.sh"
 
 	if [[ ! -f "$SCRIPT" ]]; then
