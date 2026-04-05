@@ -66,7 +66,11 @@ setup() {
 
 teardown() {
 	rm -f "${TEST_PAYLOAD_FILE}"
-	[[ -n "$input_payload" ]] && rm -f "$input_payload"
+	[[ -n "${input_payload:-}" ]] && rm -f "$input_payload"
+	if [[ -n "${_SLACK_WORKSPACE:-}" ]] && [[ -d "${_SLACK_WORKSPACE}" ]]; then
+		rm -rf "${_SLACK_WORKSPACE}"
+	fi
+
 	return 0
 }
 
@@ -297,6 +301,14 @@ teardown() {
 @test "crosspost_notification:: auto-appends permalink by default" {
 	DRY_RUN="true"
 	NOTIFICATION_PERMALINK="https://workspace.slack.com/archives/C123/p123"
+	local capture_file
+	capture_file=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.crosspost-capture.XXXXXX")
+
+	send_notification() {
+		printf '%s' "$1" >"${capture_file}"
+		return 0
+	}
+
 	local input_payload
 	input_payload=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.test-crosspost.XXXXXX")
 	jq -n '{
@@ -321,19 +333,16 @@ teardown() {
 		}
 	}' >"$input_payload"
 
-	local crosspost_params
-	crosspost_params=$(jq '.params.crosspost | del(.channel, .no_link)' "$input_payload")
-	# shellcheck disable=SC2016
-	local permalink_block='{"context": {"elements": [{"type": "mrkdwn", "text": "<$NOTIFICATION_PERMALINK|View original message>"}]}}'
-	crosspost_params=$(echo "$crosspost_params" | jq --argjson link "$permalink_block" '.blocks = (.blocks // []) + [$link]')
+	run crosspost_notification "$input_payload"
+	[[ "$status" -eq 0 ]]
 
 	local block_count
-	block_count=$(echo "$crosspost_params" | jq '.blocks | length')
+	block_count=$(jq '.blocks | length' "${capture_file}")
 	[[ "$block_count" -eq 2 ]]
 
-	echo "$crosspost_params" | jq -e '.blocks[-1].context.elements[0].text | contains("NOTIFICATION_PERMALINK")' >/dev/null
+	jq -e '.blocks[-1] | select(.type == "context") | .elements[0].text | contains("https://workspace.slack.com/archives/C123/p123")' "${capture_file}" >/dev/null
 
-	rm -f "$input_payload"
+	rm -f "$input_payload" "${capture_file}"
 }
 
 @test "crosspost_notification:: no_link true skips permalink" {
@@ -366,6 +375,151 @@ teardown() {
 
 	run crosspost_notification "$input_payload"
 	[[ "$status" -eq 0 ]]
+
+	rm -f "$input_payload"
+}
+
+@test "crosspost_notification:: returns 1 when input_payload path is missing" {
+	run crosspost_notification "/nonexistent/crosspost-payload.json"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "input_payload must be a readable file"
+}
+
+@test "crosspost_notification:: returns 1 when parse_payload fails for a channel" {
+	DRY_RUN="true"
+	NOTIFICATION_PERMALINK="https://workspace.slack.com/archives/C123/p123"
+
+	# shellcheck disable=SC2317
+	parse_payload() {
+		return 1
+	}
+
+	local input_payload
+	input_payload=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.test-crosspost.XXXXXX")
+	jq -n '{
+		source: { slack_bot_user_oauth_token: "test-token" },
+		params: {
+			channel: "#test",
+			blocks: [{
+				section: {
+					type: "text",
+					text: { type: "plain_text", text: "Primary" }
+				}
+			}],
+			crosspost: {
+				channel: "#channel1",
+				blocks: [{
+					section: {
+						type: "text",
+						text: { type: "plain_text", text: "Crosspost message" }
+					}
+				}]
+			}
+		}
+	}' >"$input_payload"
+
+	run crosspost_notification "$input_payload"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "failed to parse payload for channel"
+
+	rm -f "$input_payload"
+}
+
+@test "crosspost_notification:: returns 1 when any channel fails and others still run" {
+	DRY_RUN="true"
+	NOTIFICATION_PERMALINK="https://workspace.slack.com/archives/C123/p123"
+
+	local parse_attempt_file
+	parse_attempt_file=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.parse-attempt.XXXXXX")
+	echo 0 >"${parse_attempt_file}"
+
+	# shellcheck disable=SC2317
+	parse_payload() {
+		local n
+		n=$(<"${parse_attempt_file}")
+		n=$((n + 1))
+		echo "${n}" >"${parse_attempt_file}"
+		if [[ "${n}" -eq 1 ]]; then
+			return 1
+		fi
+		echo '{"channel":"#channel2","blocks":[]}'
+		return 0
+	}
+
+	# shellcheck disable=SC2317
+	send_notification() {
+		return 0
+	}
+
+	local input_payload
+	input_payload=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.test-crosspost.XXXXXX")
+	jq -n '{
+		source: { slack_bot_user_oauth_token: "test-token" },
+		params: {
+			channel: "#test",
+			blocks: [{
+				section: {
+					type: "text",
+					text: { type: "plain_text", text: "Primary" }
+				}
+			}],
+			crosspost: {
+				channel: ["#channel1", "#channel2"],
+				blocks: [{
+					section: {
+						type: "text",
+						text: { type: "plain_text", text: "Crosspost" }
+					}
+				}]
+			}
+		}
+	}' >"$input_payload"
+
+	run crosspost_notification "$input_payload"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "failed to parse payload for channel"
+	echo "$output" | grep -q "processing channel #channel2"
+	echo "$output" | grep -q "sent to channel #channel2"
+
+	rm -f "$input_payload" "${parse_attempt_file}"
+}
+
+@test "crosspost_notification:: returns 1 when send_notification fails for a channel" {
+	DRY_RUN="true"
+	NOTIFICATION_PERMALINK="https://workspace.slack.com/archives/C123/p123"
+
+	# shellcheck disable=SC2317
+	send_notification() {
+		return 1
+	}
+
+	local input_payload
+	input_payload=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.test-crosspost.XXXXXX")
+	jq -n '{
+		source: { slack_bot_user_oauth_token: "test-token" },
+		params: {
+			channel: "#test",
+			blocks: [{
+				section: {
+					type: "text",
+					text: { type: "plain_text", text: "Primary" }
+				}
+			}],
+			crosspost: {
+				channel: "#channel1",
+				blocks: [{
+					section: {
+						type: "text",
+						text: { type: "plain_text", text: "Crosspost message" }
+					}
+				}]
+			}
+		}
+	}' >"$input_payload"
+
+	run crosspost_notification "$input_payload"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "failed to send notification to channel"
 
 	rm -f "$input_payload"
 }
