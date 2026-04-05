@@ -527,13 +527,19 @@ update_message() {
 
 	if [[ "${LOG_VERBOSE:-}" == "true" ]]; then
 		local block_count
+		local sanitized_update_body
 		block_count=$(echo "$update_body" | jq '.blocks | length // 0' 2>/dev/null || echo "0")
+		sanitized_update_body=$(
+			echo "$update_body" |
+				jq 'del(.thread_ts) | .blocks |= (if type == "array" then [.[] | {type: .type}] else . end)' \
+					2>/dev/null || echo "$update_body" | jq . 2>/dev/null
+		)
 		cat <<EOF >&2
 update_message:: channel: ${resp_channel}
 update_message:: ts: ${resp_ts}
 update_message:: blocks: ${block_count}
 update_message:: request payload (sanitized):
-$(echo "$update_body" | jq 'del(.thread_ts) | .blocks |= (if type == "array" then [.[] | {type: .type}] else . end)' 2>/dev/null || echo "$update_body" | jq . 2>/dev/null)
+${sanitized_update_body}
 EOF
 	fi
 
@@ -754,13 +760,19 @@ send_notification() {
 
 	if [[ "${LOG_VERBOSE:-}" == "true" ]]; then
 		local block_count
+		local sanitized_payload
 		block_count=$(echo "$payload" | jq '.blocks | length // 0' 2>/dev/null || echo "0")
+		sanitized_payload=$(
+			echo "$payload" |
+				jq 'del(.thread_ts) | .blocks |= (if type == "array" then [.[] | {type: .type}] else . end)' \
+					2>/dev/null || echo "$payload" | jq . 2>/dev/null
+		)
 		cat <<EOF >&2
 send_notification:: channel: ${channel}
 send_notification:: ts: ${message_ts}
 send_notification:: blocks: ${block_count}
 send_notification:: request payload (sanitized):
-$(echo "$payload" | jq 'del(.thread_ts) | .blocks |= (if type == "array" then [.[] | {type: .type}] else . end)' 2>/dev/null || echo "$payload" | jq . 2>/dev/null)
+${sanitized_payload}
 EOF
 	fi
 

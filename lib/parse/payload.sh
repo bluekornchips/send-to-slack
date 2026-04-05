@@ -488,7 +488,8 @@ load_configuration() {
 	[[ -z "${SLACK_BOT_USER_OAUTH_TOKEN:-}" ]] && token_preview="empty"
 	[[ -z "${WEBHOOK_URL:-}" ]] && webhook_preview="empty"
 	[[ -n "${EPHEMERAL_USER:-}" ]] && ephemeral_preview="set"
-	echo "load_configuration:: method=${DELIVERY_METHOD} channel=${CHANNEL:-none} dry_run=${DRY_RUN} token=${token_preview} webhook=${webhook_preview} ephemeral=${ephemeral_preview}" >&2
+	echo "load_configuration:: method=${DELIVERY_METHOD} channel=${CHANNEL:-none} dry_run=${DRY_RUN}" >&2
+	echo "load_configuration:: token=${token_preview} webhook=${webhook_preview} ephemeral=${ephemeral_preview}" >&2
 
 	return 0
 }

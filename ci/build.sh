@@ -397,6 +397,7 @@ send_test_message() {
 
 	payload_file=$(mktemp /tmp/build-sh.payload.XXXXXX)
 	chmod 0600 "$payload_file"
+	trap 'rm -f "$payload_file"' RETURN ERR
 
 	# Always use table format
 	# Try to get branch and commit from git if not available from CI metadata
@@ -523,12 +524,10 @@ send_test_message() {
 		}' >"$payload_file"
 
 	if ! "$script_path" --file "$payload_file"; then
-		rm -f "$payload_file"
 		echo "send_test_message:: failed to send test message" >&2
 		return 1
 	fi
 
-	rm -f "$payload_file"
 	echo "send_test_message:: test message sent"
 	return 0
 }

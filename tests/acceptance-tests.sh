@@ -64,7 +64,7 @@ setup() {
 		}
 	]')"
 
-	TEST_PAYLOAD_FILE=$(mktemp acceptance-tests.test-payload.XXXXXX)
+	TEST_PAYLOAD_FILE=$(mktemp "${BATS_TEST_TMPDIR}/acceptance-tests.test-payload.XXXXXX")
 
 	export SLACK_BOT_USER_OAUTH_TOKEN
 	export CHANNEL
@@ -104,7 +104,7 @@ teardown() {
 		return 1
 	fi
 
-	ACCEPTANCE_TEST_FILE=$(mktemp acceptance-tests.test-upload.XXXXXX)
+	ACCEPTANCE_TEST_FILE=$(mktemp "${BATS_TEST_TMPDIR}/acceptance-tests.test-upload.XXXXXX")
 	echo "Test file content for upload testing" >"$ACCEPTANCE_TEST_FILE"
 
 	local file_block
@@ -243,7 +243,7 @@ teardown() {
 	local token="$REAL_TOKEN"
 	DRY_RUN="false"
 
-	ACCEPTANCE_PAYLOAD_FILE=$(mktemp acceptance-tests.acceptance-payload.XXXXXX)
+	ACCEPTANCE_PAYLOAD_FILE=$(mktemp "${BATS_TEST_TMPDIR}/acceptance-tests.acceptance-payload.XXXXXX")
 	jq -n \
 		--arg channel "$CHANNEL" \
 		--arg dry_run "$DRY_RUN" \
@@ -542,7 +542,7 @@ teardown() {
 		return 1
 	fi
 
-	ACCEPTANCE_TEST_FILE=$(mktemp acceptance-tests.test-upload.XXXXXX)
+	ACCEPTANCE_TEST_FILE=$(mktemp "${BATS_TEST_TMPDIR}/acceptance-tests.test-upload.XXXXXX")
 	echo "Test file content for upload testing" >"$ACCEPTANCE_TEST_FILE"
 
 	local file_block
@@ -588,7 +588,7 @@ teardown() {
 	echo "$output" | grep -q "main:: sending notification"
 
 	local parsed_payload_file
-	parsed_payload_file=$(mktemp acceptance-tests.parsed-payload.XXXXXX)
+	parsed_payload_file=$(mktemp "${BATS_TEST_TMPDIR}/acceptance-tests.parsed-payload.XXXXXX")
 	trap 'rm -f "$parsed_payload_file" 2>/dev/null || true' EXIT
 	if ! parse_payload "$TEST_PAYLOAD_FILE" >"$parsed_payload_file"; then
 		echo "parse_payload failed" >&2
