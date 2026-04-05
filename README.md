@@ -622,7 +622,7 @@ The `$NOTIFICATION_PERMALINK` environment variable is available for use in cross
 2. After successful delivery, the permalink to the original message is stored in `$NOTIFICATION_PERMALINK`
 3. For each channel in `crosspost.channel` or `crosspost.channels`, a new message is created using the crosspost params
 4. Unless `no_link: true`, a context block with a link to the original message is appended
-5. If a crosspost fails for a specific channel, the error is logged but processing continues for remaining channels
+5. If a crosspost fails for a specific channel, the error is logged but processing continues for remaining channels. If any channel fails to build, parse, or send, the resource exits with a non-zero status after all channels are attempted
 
 ## File Uploads
 
