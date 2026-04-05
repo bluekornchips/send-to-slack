@@ -66,7 +66,10 @@ setup() {
 
 teardown() {
 	rm -f "${TEST_PAYLOAD_FILE}"
-	[[ -n "$input_payload" ]] && rm -f "$input_payload"
+	[[ -n "${input_payload:-}" ]] && rm -f "$input_payload"
+	if [[ -n "${_SLACK_WORKSPACE:-}" ]] && [[ -d "$_SLACK_WORKSPACE" ]]; then
+		rm -rf "$_SLACK_WORKSPACE"
+	fi
 	return 0
 }
 
@@ -86,6 +89,35 @@ mock_curl_success() {
 ########################################################
 # send_thread_replies
 ########################################################
+
+@test "send_thread_replies:: returns 1 when input_payload_file is missing" {
+	local parsed_payload
+	parsed_payload=$(jq -n '{
+		channel: "#test",
+		blocks: [],
+		thread_replies: [
+			{
+				blocks: [
+					{
+						type: "section",
+						text: { type: "plain_text", text: "Reply 1" }
+					}
+				]
+			}
+		]
+	}')
+
+	local outfile
+	outfile=$(mktemp "${BATS_TEST_TMPDIR}/send-to-slack-tests.replies-missing-input.XXXXXX")
+	set +e
+	send_thread_replies "/nonexistent/payload.json" "1234567890.123456" "$parsed_payload" >"$outfile" 2>&1
+	local status=$?
+	set -e
+
+	[[ "$status" -eq 1 ]]
+	grep -q "input_payload_file is missing or not readable" "$outfile"
+	rm -f "$outfile"
+}
 
 @test "send_thread_replies:: skips when thread_replies is absent" {
 	local parsed_payload
