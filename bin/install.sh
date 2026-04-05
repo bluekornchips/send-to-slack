@@ -217,6 +217,11 @@ install_from_source() {
 		return 1
 	fi
 
+	if [[ ! -f "${source_dir}/lib/get-version.sh" ]]; then
+		echo "install_from_source:: missing lib/get-version.sh" >&2
+		return 1
+	fi
+
 	if [[ ! -f "${source_dir}/lib/slack/api.sh" ]]; then
 		echo "install_from_source:: missing lib/slack/api.sh" >&2
 		return 1
@@ -296,6 +301,11 @@ install_from_source() {
 
 	if ! cp "${source_dir}/lib/health-check.sh" "${install_root}/lib/"; then
 		echo "install_from_source:: failed to copy lib/health-check.sh" >&2
+		return 1
+	fi
+
+	if ! cp "${source_dir}/lib/get-version.sh" "${install_root}/lib/"; then
+		echo "install_from_source:: failed to copy lib/get-version.sh" >&2
 		return 1
 	fi
 

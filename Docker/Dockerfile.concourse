@@ -28,7 +28,7 @@ ENV PATH="/opt/resource:${PATH}"
 
 RUN chmod +x /opt/resource/check /opt/resource/in /opt/resource/out && \
     chmod +x /opt/resource/send-to-slack && \
-    chmod +x /opt/resource/lib/metadata.sh /opt/resource/lib/health-check.sh && \
+    chmod +x /opt/resource/lib/metadata.sh /opt/resource/lib/health-check.sh /opt/resource/lib/get-version.sh && \
     chmod +x /opt/resource/lib/parse/*.sh && \
     chmod +x /opt/resource/lib/slack/api.sh /opt/resource/lib/slack/crosspost.sh /opt/resource/lib/slack/replies.sh && \
     chmod +x /opt/resource/lib/slack/utils/*.sh && \

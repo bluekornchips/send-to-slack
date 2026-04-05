@@ -98,3 +98,49 @@ create_metadata() {
 
 	return 0
 }
+
+# Emit Concourse resource JSON to stdout or SEND_TO_SLACK_OUTPUT
+#
+# Inputs:
+# - $1 - timestamp: version.timestamp string
+# - $2 - meta_ts: message ts for version.message_ts when non-empty
+#
+# Inputs from environment:
+# - METADATA: JSON value for metadata field
+# - SEND_TO_SLACK_OUTPUT: optional file path
+#
+# Returns:
+# - 0 on success
+# - 1 if jq fails
+emit_concourse_output() {
+	local timestamp="$1"
+	local meta_ts="$2"
+	local json_output
+
+	if ! json_output=$(jq -n \
+		--arg timestamp "${timestamp}" \
+		--arg version_message_ts "${meta_ts}" \
+		--argjson metadata "${METADATA}" \
+		'{
+      version: (
+        if $version_message_ts != "" then { timestamp: $timestamp, message_ts: $version_message_ts }
+        else { timestamp: $timestamp }
+        end
+      ),
+      metadata: $metadata
+    }'); then
+		echo "emit_concourse_output:: failed to build output JSON" >&2
+		return 1
+	fi
+
+	if [[ -n "${SEND_TO_SLACK_OUTPUT:-}" ]]; then
+		jq -r '.' <<<"${json_output}" >"${SEND_TO_SLACK_OUTPUT}"
+		echo "emit_concourse_output:: output written to ${SEND_TO_SLACK_OUTPUT}"
+
+		return 0
+	fi
+
+	jq -r '.' <<<"${json_output}"
+
+	return 0
+}

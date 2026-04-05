@@ -11,6 +11,16 @@
 SHOW_METADATA="true"
 SHOW_PAYLOAD="true"
 
+# Paths relative to repo or install root, sourced in order by _load_libs
+SEND_TO_SLACK_LIB_FILES=(
+	lib/slack/api.sh
+	lib/metadata.sh
+	lib/slack/utils/resolve-mentions.sh
+	lib/parse/payload.sh
+	lib/slack/crosspost.sh
+	lib/slack/replies.sh
+)
+
 # Display usage information
 #
 # Side Effects:
@@ -33,38 +43,6 @@ OPTIONS:
 For more information, see: https://github.com/bluekornchips/send-to-slack
 EOF
 	return 0
-}
-
-# Resolve version from known locations
-#
-# Inputs:
-# - $1 - root_path: Base directory for repository or packaged copy
-#
-# Outputs:
-# - Writes version string to stdout on success
-#
-# Returns:
-# - 0 on success, 1 on missing
-get_version() {
-	local root_path="$1"
-	local version_path
-	local version_value
-
-	if [[ -z "$root_path" ]]; then
-		return 1
-	fi
-
-	version_path="${root_path}/VERSION"
-
-	if [[ -f "$version_path" ]]; then
-		version_value=$(tr -d '\r' <"$version_path" | tr -d '\n')
-		if [[ -n "$version_value" ]]; then
-			echo "$version_value"
-			return 0
-		fi
-	fi
-
-	return 1
 }
 
 # Resolve commit from git metadata when available
@@ -411,98 +389,28 @@ apply_debug_from_payload() {
 	return 0
 }
 
-# Emit Concourse resource JSON to stdout or SEND_TO_SLACK_OUTPUT
-#
-# Inputs:
-# - $1 - timestamp: version.timestamp string
-# - $2 - meta_ts: message ts for version.message_ts when non-empty
-#
-# Inputs from environment:
-# - METADATA: JSON value for metadata field
-# - SEND_TO_SLACK_OUTPUT: optional file path
-#
-# Returns:
-# - 0 on success
-# - 1 if jq fails
-emit_concourse_output() {
-	local timestamp="$1"
-	local meta_ts="$2"
-	local json_output
-
-	if ! json_output=$(jq -n \
-		--arg timestamp "${timestamp}" \
-		--arg version_message_ts "${meta_ts}" \
-		--argjson metadata "${METADATA}" \
-		'{
-      version: (
-        if $version_message_ts != "" then { timestamp: $timestamp, message_ts: $version_message_ts }
-        else { timestamp: $timestamp }
-        end
-      ),
-      metadata: $metadata
-    }'); then
-		echo "emit_concourse_output:: failed to build output JSON" >&2
-		return 1
-	fi
-
-	if [[ -n "${SEND_TO_SLACK_OUTPUT:-}" ]]; then
-		jq -r '.' <<<"${json_output}" >"${SEND_TO_SLACK_OUTPUT}"
-		echo "main:: output written to ${SEND_TO_SLACK_OUTPUT}"
-	else
-		jq -r '.' <<<"${json_output}"
-	fi
-
-	return 0
-}
-
-# Source API, metadata, and mention resolution libraries
+# Source Slack helper libraries listed in SEND_TO_SLACK_LIB_FILES
 #
 # Inputs:
 # - $1 - root_dir: repository or install root
 #
-# Returns:
-# - 0 on success
-# - 1 if a required file is missing
-source_send_to_slack_libs_core() {
-	local root_dir="$1"
-	local path
-
-	for path in \
-		"${root_dir}/lib/slack/api.sh" \
-		"${root_dir}/lib/metadata.sh" \
-		"${root_dir}/lib/slack/utils/resolve-mentions.sh"; do
-		if [[ ! -f "$path" ]]; then
-			echo "main:: cannot locate required library at ${path}" >&2
-			return 1
-		fi
-		# shellcheck disable=SC1090
-		source "$path"
-	done
-
-	return 0
-}
-
-# Source payload parsing, crosspost, and replies libraries
-#
-# Inputs:
-# - $1 - root_dir: repository or install root
+# Side Effects:
+# - SEND_TO_SLACK_ROOT must already be set and exported before calling
 #
 # Returns:
 # - 0 on success
 # - 1 if a required file is missing
-source_send_to_slack_libs_message() {
+_load_libs() {
 	local root_dir="$1"
 	local path
+	local rel
 
-	for path in \
-		"${root_dir}/lib/parse/payload.sh" \
-		"${root_dir}/lib/slack/crosspost.sh" \
-		"${root_dir}/lib/slack/replies.sh"; do
+	for rel in "${SEND_TO_SLACK_LIB_FILES[@]}"; do
+		path="${root_dir}/${rel}"
 		if [[ ! -f "$path" ]]; then
 			echo "main:: cannot locate required library at ${path}" >&2
 			return 1
 		fi
-		# shellcheck disable=SC1090
 		source "$path"
 	done
 
@@ -532,6 +440,12 @@ main() {
 	if ! root_dir=$(initialize_script_environment); then
 		return 1
 	fi
+
+	if [[ ! -f "${root_dir}/lib/get-version.sh" ]]; then
+		echo "main:: cannot locate get-version.sh at ${root_dir}/lib/get-version.sh" >&2
+		return 1
+	fi
+	source "${root_dir}/lib/get-version.sh"
 
 	parse_result=0
 	parse_main_args "$@" || parse_result=$?
@@ -569,7 +483,7 @@ main() {
 	SEND_TO_SLACK_ROOT="$root_dir"
 	export SEND_TO_SLACK_ROOT
 
-	if ! source_send_to_slack_libs_core "${root_dir}"; then
+	if ! _load_libs "${root_dir}"; then
 		return 1
 	fi
 
@@ -606,10 +520,6 @@ main() {
 
 	if [[ ! -f "${input_payload}" ]]; then
 		echo "main:: input file disappeared before parsing: ${input_payload}" >&2
-		return 1
-	fi
-
-	if ! source_send_to_slack_libs_message "${root_dir}"; then
 		return 1
 	fi
 

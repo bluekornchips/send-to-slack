@@ -124,7 +124,7 @@ teardown() {
 	mkdir -p "${source_dir}/bin" "${source_dir}/lib/slack/block-kit/blocks" "${source_dir}/lib/slack/utils" "${source_dir}/lib/parse"
 
 	cp "${GIT_ROOT}/bin/send-to-slack.sh" "${source_dir}/bin/send-to-slack.sh"
-	cp "${GIT_ROOT}/lib/metadata.sh" "${GIT_ROOT}/lib/health-check.sh" "${source_dir}/lib/"
+	cp "${GIT_ROOT}/lib/metadata.sh" "${GIT_ROOT}/lib/health-check.sh" "${GIT_ROOT}/lib/get-version.sh" "${source_dir}/lib/"
 	cp "${GIT_ROOT}/lib/parse"/*.sh "${source_dir}/lib/parse/"
 	cp "${GIT_ROOT}/lib/slack/api.sh" "${GIT_ROOT}/lib/slack/crosspost.sh" "${GIT_ROOT}/lib/slack/replies.sh" "${source_dir}/lib/slack/"
 	cp "${GIT_ROOT}/lib/slack/utils"/*.sh "${source_dir}/lib/slack/utils/"
