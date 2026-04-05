@@ -61,9 +61,9 @@ Always fetches the base branch from origin before comparing.
 
 ### Examples
 
-If `lib/parse-payload.sh` changes, the script finds `tests/parse-payload-tests.sh` because it contains "parse-payload".
+If `lib/parse/payload.sh` changes, the script finds `tests/lib/parse/payload-tests.sh` because it contains "payload".
 
-If `lib/blocks/rich-text.sh` changes, the script finds `tests/blocks/rich-text-tests.sh` because it contains "rich-text".
+If `lib/block-kit/blocks/rich-text.sh` changes, the script finds `tests/lib/block-kit/blocks/rich-text-tests.sh` because it contains "rich-text".
 
 If `tests/smoke-tests.sh` changes, the script runs that test file directly.
 

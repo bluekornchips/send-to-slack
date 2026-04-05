@@ -9,7 +9,7 @@ setup_file() {
 		fail "Failed to get git root"
 	fi
 
-	SCRIPT="$GIT_ROOT/lib/blocks/divider.sh"
+	SCRIPT="$GIT_ROOT/lib/slack/block-kit/blocks/divider.sh"
 	EXAMPLES_FILE="$GIT_ROOT/examples/divider.yaml"
 
 	if [[ ! -f "$SCRIPT" ]]; then

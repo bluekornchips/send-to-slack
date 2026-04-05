@@ -9,7 +9,7 @@ setup_file() {
 		fail "Failed to get git root"
 	fi
 
-	SCRIPT="$GIT_ROOT/lib/blocks/context.sh"
+	SCRIPT="$GIT_ROOT/lib/slack/block-kit/blocks/context.sh"
 	EXAMPLES_FILE="$GIT_ROOT/examples/context.yaml"
 
 	if [[ ! -f "$SCRIPT" ]]; then

@@ -121,20 +121,22 @@ teardown() {
 	temp_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/send-to-slack-source.XXXXXX")
 	source_dir="${temp_dir}/send-to-slack-main"
 
-	mkdir -p "${source_dir}/bin" "${source_dir}/lib/blocks" "${source_dir}/lib/parse"
+	mkdir -p "${source_dir}/bin" "${source_dir}/lib/slack/block-kit/blocks" "${source_dir}/lib/slack/utils" "${source_dir}/lib/parse"
 
 	cp "${GIT_ROOT}/bin/send-to-slack.sh" "${source_dir}/bin/send-to-slack.sh"
-	cp "${GIT_ROOT}/lib"/*.sh "${source_dir}/lib/"
+	cp "${GIT_ROOT}/lib/metadata.sh" "${source_dir}/lib/"
 	cp "${GIT_ROOT}/lib/parse"/*.sh "${source_dir}/lib/parse/"
-	cp "${GIT_ROOT}/lib/blocks"/*.sh "${source_dir}/lib/blocks/"
+	cp "${GIT_ROOT}/lib/slack/api.sh" "${GIT_ROOT}/lib/slack/crosspost.sh" "${GIT_ROOT}/lib/slack/replies.sh" "${source_dir}/lib/slack/"
+	cp "${GIT_ROOT}/lib/slack/utils"/*.sh "${source_dir}/lib/slack/utils/"
+	cp "${GIT_ROOT}/lib/slack/block-kit/create-block.sh" "${source_dir}/lib/slack/block-kit/"
+	cp "${GIT_ROOT}/lib/slack/block-kit/blocks"/*.sh "${source_dir}/lib/slack/block-kit/blocks/"
 	if [[ -f "${GIT_ROOT}/VERSION" ]]; then
 		cp "${GIT_ROOT}/VERSION" "${source_dir}/VERSION"
 	fi
 
 	for need in \
 		"${source_dir}/lib/parse/payload.sh" \
-		"${source_dir}/lib/parse/blocks.sh" \
-		"${source_dir}/lib/parse-payload.sh"; do
+		"${source_dir}/lib/parse/blocks.sh"; do
 		if [[ ! -f "$need" ]]; then
 			fail "uninstall fixture missing required file after copy: $need"
 		fi

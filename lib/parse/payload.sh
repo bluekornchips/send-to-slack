@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 #
 # Payload loading, sanitization, validation, and delivery configuration
-# Sourced before lib/parse/blocks.sh for full parse flow
+# Sources lib/parse/blocks.sh at end of file for process_blocks and full parse flow
 #
+
+if [[ -z "${SEND_TO_SLACK_ROOT:-}" ]]; then
+	SEND_TO_SLACK_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+	export SEND_TO_SLACK_ROOT
+fi
 
 DEFAULT_DRY_RUN="false"
 
@@ -510,10 +515,6 @@ load_configuration() {
 parse_payload() {
 	local payload_file="$1"
 
-	local _lib_dir
-	_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-	source "${_lib_dir}/create-blocks.sh"
-
 	INPUT_PAYLOAD="$payload_file"
 	export INPUT_PAYLOAD
 
@@ -543,3 +544,6 @@ parse_payload() {
 
 	return 0
 }
+
+# Block assembly, Slack limits, legacy attachments, Block Kit via create_block
+source "${SEND_TO_SLACK_ROOT}/lib/parse/blocks.sh"

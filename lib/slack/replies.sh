@@ -2,7 +2,7 @@
 #
 # Thread replies handler, source this file from send-to-slack.sh, do not execute directly.
 # Sends each entry in thread_replies as a separate message in a thread.
-# Depends on: send_notification from lib/slack-api.sh, parse_payload, _SLACK_WORKSPACE
+# Depends on: send_notification from lib/slack/api.sh, parse_payload, _SLACK_WORKSPACE
 #
 
 # Send each entry in thread_replies as a separate thread message

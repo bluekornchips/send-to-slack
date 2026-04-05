@@ -8,19 +8,19 @@
 # Files
 ########################################################
 
-RICH_TEXT_BLOCK_FILE="lib/blocks/rich-text.sh"
-TABLE_BLOCK_FILE="lib/blocks/table.sh"
-SECTION_BLOCK_FILE="lib/blocks/section.sh"
-HEADER_BLOCK_FILE="lib/blocks/header.sh"
-CONTEXT_BLOCK_FILE="lib/blocks/context.sh"
-DIVIDER_BLOCK_FILE="lib/blocks/divider.sh"
-MARKDOWN_BLOCK_FILE="lib/blocks/markdown.sh"
-ACTIONS_BLOCK_FILE="lib/blocks/actions.sh"
-IMAGE_BLOCK_FILE="lib/blocks/image.sh"
-VIDEO_BLOCK_FILE="lib/blocks/video.sh"
+RICH_TEXT_BLOCK_FILE="lib/slack/block-kit/blocks/rich-text.sh"
+TABLE_BLOCK_FILE="lib/slack/block-kit/blocks/table.sh"
+SECTION_BLOCK_FILE="lib/slack/block-kit/blocks/section.sh"
+HEADER_BLOCK_FILE="lib/slack/block-kit/blocks/header.sh"
+CONTEXT_BLOCK_FILE="lib/slack/block-kit/blocks/context.sh"
+DIVIDER_BLOCK_FILE="lib/slack/block-kit/blocks/divider.sh"
+MARKDOWN_BLOCK_FILE="lib/slack/block-kit/blocks/markdown.sh"
+ACTIONS_BLOCK_FILE="lib/slack/block-kit/blocks/actions.sh"
+IMAGE_BLOCK_FILE="lib/slack/block-kit/blocks/image.sh"
+VIDEO_BLOCK_FILE="lib/slack/block-kit/blocks/video.sh"
 
 # Other scripts
-FILE_UPLOAD_SCRIPT="lib/file-upload.sh"
+FILE_UPLOAD_SCRIPT="lib/slack/utils/file-upload.sh"
 
 ########################################################
 # Documentation URLs
@@ -36,8 +36,7 @@ DOC_URL_BLOCK_KIT_RICH_TEXT="https://docs.slack.dev/reference/block-kit/blocks/r
 DOC_URL_BLOCK_KIT_SECTION="https://docs.slack.dev/reference/block-kit/blocks/section-block"
 DOC_URL_BLOCK_KIT_VIDEO="https://docs.slack.dev/reference/block-kit/blocks/video-block"
 
-# Find the root directory based on this script's location
-# This script is in lib/, so the root is the parent directory
+# Find the repository root from this script's path, lib/slack/block-kit/create-block.sh
 # Resolves symlinks with cd and pwd
 #
 # Outputs:
@@ -47,9 +46,15 @@ DOC_URL_BLOCK_KIT_VIDEO="https://docs.slack.dev/reference/block-kit/blocks/video
 #   0 on success
 #   1 if root directory cannot be located
 _find_root_dir() {
-	local lib_dir
 	local root_dir
 	local script_path
+
+	if [[ -n "${SEND_TO_SLACK_ROOT:-}" ]]; then
+		if [[ -f "${SEND_TO_SLACK_ROOT}/lib/slack/block-kit/create-block.sh" ]]; then
+			echo "${SEND_TO_SLACK_ROOT}"
+			return 0
+		fi
+	fi
 
 	if [[ -z "${BASH_SOURCE[0]:-}" ]]; then
 		echo "_find_root_dir:: BASH_SOURCE[0] is not set" >&2
@@ -62,15 +67,31 @@ _find_root_dir() {
 		script_path=$(cd "$(dirname "$script_path")" && pwd)/$(basename "$script_path")
 	fi
 
-	lib_dir=$(cd "$(dirname "$script_path")" && pwd)
-	if [[ -z "$lib_dir" ]]; then
-		echo "_find_root_dir:: cannot determine lib directory" >&2
+	local kit_dir
+	local slack_dir
+	local lib_dir
+
+	kit_dir=$(cd "$(dirname "$script_path")" && pwd)
+	if [[ -z "$kit_dir" ]]; then
+		echo "_find_root_dir:: cannot determine block-kit directory" >&2
+		return 1
+	fi
+
+	slack_dir=$(dirname "$kit_dir")
+	if [[ -z "$slack_dir" ]] || [[ "$(basename "$slack_dir")" != "slack" ]]; then
+		echo "_find_root_dir:: expected lib/slack/block-kit/create-block.sh under repository lib" >&2
+		return 1
+	fi
+
+	lib_dir=$(dirname "$slack_dir")
+	if [[ -z "$lib_dir" ]] || [[ "$(basename "$lib_dir")" != "lib" ]]; then
+		echo "_find_root_dir:: expected create-block.sh under lib/slack/block-kit" >&2
 		return 1
 	fi
 
 	root_dir=$(dirname "$lib_dir")
 	if [[ -z "$root_dir" ]]; then
-		echo "_find_root_dir:: cannot determine root directory from lib_dir: ${lib_dir}" >&2
+		echo "_find_root_dir:: cannot determine repository root from lib: ${lib_dir}" >&2
 		return 1
 	fi
 

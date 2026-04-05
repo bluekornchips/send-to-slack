@@ -7,7 +7,7 @@
 BLOCK_TYPE="rich_text"
 MAX_RICH_TEXT_CHARS=4000
 
-UPLOAD_FILE_SCRIPT="${UPLOAD_FILE_SCRIPT:-lib/file-upload.sh}"
+UPLOAD_FILE_SCRIPT="${UPLOAD_FILE_SCRIPT:-lib/slack/utils/file-upload.sh}"
 
 ########################################################
 # Documentation URLs
@@ -46,10 +46,20 @@ handle_oversize_text() {
 	local upload_script_path
 	if [[ "$UPLOAD_FILE_SCRIPT" = /* ]]; then
 		upload_script_path="$UPLOAD_FILE_SCRIPT"
+	elif [[ -n "${SEND_TO_SLACK_ROOT:-}" ]]; then
+		local lib_path
+		lib_path="${SEND_TO_SLACK_ROOT}/${UPLOAD_FILE_SCRIPT}"
+		if [[ -f "$lib_path" ]]; then
+			upload_script_path="$lib_path"
+		else
+			echo "handle_oversize_text:: file upload script not found: ${lib_path}" >&2
+			return 1
+		fi
 	else
 		local blocks_dir
 		local lib_dir
 		local root_dir
+		local lib_path
 
 		blocks_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 		if [[ -z "$blocks_dir" ]]; then
@@ -60,7 +70,7 @@ handle_oversize_text() {
 		lib_dir=$(dirname "$blocks_dir")
 		root_dir=$(dirname "$lib_dir")
 
-		local lib_path="${root_dir}/${UPLOAD_FILE_SCRIPT}"
+		lib_path="${root_dir}/${UPLOAD_FILE_SCRIPT}"
 
 		# Check lib/ layout (source layout)
 		if [[ -f "$lib_path" ]]; then

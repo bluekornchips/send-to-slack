@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 #
-# Tests for lib/create-blocks.sh
+# Tests for lib/slack/block-kit/create-block.sh
 #
 
 setup_file() {
@@ -9,7 +9,7 @@ setup_file() {
 		fail "setup_file:: Failed to get git root"
 	fi
 
-	SCRIPT="$GIT_ROOT/lib/create-blocks.sh"
+	SCRIPT="$GIT_ROOT/lib/slack/block-kit/create-block.sh"
 	if [[ ! -f "$SCRIPT" ]]; then
 		fail "setup_file:: Script not found: $SCRIPT"
 	fi
@@ -28,7 +28,7 @@ setup_file() {
 setup() {
 	source "$SCRIPT"
 
-	_SLACK_WORKSPACE=$(mktemp -d "${BATS_TEST_TMPDIR}/create-blocks-tests.workspace.XXXXXX")
+	_SLACK_WORKSPACE=$(mktemp -d "${BATS_TEST_TMPDIR}/create-block-tests.workspace.XXXXXX")
 	export _SLACK_WORKSPACE
 
 	CREATE_BLOCK_OUTPUT_FILE=$(mktemp "$_SLACK_WORKSPACE/block-out.XXXXXX")

@@ -357,22 +357,22 @@ find_root_dir() {
 	git_root=$(git -C "$script_dir" rev-parse --show-toplevel 2>/dev/null || true)
 
 	# Prefer installed layout, then repo layout, then git root
-	if [[ -f "${script_dir}/lib/parse-payload.sh" ]]; then
+	if [[ -f "${script_dir}/lib/parse/payload.sh" ]]; then
 		echo "$script_dir"
 		return 0
 	fi
 
-	if [[ -n "$parent_dir" && -f "${parent_dir}/lib/parse-payload.sh" ]]; then
+	if [[ -n "$parent_dir" && -f "${parent_dir}/lib/parse/payload.sh" ]]; then
 		echo "$parent_dir"
 		return 0
 	fi
 
-	if [[ -n "$git_root" && -f "${git_root}/lib/parse-payload.sh" ]]; then
+	if [[ -n "$git_root" && -f "${git_root}/lib/parse/payload.sh" ]]; then
 		echo "$git_root"
 		return 0
 	fi
 
-	echo "find_root_dir:: cannot locate lib/parse-payload.sh (checked: ${script_dir}, ${parent_dir}, ${git_root:-none})" >&2
+	echo "find_root_dir:: cannot locate lib/parse/payload.sh (checked: ${script_dir}, ${parent_dir}, ${git_root:-none})" >&2
 
 	return 1
 }
@@ -395,8 +395,8 @@ initialize_script_environment() {
 
 	lib_dir="${root_dir}/lib"
 
-	if [[ ! -f "${lib_dir}/parse-payload.sh" ]]; then
-		echo "initialize_script_environment:: cannot locate parse-payload.sh (lib_dir: ${lib_dir})" >&2
+	if [[ ! -f "${lib_dir}/parse/payload.sh" ]]; then
+		echo "initialize_script_environment:: cannot locate lib/parse/payload.sh (lib_dir: ${lib_dir})" >&2
 		return 1
 	fi
 
@@ -503,13 +503,13 @@ main() {
 		return 0
 	fi
 
-	SEND_TO_SLACK_BIN_DIR="$root_dir"
-	export SEND_TO_SLACK_BIN_DIR
+	SEND_TO_SLACK_ROOT="$root_dir"
+	export SEND_TO_SLACK_ROOT
 
-	if [[ -f "${root_dir}/lib/slack-api.sh" ]]; then
-		source "${root_dir}/lib/slack-api.sh"
+	if [[ -f "${root_dir}/lib/slack/api.sh" ]]; then
+		source "${root_dir}/lib/slack/api.sh"
 	else
-		echo "main:: cannot locate slack-api.sh at ${root_dir}/lib/slack-api.sh" >&2
+		echo "main:: cannot locate slack api at ${root_dir}/lib/slack/api.sh" >&2
 		return 1
 	fi
 
@@ -520,10 +520,10 @@ main() {
 		return 1
 	fi
 
-	if [[ -f "${root_dir}/lib/resolve-mentions.sh" ]]; then
-		source "${root_dir}/lib/resolve-mentions.sh"
+	if [[ -f "${root_dir}/lib/slack/utils/resolve-mentions.sh" ]]; then
+		source "${root_dir}/lib/slack/utils/resolve-mentions.sh"
 	else
-		echo "main:: cannot locate resolve-mentions.sh at ${root_dir}/lib/resolve-mentions.sh" >&2
+		echo "main:: cannot locate resolve-mentions.sh at ${root_dir}/lib/slack/utils/resolve-mentions.sh" >&2
 		return 1
 	fi
 
@@ -574,24 +574,24 @@ main() {
 		return 1
 	fi
 
-	if [[ -f "${root_dir}/lib/parse-payload.sh" ]]; then
-		source "${root_dir}/lib/parse-payload.sh"
+	if [[ -f "${root_dir}/lib/parse/payload.sh" ]]; then
+		source "${root_dir}/lib/parse/payload.sh"
 	else
-		echo "main:: cannot locate parse-payload.sh at ${root_dir}/lib/parse-payload.sh" >&2
+		echo "main:: cannot locate lib/parse/payload.sh at ${root_dir}/lib/parse/payload.sh" >&2
 		return 1
 	fi
 
-	if [[ -f "${root_dir}/lib/crosspost.sh" ]]; then
-		source "${root_dir}/lib/crosspost.sh"
+	if [[ -f "${root_dir}/lib/slack/crosspost.sh" ]]; then
+		source "${root_dir}/lib/slack/crosspost.sh"
 	else
-		echo "main:: cannot locate crosspost.sh at ${root_dir}/lib/crosspost.sh" >&2
+		echo "main:: cannot locate crosspost.sh at ${root_dir}/lib/slack/crosspost.sh" >&2
 		return 1
 	fi
 
-	if [[ -f "${root_dir}/lib/replies.sh" ]]; then
-		source "${root_dir}/lib/replies.sh"
+	if [[ -f "${root_dir}/lib/slack/replies.sh" ]]; then
+		source "${root_dir}/lib/slack/replies.sh"
 	else
-		echo "main:: cannot locate replies.sh at ${root_dir}/lib/replies.sh" >&2
+		echo "main:: cannot locate replies.sh at ${root_dir}/lib/slack/replies.sh" >&2
 		return 1
 	fi
 
