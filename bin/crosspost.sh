@@ -201,9 +201,7 @@ crosspost_notification() {
 		rm -f "${temp_payload}"
 	done
 
-	if [[ "${any_failed}" -ne 0 ]]; then
-		return 1
-	fi
-
+	[[ "${any_failed}" -ne 0 ]] && return 1
+	
 	return 0
 }

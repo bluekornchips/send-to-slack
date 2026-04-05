@@ -340,7 +340,7 @@ teardown() {
 	block_count=$(jq '.blocks | length' "${capture_file}")
 	[[ "$block_count" -eq 2 ]]
 
-	jq -e '.blocks[-1].context.elements[0].text | contains("https://workspace.slack.com/archives/C123/p123")' "${capture_file}" >/dev/null
+	jq -e '.blocks[-1] | select(.type == "context") | .elements[0].text | contains("https://workspace.slack.com/archives/C123/p123")' "${capture_file}" >/dev/null
 
 	rm -f "$input_payload" "${capture_file}"
 }
