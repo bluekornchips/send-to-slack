@@ -4,6 +4,11 @@
 # Sources lib/parse/blocks.sh at end of file for process_blocks and full parse flow
 #
 
+if [[ -z "${SEND_TO_SLACK_ROOT:-}" ]]; then
+	SEND_TO_SLACK_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+	export SEND_TO_SLACK_ROOT
+fi
+
 DEFAULT_DRY_RUN="false"
 
 # Convert Slack permalink to thread_ts format if needed
@@ -541,5 +546,4 @@ parse_payload() {
 }
 
 # Block assembly, Slack limits, legacy attachments, Block Kit via create_block
-# shellcheck source=blocks.sh
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/blocks.sh"
+source "${SEND_TO_SLACK_ROOT}/lib/parse/blocks.sh"

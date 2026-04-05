@@ -49,6 +49,13 @@ _find_root_dir() {
 	local root_dir
 	local script_path
 
+	if [[ -n "${SEND_TO_SLACK_ROOT:-}" ]]; then
+		if [[ -f "${SEND_TO_SLACK_ROOT}/lib/slack/block-kit/create-block.sh" ]]; then
+			echo "${SEND_TO_SLACK_ROOT}"
+			return 0
+		fi
+	fi
+
 	if [[ -z "${BASH_SOURCE[0]:-}" ]]; then
 		echo "_find_root_dir:: BASH_SOURCE[0] is not set" >&2
 		return 1

@@ -503,8 +503,8 @@ main() {
 		return 0
 	fi
 
-	SEND_TO_SLACK_BIN_DIR="$root_dir"
-	export SEND_TO_SLACK_BIN_DIR
+	SEND_TO_SLACK_ROOT="$root_dir"
+	export SEND_TO_SLACK_ROOT
 
 	if [[ -f "${root_dir}/lib/slack/api.sh" ]]; then
 		source "${root_dir}/lib/slack/api.sh"

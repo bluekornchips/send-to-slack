@@ -15,9 +15,12 @@ WARN_COLOR="#FFC107"    # Yellow
 
 DOC_URL_LEGACY_ATTACHMENTS="https://api.slack.com/reference/messaging/payload#legacy"
 
-_blocks_lib_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../slack" && pwd)"
-# shellcheck source=../slack/block-kit/create-block.sh
-source "${_blocks_lib_root}/block-kit/create-block.sh"
+if [[ -z "${SEND_TO_SLACK_ROOT:-}" ]]; then
+	SEND_TO_SLACK_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+	export SEND_TO_SLACK_ROOT
+fi
+
+source "${SEND_TO_SLACK_ROOT}/lib/slack/block-kit/create-block.sh"
 
 MAX_TEXT_LENGTH=40000
 MAX_BLOCKS=50
