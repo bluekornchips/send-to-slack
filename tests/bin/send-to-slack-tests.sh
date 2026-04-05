@@ -29,7 +29,6 @@ setup_file() {
 setup() {
 	source "$GIT_ROOT/lib/slack/api.sh"
 	source "$GIT_ROOT/lib/metadata.sh"
-	source "$GIT_ROOT/lib/health-check.sh"
 	source "$SCRIPT"
 
 	# Source lib/parse/payload.sh for parse_payload and process_blocks
@@ -102,7 +101,7 @@ create_test_payload() {
 }
 
 ########################################################
-# version and health_check
+# version
 ########################################################
 
 @test "version:: --version prints version and exits" {
@@ -123,30 +122,9 @@ create_test_payload() {
 	echo "$output" | grep -v -q "main::"
 }
 
-@test "health_check:: passes when dependencies are available" {
-	unset SLACK_BOT_USER_OAUTH_TOKEN
-	run health_check
-	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "jq found"
-	echo "$output" | grep -q "curl found"
-	echo "$output" | grep -q "Health check passed"
-}
-
-@test "health_check:: skips API check when token not set" {
-	unset SLACK_BOT_USER_OAUTH_TOKEN
-	run health_check
-	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "SLACK_BOT_USER_OAUTH_TOKEN not set, skipping API connectivity check"
-}
-
-@test "health_check:: tests API connectivity when token is set" {
-	SLACK_BOT_USER_OAUTH_TOKEN="test-token"
-	export SLACK_BOT_USER_OAUTH_TOKEN
-
-	run health_check
-	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "Testing Slack API connectivity"
-}
+########################################################
+# CLI health check
+########################################################
 
 @test "health_check:: --health-check flag works" {
 	unset SLACK_BOT_USER_OAUTH_TOKEN

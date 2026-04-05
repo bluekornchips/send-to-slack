@@ -170,12 +170,13 @@ make concourse-run-all-examples
 - `SLACK_BOT_USER_OAUTH_TOKEN`, required: Slack bot OAuth token for pipeline variables
 - `CHANNEL`, required: Primary Slack channel for pipeline variables
 - `SIDE_CHANNEL`, optional: Secondary Slack channel, defaults to empty
-- `SLACK_WEBHOOK_URL`, optional: Incoming Webhook URL for `examples/webhook-slack.yaml`. When unset, `webhook-slack/notify-via-slack-webhook` is skipped so the suite can still pass without a webhook
+- `SLACK_WEBHOOK_URL`, optional: Incoming Webhook URL for `examples/webhook-slack.yaml` and `examples/webhook-no-channel.yaml`. When unset, `webhook-slack/notify-via-slack-webhook` is skipped only; set a URL for an all-green run because `webhook-no-channel` jobs are not auto-skipped
 - `EPHEMERAL_USER`, optional: Slack user ID for `examples/ephemeral.yaml`, e.g. `U012AB3CD`, defaults to empty
 - `TAG`, optional: Docker image tag for the resource type, defaults to contents of `VERSION` file
 
 ### Notes
 
 - Jobs listed in the hardcoded `SKIPPED_JOBS` array in `ci/run-all-examples.sh` are skipped. That list includes `thread-replies/thread-replies-with-thread-ts`, `blocks-from-file/blocks-from-file-3` and `blocks-from-file/concourse-metadata` (they need a GitHub reachable from the worker), and all `video/*` jobs (Slack unfurl domains and scopes). Keep this README in sync when `SKIPPED_JOBS` changes.
-- When `SLACK_WEBHOOK_URL` is empty, `webhook-slack/notify-via-slack-webhook` is skipped so the suite can still pass.
+- When `SLACK_WEBHOOK_URL` is empty, `webhook-slack/notify-via-slack-webhook` is skipped. The `webhook-no-channel` pipeline is not added to that runtime skip list; leave the URL set or expect that pipeline to fail until you add a skip or a URL.
+- When `EPHEMERAL_USER` is empty, `ephemeral/ephemeral-basic-blocks` is skipped so the suite can still pass without a user ID.
 - `examples/bot-identity.yaml` (`notify-deploy-bot`, `notify-test-bot`) requires the `chat:write.customize` scope on the bot token. The jobs will fail with a Slack `missing_scope` error if that scope is not granted.

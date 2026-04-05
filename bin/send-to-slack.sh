@@ -31,10 +31,10 @@ Usage: send-to-slack [OPTIONS]
 Send messages to Slack using Block Kit formatting.
 
 OPTIONS:
-  -f, --file <path>     Read payload from file instead of stdin
-  -v, --version         Display version information and exit
-  -h, --help            Display this help message and exit
-  --health-check        Validate dependencies and Slack API connectivity without sending
+  -f, -file, --file <path>  Read payload from file instead of stdin
+  -v, --version             Display version information and exit
+  -h, --help                Display this help message and exit
+  --health-check            Validate dependencies and Slack API connectivity without sending
 
 For more information, see: https://github.com/bluekornchips/send-to-slack
 EOF

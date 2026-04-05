@@ -25,6 +25,7 @@ This directory contains complete configuration examples for all supported Slack 
 - [update-message.yaml](update-message.yaml) - Post a message, then update it with `params.message_ts` and `chat.update`
 - [video.yaml](video.yaml) - Video block examples
 - [webhook-slack.yaml](webhook-slack.yaml) - Incoming Webhook delivery, no bot token
+- [webhook-no-channel.yaml](webhook-no-channel.yaml) - Incoming Webhook with no `params.channel`; hook URL is tied to a default channel in Slack
 
 ## Formats
 
@@ -46,7 +47,7 @@ fly -t <target> set-pipeline \
   -v ephemeral_user=<slack-user-id-or-empty>
 ```
 
-`webhook-slack.yaml` only needs `SLACK_WEBHOOK_URL` and `TAG`. See that file for the exact `((VAR))` names. Pipelines that use the Web API need `SLACK_BOT_USER_OAUTH_TOKEN` and `channel`. `ephemeral.yaml` also needs `ephemeral_user`, a member user ID such as `U012AB3CD`.
+`webhook-slack.yaml` and `webhook-no-channel.yaml` only need `SLACK_WEBHOOK_URL` and `TAG`. See each file for the exact `((VAR))` names. Pipelines that use the Web API need `SLACK_BOT_USER_OAUTH_TOKEN` and `channel`. `ephemeral.yaml` also needs `ephemeral_user`, a member user ID such as `U012AB3CD`.
 
 ## Supported Block Types
 

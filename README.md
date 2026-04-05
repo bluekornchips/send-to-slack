@@ -141,7 +141,7 @@ docker build -f Docker/Dockerfile.remote -t send-to-slack-remote:local .
 ci/build.sh
 
 # Build + healthcheck + test message, requires CHANNEL and SLACK_BOT_USER_OAUTH_TOKEN
-CHANNEL=test SLACK_BOT_USER_OAUTH_TOKEN=token ci/build.sh --healthcheck --send-test-message
+CHANNEL=#test SLACK_BOT_USER_OAUTH_TOKEN=token ci/build.sh --healthcheck --send-test-message
 ```
 
 ### Development Usage
@@ -220,12 +220,12 @@ When running directly from the repository, use `./bin/send-to-slack.sh` instead 
 - Use `-f`, `-file`, or `--file` to point at a payload file.
 - Use `-v` or `--version` to display version information and exit.
 - Use `-h` or `--help` to display usage information and exit.
-- Use `--health-check` to validate required dependencies without sending a message.
+- Use `--health-check` to validate `jq`, `curl`, and optional Slack API connectivity without sending a message. It does not check `envsubst`; see Requirements.
 - Emits Concourse-style JSON (`version`, `metadata`) to stdout unless `SEND_TO_SLACK_OUTPUT` is set.
 
 ## Health Check
 
-Use `--health-check` to validate dependencies `jq` and `curl` and optionally test Slack Web API connectivity if `SLACK_BOT_USER_OAUTH_TOKEN` is set. There is no separate probe for Incoming Webhook URLs. Returns exit code 0 on success, 1 on failure. Skips the API check if `DRY_RUN` or `SKIP_SLACK_API_CHECK` is set.
+Use `--health-check` to validate dependencies `jq` and `curl` and optionally test Slack Web API connectivity if `SLACK_BOT_USER_OAUTH_TOKEN` is set. There is no separate probe for Incoming Webhook URLs. The check does not verify `envsubst`; payloads that use variable interpolation in blocks still need `envsubst` on PATH at send time. Returns exit code 0 on success, 1 on failure. Skips the API check if `DRY_RUN` or `SKIP_SLACK_API_CHECK` is set.
 
 ## Environment Variables
 
@@ -309,7 +309,7 @@ Debug mode redacts authentication tokens but still logs the payload structure.
 - Bash 3.2 or later (project shell style targets Bash 3.2 plus)
 - `jq` - [jqlang](https://github.com/jqlang/jq) for JSON processing
 - `curl` - [curl](https://curl.se/) for HTTP requests
-- `envsubst` from [GNU gettext](https://www.gnu.org/software/gettext/) (usually in the `gettext` package) for variable interpolation in blocks
+- `envsubst` from [GNU gettext](https://www.gnu.org/software/gettext/) (usually in the `gettext` package) for variable interpolation in blocks. Not exercised by `--health-check`; install it alongside `jq` and `curl` if you use envsubst in payloads
 
 ### Interactive Components Dependencies
 
@@ -407,7 +407,7 @@ Incoming Webhook:
 
 - `source.webhook_url` or `WEBHOOK_URL`, with no bot token in effect
 - `params.blocks`
-- `params.channel` or `CHANNEL` only when you need to override or supply a channel for tooling that expects it; many webhook-only payloads omit `channel` like [examples/webhook-slack.yaml](examples/webhook-slack.yaml)
+- `params.channel` or `CHANNEL` only when you need to override or supply a channel for tooling that expects it; many webhook-only payloads omit `channel` like [examples/webhook-slack.yaml](examples/webhook-slack.yaml) or [examples/webhook-no-channel.yaml](examples/webhook-no-channel.yaml)
 
 ### Optional source fields
 
@@ -692,15 +692,17 @@ Some smoke and acceptance tests for Incoming Webhooks run only when `SLACK_WEBHO
 make concourse-up                  # Start local Concourse server
 make concourse-down                # Stop local Concourse server
 make concourse-load-examples       # Load example pipelines
-make concourse-run-all-examples    # Run all example pipelines end-to-end (CI)
+make concourse-run-all-examples    # Restart stack, rebuild image, then run all example jobs (see below)
 ```
+
+`make concourse-run-all-examples` depends on `concourse-clean-restart`, which runs `make concourse-down`, `make concourse-up`, and `./ci/build.sh` before [ci/run-all-examples.sh](ci/run-all-examples.sh). Expect extra Docker build time compared to loading pipelines alone.
 
 Environment variables for `make concourse-load-examples`, each passed to `fly set-pipeline -v`:
 
 - `SLACK_BOT_USER_OAUTH_TOKEN` - Slack bot OAuth token for pipelines that use the Web API
 - `CHANNEL` - Primary Slack channel for examples that need `channel`
 - `SIDE_CHANNEL` - Secondary channel for examples that use `side_channel`, may be empty
-- `SLACK_WEBHOOK_URL` - Incoming Webhook URL for [examples/webhook-slack.yaml](examples/webhook-slack.yaml), may be empty if you skip that pipeline
+- `SLACK_WEBHOOK_URL` - Incoming Webhook URL for [examples/webhook-slack.yaml](examples/webhook-slack.yaml) and [examples/webhook-no-channel.yaml](examples/webhook-no-channel.yaml); may be empty when you are not using webhook examples. For `make concourse-run-all-examples`, see [ci/README.md](ci/README.md) for which webhook jobs are skipped when this is unset
 - `EPHEMERAL_USER` - Slack user ID for [examples/ephemeral.yaml](examples/ephemeral.yaml), e.g. `U012AB3CD`, may be empty if you skip that pipeline
 
 ### Development Dependencies
