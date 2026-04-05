@@ -31,8 +31,9 @@ setup() {
 	source "$GIT_ROOT/lib/metadata.sh"
 	source "$SCRIPT"
 
-	# Source lib/parse/payload.sh for parse_payload and process_blocks
+	# Source lib/parse/payload.sh and blocks.sh for parse_payload and process_blocks
 	source "$GIT_ROOT/lib/parse/payload.sh"
+	source "$GIT_ROOT/lib/parse/blocks.sh"
 
 	SLACK_BOT_USER_OAUTH_TOKEN="test-token"
 	CHANNEL="#test"

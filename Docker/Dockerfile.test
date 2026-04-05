@@ -14,7 +14,9 @@ COPY ./VERSION /opt/resource/VERSION
 
 
 # Install test dependencies
-RUN apk add --no-cache make git shellcheck shfmt coreutils wget && \
+RUN chmod +x /opt/resource/check /opt/resource/in /opt/resource/out /opt/resource/send-to-slack && \
+	find /opt/resource/lib -type f -name '*.sh' -exec chmod +x {} + && \
+	apk add --no-cache make git shellcheck shfmt coreutils wget && \
 	git config --global --add safe.directory /workspace && \
 	wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 && \
 	chmod 755 /usr/local/bin/yq && \

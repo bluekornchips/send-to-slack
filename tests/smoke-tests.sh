@@ -40,6 +40,7 @@ setup() {
 	source "$GIT_ROOT/lib/slack/api.sh"
 	source "$GIT_ROOT/lib/metadata.sh"
 	source "$GIT_ROOT/lib/parse/payload.sh"
+	source "$GIT_ROOT/lib/parse/blocks.sh"
 	source "$SEND_TO_SLACK_SCRIPT"
 
 	_SLACK_WORKSPACE=$(mktemp -d "${BATS_TEST_TMPDIR}/smoke-tests.workspace.XXXXXX")

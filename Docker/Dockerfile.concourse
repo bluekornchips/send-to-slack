@@ -1,6 +1,6 @@
 # Concourse resource-type image: only what the resource scripts need at runtime.
 # Build from repo root so bin/, lib/, and VERSION are in context:
-#   docker build -f concourse/Dockerfile.concourse .
+#   docker build -f Docker/Dockerfile.concourse .
 FROM alpine:3.20
 
 RUN apk add --no-cache \
@@ -26,13 +26,7 @@ COPY ./VERSION /opt/resource/VERSION
 
 ENV PATH="/opt/resource:${PATH}"
 
-RUN chmod +x /opt/resource/check /opt/resource/in /opt/resource/out && \
-    chmod +x /opt/resource/send-to-slack && \
-    chmod +x /opt/resource/lib/metadata.sh /opt/resource/lib/health-check.sh /opt/resource/lib/get-version.sh && \
-    chmod +x /opt/resource/lib/parse/*.sh && \
-    chmod +x /opt/resource/lib/slack/api.sh /opt/resource/lib/slack/crosspost.sh /opt/resource/lib/slack/replies.sh && \
-    chmod +x /opt/resource/lib/slack/utils/*.sh && \
-    chmod +x /opt/resource/lib/slack/block-kit/create-block.sh && \
-    chmod +x /opt/resource/lib/slack/block-kit/blocks/*.sh
+RUN chmod +x /opt/resource/check /opt/resource/in /opt/resource/out /opt/resource/send-to-slack && \
+    find /opt/resource/lib -type f -name '*.sh' -exec chmod +x {} +
 
 ENTRYPOINT ["/bin/bash"]

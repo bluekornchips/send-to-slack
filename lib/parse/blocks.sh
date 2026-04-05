@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
 # Block processing, Slack limits, and legacy attachment routing
-# Sourced from lib/parse/payload.sh after payload helpers, uses _resolve_from_file_path and convert_thread_ts
-# Sources lib/slack/block-kit/create-block.sh for create_block and Block Kit documentation URLs
+# Load after lib/parse/payload.sh, uses _resolve_from_file_path and convert_thread_ts from that file
+# Sources lib/slack/block-kit/create-block.sh for create_block and Block Kit documentation URLs when not already loaded
 #
 
 DANGER_COLOR="#F44336"  # Red

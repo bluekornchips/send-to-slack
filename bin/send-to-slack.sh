@@ -11,18 +11,106 @@
 SHOW_METADATA="true"
 SHOW_PAYLOAD="true"
 GITHUB_URL="https://github.com/bluekornchips/send-to-slack"
+MAX_DEPTH=4
 
-# Paths relative to repo or install root, sourced in order by _load_libs
-SEND_TO_SLACK_LIB_FILES=(
-	lib/get-version.sh
-	lib/health-check.sh
-	lib/slack/api.sh
-	lib/metadata.sh
-	lib/slack/utils/resolve-mentions.sh
-	lib/parse/payload.sh
-	lib/slack/crosspost.sh
-	lib/slack/replies.sh
-)
+# List .sh files under lib, sorted for stable order
+#
+# Excludes lib/slack/block-kit/blocks/*.sh, those run as standalone scripts from create_block
+#
+# Inputs:
+# - $1 - root_dir: repository or install root
+#
+# Outputs:
+# - Writes one absolute path per line to stdout
+#
+# Returns:
+# - 0 always
+_send_to_slack_lib_abs_paths() {
+	local root_dir="$1"
+	local lib_root="${root_dir}/lib"
+
+	find "$lib_root" \
+		-mindepth 1 \
+		-maxdepth "$MAX_DEPTH" \
+		-type f \
+		-name '*.sh' \
+		! -path "${lib_root}/slack/block-kit/blocks/*" |
+		LC_ALL=C sort
+
+	return 0
+}
+
+# Same discovery as _send_to_slack_lib_abs_paths, paths relative to root_dir
+#
+# Inputs:
+# - $1 - root_dir: repository or install root
+#
+# Outputs:
+# - Writes one path relative to root_dir per line, e.g. lib/parse/payload.sh
+#
+# Returns:
+# - 0 always
+_send_to_slack_lib_rel_paths() {
+	local root_dir="$1"
+	local abs
+
+	while IFS= read -r abs; do
+		[[ -z "$abs" ]] && continue
+		printf '%s\n' "${abs#"${root_dir}/"}"
+	done < <(_send_to_slack_lib_abs_paths "$root_dir")
+
+	return 0
+}
+
+# Source every library file discovered under lib/, see _send_to_slack_lib_abs_paths
+#
+# lib/parse/blocks.sh is sourced last so lexicographic order does not load it before payload.sh
+#
+# Inputs:
+# - $1 - root_dir: repository or install root
+#
+# Side Effects:
+# - SEND_TO_SLACK_ROOT must already be set and exported before calling
+#
+# Returns:
+# - 0 on success
+# - 1 if lib is missing, a file is missing, or source fails
+_load_libs() {
+	local root_dir="$1"
+	[[ -z "$root_dir" ]] && return 1
+
+	local lib_root="${root_dir}/lib"
+	if [[ ! -d "$lib_root" ]]; then
+		echo "_load_libs:: lib directory not found: ${lib_root}" >&2
+		return 1
+	fi
+
+	local deferred_blocks=""
+	local abs
+
+	while IFS= read -r abs; do
+		[[ -z "$abs" ]] && continue
+		if [[ "$abs" == "${lib_root}/parse/blocks.sh" ]]; then
+			deferred_blocks="$abs"
+			continue
+		fi
+		if [[ ! -f "$abs" ]]; then
+			echo "_load_libs:: cannot locate required library at ${abs}" >&2
+			return 1
+		fi
+		source "$abs"
+	done < <(_send_to_slack_lib_abs_paths "$root_dir")
+
+	if [[ -n "$deferred_blocks" ]]; then
+		if [[ ! -f "$deferred_blocks" ]]; then
+			echo "_load_libs:: cannot locate required library at ${deferred_blocks}" >&2
+			return 1
+		fi
+		source "$deferred_blocks"
+	fi
+
+	return 0
+}
 
 usage() {
 	cat <<EOF
@@ -38,35 +126,6 @@ OPTIONS:
 
 For more information, see: https://github.com/bluekornchips/send-to-slack
 EOF
-	return 0
-}
-
-# Source Slack helper libraries listed in SEND_TO_SLACK_LIB_FILES
-#
-# Inputs:
-# - $1 - root_dir: repository or install root
-#
-# Side Effects:
-# - SEND_TO_SLACK_ROOT must already be set and exported before calling
-#
-# Returns:
-# - 0 on success
-# - 1 if a required file is missing
-_load_libs() {
-	local root_dir="$1"
-	[[ -z "$root_dir" ]] && return 1
-
-	local rel
-	for rel in "${SEND_TO_SLACK_LIB_FILES[@]}"; do
-		local path
-		path="${root_dir}/${rel}"
-		if [[ ! -f "$path" ]]; then
-			echo "_load_libs:: cannot locate required library at ${path}" >&2
-			return 1
-		fi
-		source "$path"
-	done
-
 	return 0
 }
 

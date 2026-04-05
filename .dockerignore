@@ -32,8 +32,6 @@ acceptance-tests.test-upload*
 
 # Build and development tools
 Makefile
-install.sh
-uninstall.sh
 
 # Python
 .venv

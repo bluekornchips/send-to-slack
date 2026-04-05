@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Payload loading, sanitization, validation, and delivery configuration
-# Sources lib/parse/blocks.sh at end of file for process_blocks and full parse flow
+# For process_blocks and full parse flow, load lib/parse/blocks.sh after this file, see bin/send-to-slack.sh _load_libs
 # SEND_TO_SLACK_ROOT is set by bin/send-to-slack.sh before this file is sourced
 #
 
@@ -540,7 +540,3 @@ parse_payload() {
 
 	return 0
 }
-
-# Block assembly, Slack limits, legacy attachments, Block Kit via create_block
-# shellcheck disable=SC1091
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/blocks.sh"
