@@ -197,11 +197,6 @@ install_from_source() {
 		return 1
 	fi
 
-	if [[ ! -f "${source_dir}/lib/parse-payload.sh" ]]; then
-		echo "install_from_source:: missing lib/parse-payload.sh" >&2
-		return 1
-	fi
-
 	if [[ ! -f "${source_dir}/lib/parse/payload.sh" ]]; then
 		echo "install_from_source:: missing lib/parse/payload.sh" >&2
 		return 1
@@ -217,8 +212,8 @@ install_from_source() {
 		return 1
 	fi
 
-	if [[ ! -f "${source_dir}/lib/block-kit/create-blocks.sh" ]]; then
-		echo "install_from_source:: missing lib/block-kit/create-blocks.sh" >&2
+	if [[ ! -f "${source_dir}/lib/block-kit/create-block.sh" ]]; then
+		echo "install_from_source:: missing lib/block-kit/create-block.sh" >&2
 		return 1
 	fi
 
@@ -274,8 +269,8 @@ install_from_source() {
 		return 1
 	fi
 
-	if ! cp "${source_dir}/lib/block-kit/create-blocks.sh" "${install_root}/lib/block-kit/"; then
-		echo "install_from_source:: failed to copy lib/block-kit/create-blocks.sh" >&2
+	if ! cp "${source_dir}/lib/block-kit/create-block.sh" "${install_root}/lib/block-kit/"; then
+		echo "install_from_source:: failed to copy lib/block-kit/create-block.sh" >&2
 		return 1
 	fi
 

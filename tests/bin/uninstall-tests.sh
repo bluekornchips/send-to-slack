@@ -126,7 +126,7 @@ teardown() {
 	cp "${GIT_ROOT}/bin/send-to-slack.sh" "${source_dir}/bin/send-to-slack.sh"
 	cp "${GIT_ROOT}/lib"/*.sh "${source_dir}/lib/"
 	cp "${GIT_ROOT}/lib/parse"/*.sh "${source_dir}/lib/parse/"
-	cp "${GIT_ROOT}/lib/block-kit/create-blocks.sh" "${source_dir}/lib/block-kit/"
+	cp "${GIT_ROOT}/lib/block-kit/create-block.sh" "${source_dir}/lib/block-kit/"
 	cp "${GIT_ROOT}/lib/block-kit/blocks"/*.sh "${source_dir}/lib/block-kit/blocks/"
 	if [[ -f "${GIT_ROOT}/VERSION" ]]; then
 		cp "${GIT_ROOT}/VERSION" "${source_dir}/VERSION"
@@ -134,8 +134,7 @@ teardown() {
 
 	for need in \
 		"${source_dir}/lib/parse/payload.sh" \
-		"${source_dir}/lib/parse/blocks.sh" \
-		"${source_dir}/lib/parse-payload.sh"; do
+		"${source_dir}/lib/parse/blocks.sh"; do
 		if [[ ! -f "$need" ]]; then
 			fail "uninstall fixture missing required file after copy: $need"
 		fi

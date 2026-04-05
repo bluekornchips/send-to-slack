@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # Block processing, Slack limits, and legacy attachment routing
-# Requires lib/parse/payload.sh sourced first for _resolve_from_file_path and convert_thread_ts
+# Sourced from lib/parse/payload.sh after payload helpers, uses _resolve_from_file_path and convert_thread_ts
+# Sources lib/block-kit/create-block.sh for create_block and Block Kit documentation URLs
 #
 
 DANGER_COLOR="#F44336"  # Red
@@ -9,41 +10,19 @@ SUCCESS_COLOR="#4CAF50" # Green
 WARN_COLOR="#FFC107"    # Yellow
 
 ########################################################
-# Files
+# Documentation, legacy attachments only
 ########################################################
 
-RICH_TEXT_BLOCK_FILE="lib/block-kit/blocks/rich-text.sh"
-TABLE_BLOCK_FILE="lib/block-kit/blocks/table.sh"
-SECTION_BLOCK_FILE="lib/block-kit/blocks/section.sh"
-HEADER_BLOCK_FILE="lib/block-kit/blocks/header.sh"
-CONTEXT_BLOCK_FILE="lib/block-kit/blocks/context.sh"
-DIVIDER_BLOCK_FILE="lib/block-kit/blocks/divider.sh"
-MARKDOWN_BLOCK_FILE="lib/block-kit/blocks/markdown.sh"
-ACTIONS_BLOCK_FILE="lib/block-kit/blocks/actions.sh"
-IMAGE_BLOCK_FILE="lib/block-kit/blocks/image.sh"
-VIDEO_BLOCK_FILE="lib/block-kit/blocks/video.sh"
+DOC_URL_LEGACY_ATTACHMENTS="https://api.slack.com/reference/messaging/payload#legacy"
 
-# Other scripts
-FILE_UPLOAD_SCRIPT="lib/file-upload.sh"
+_blocks_lib_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=../block-kit/create-block.sh
+source "${_blocks_lib_root}/block-kit/create-block.sh"
 
 MAX_TEXT_LENGTH=40000
 MAX_BLOCKS=50
 MAX_ATTACHMENTS=20
 MAX_BLOCK_INPUT_BYTES=524288 # 512 KiB
-
-########################################################
-# Documentation URLs
-########################################################
-DOC_URL_BLOCK_KIT_ACTIONS="https://docs.slack.dev/reference/block-kit/blocks/actions-block"
-DOC_URL_BLOCK_KIT_BLOCKS="https://docs.slack.dev/reference/block-kit/blocks"
-DOC_URL_BLOCK_KIT_CONTEXT="https://docs.slack.dev/reference/block-kit/blocks/context-block"
-DOC_URL_BLOCK_KIT_HEADER="https://docs.slack.dev/reference/block-kit/blocks/header-block"
-DOC_URL_BLOCK_KIT_IMAGE="https://docs.slack.dev/reference/block-kit/blocks/image-block"
-DOC_URL_BLOCK_KIT_MARKDOWN="https://docs.slack.dev/reference/block-kit/blocks/markdown-block"
-DOC_URL_BLOCK_KIT_RICH_TEXT="https://docs.slack.dev/reference/block-kit/blocks/rich-text-block"
-DOC_URL_BLOCK_KIT_SECTION="https://docs.slack.dev/reference/block-kit/blocks/section-block"
-DOC_URL_BLOCK_KIT_VIDEO="https://docs.slack.dev/reference/block-kit/blocks/video-block"
-DOC_URL_LEGACY_ATTACHMENTS="https://api.slack.com/reference/messaging/payload#legacy"
 
 # Validate block input JSON byte size before dispatching to a block script.
 # Catches pathologically large inputs before any subprocess is spawned.

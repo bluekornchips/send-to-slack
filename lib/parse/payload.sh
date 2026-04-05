@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Payload loading, sanitization, validation, and delivery configuration
-# Sourced before lib/parse/blocks.sh for full parse flow
+# Sources lib/parse/blocks.sh at end of file for process_blocks and full parse flow
 #
 
 DEFAULT_DRY_RUN="false"
@@ -510,10 +510,6 @@ load_configuration() {
 parse_payload() {
 	local payload_file="$1"
 
-	local _lib_dir
-	_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-	source "${_lib_dir}/block-kit/create-blocks.sh"
-
 	INPUT_PAYLOAD="$payload_file"
 	export INPUT_PAYLOAD
 
@@ -543,3 +539,7 @@ parse_payload() {
 
 	return 0
 }
+
+# Block assembly, Slack limits, legacy attachments, Block Kit via create_block
+# shellcheck source=blocks.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/blocks.sh"

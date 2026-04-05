@@ -36,7 +36,7 @@ DOC_URL_BLOCK_KIT_RICH_TEXT="https://docs.slack.dev/reference/block-kit/blocks/r
 DOC_URL_BLOCK_KIT_SECTION="https://docs.slack.dev/reference/block-kit/blocks/section-block"
 DOC_URL_BLOCK_KIT_VIDEO="https://docs.slack.dev/reference/block-kit/blocks/video-block"
 
-# Find the repository root from this script's path, lib/block-kit/create-blocks.sh
+# Find the repository root from this script's path, lib/block-kit/create-block.sh
 # Resolves symlinks with cd and pwd
 #
 # Outputs:
@@ -71,7 +71,7 @@ _find_root_dir() {
 
 	lib_dir_parent=$(dirname "$kit_dir")
 	if [[ -z "$lib_dir_parent" ]] || [[ "$(basename "$lib_dir_parent")" != "lib" ]]; then
-		echo "_find_root_dir:: expected lib/block-kit/create-blocks.sh under repository lib" >&2
+		echo "_find_root_dir:: expected lib/block-kit/create-block.sh under repository lib" >&2
 		return 1
 	fi
 

@@ -30,7 +30,7 @@ setup() {
 	cd "$GIT_ROOT" || return 1
 	source "$GIT_ROOT/lib/slack-api.sh"
 	source "$SCRIPT"
-	source "$GIT_ROOT/lib/parse-payload.sh"
+	source "$GIT_ROOT/lib/parse/payload.sh"
 	source "$GIT_ROOT/lib/crosspost.sh"
 
 	SLACK_BOT_USER_OAUTH_TOKEN="test-token"

@@ -22,7 +22,7 @@ RUN set -euo pipefail; \
         install -m 755 /tmp/send-to-slack/bin/send-to-slack.sh /usr/local/send-to-slack/send-to-slack; \
         install -m 755 /tmp/send-to-slack/lib/*.sh /usr/local/send-to-slack/lib/; \
         install -m 755 /tmp/send-to-slack/lib/parse/*.sh /usr/local/send-to-slack/lib/parse/; \
-        install -m 755 /tmp/send-to-slack/lib/block-kit/create-blocks.sh /usr/local/send-to-slack/lib/block-kit/; \
+        install -m 755 /tmp/send-to-slack/lib/block-kit/create-block.sh /usr/local/send-to-slack/lib/block-kit/; \
         install -m 755 /tmp/send-to-slack/lib/block-kit/blocks/*.sh /usr/local/send-to-slack/lib/block-kit/blocks/; \
         install -m 644 /tmp/send-to-slack/VERSION /usr/local/send-to-slack/VERSION; \
         ln -sf /usr/local/send-to-slack/send-to-slack /usr/local/bin/send-to-slack; \

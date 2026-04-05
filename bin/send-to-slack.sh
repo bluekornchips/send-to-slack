@@ -357,22 +357,22 @@ find_root_dir() {
 	git_root=$(git -C "$script_dir" rev-parse --show-toplevel 2>/dev/null || true)
 
 	# Prefer installed layout, then repo layout, then git root
-	if [[ -f "${script_dir}/lib/parse-payload.sh" ]]; then
+	if [[ -f "${script_dir}/lib/parse/payload.sh" ]]; then
 		echo "$script_dir"
 		return 0
 	fi
 
-	if [[ -n "$parent_dir" && -f "${parent_dir}/lib/parse-payload.sh" ]]; then
+	if [[ -n "$parent_dir" && -f "${parent_dir}/lib/parse/payload.sh" ]]; then
 		echo "$parent_dir"
 		return 0
 	fi
 
-	if [[ -n "$git_root" && -f "${git_root}/lib/parse-payload.sh" ]]; then
+	if [[ -n "$git_root" && -f "${git_root}/lib/parse/payload.sh" ]]; then
 		echo "$git_root"
 		return 0
 	fi
 
-	echo "find_root_dir:: cannot locate lib/parse-payload.sh (checked: ${script_dir}, ${parent_dir}, ${git_root:-none})" >&2
+	echo "find_root_dir:: cannot locate lib/parse/payload.sh (checked: ${script_dir}, ${parent_dir}, ${git_root:-none})" >&2
 
 	return 1
 }
@@ -395,8 +395,8 @@ initialize_script_environment() {
 
 	lib_dir="${root_dir}/lib"
 
-	if [[ ! -f "${lib_dir}/parse-payload.sh" ]]; then
-		echo "initialize_script_environment:: cannot locate parse-payload.sh (lib_dir: ${lib_dir})" >&2
+	if [[ ! -f "${lib_dir}/parse/payload.sh" ]]; then
+		echo "initialize_script_environment:: cannot locate lib/parse/payload.sh (lib_dir: ${lib_dir})" >&2
 		return 1
 	fi
 
@@ -574,10 +574,10 @@ main() {
 		return 1
 	fi
 
-	if [[ -f "${root_dir}/lib/parse-payload.sh" ]]; then
-		source "${root_dir}/lib/parse-payload.sh"
+	if [[ -f "${root_dir}/lib/parse/payload.sh" ]]; then
+		source "${root_dir}/lib/parse/payload.sh"
 	else
-		echo "main:: cannot locate parse-payload.sh at ${root_dir}/lib/parse-payload.sh" >&2
+		echo "main:: cannot locate lib/parse/payload.sh at ${root_dir}/lib/parse/payload.sh" >&2
 		return 1
 	fi
 

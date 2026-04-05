@@ -68,10 +68,9 @@ teardown() {
 	actual_install_root=$(dirname "$symlink_target")
 
 	[[ -d "${actual_install_root}/lib" ]]
-	[[ -f "${actual_install_root}/lib/parse-payload.sh" ]]
 	[[ -f "${actual_install_root}/lib/parse/payload.sh" ]]
 	[[ -f "${actual_install_root}/lib/parse/blocks.sh" ]]
-	[[ -f "${actual_install_root}/lib/block-kit/create-blocks.sh" ]]
+	[[ -f "${actual_install_root}/lib/block-kit/create-block.sh" ]]
 	[[ -f "${actual_install_root}/lib/block-kit/blocks/table.sh" ]]
 	[[ -f "${actual_install_root}/lib/crosspost.sh" ]]
 	[[ -f "${actual_install_root}/lib/replies.sh" ]]
@@ -133,10 +132,9 @@ teardown() {
 	actual_install_root=$(dirname "$symlink_target")
 
 	[[ -d "${actual_install_root}/lib" ]]
-	[[ -f "${actual_install_root}/lib/parse-payload.sh" ]]
 	[[ -f "${actual_install_root}/lib/parse/payload.sh" ]]
 	[[ -f "${actual_install_root}/lib/parse/blocks.sh" ]]
-	[[ -f "${actual_install_root}/lib/block-kit/create-blocks.sh" ]]
+	[[ -f "${actual_install_root}/lib/block-kit/create-block.sh" ]]
 	[[ -f "${actual_install_root}/lib/block-kit/blocks/table.sh" ]]
 
 	rm -rf "${actual_install_root}"
@@ -234,7 +232,7 @@ _run_check_dependencies_isolated() {
 	cp "${GIT_ROOT}/bin/send-to-slack.sh" "${source_dir}/bin/send-to-slack.sh"
 	cp "${GIT_ROOT}/lib"/*.sh "${source_dir}/lib/"
 	cp "${GIT_ROOT}/lib/parse"/*.sh "${source_dir}/lib/parse/"
-	cp "${GIT_ROOT}/lib/block-kit/create-blocks.sh" "${source_dir}/lib/block-kit/"
+	cp "${GIT_ROOT}/lib/block-kit/create-block.sh" "${source_dir}/lib/block-kit/"
 	cp "${GIT_ROOT}/lib/block-kit/blocks"/*.sh "${source_dir}/lib/block-kit/blocks/"
 	if [[ -f "${GIT_ROOT}/VERSION" ]]; then
 		cp "${GIT_ROOT}/VERSION" "${source_dir}/VERSION"
@@ -263,10 +261,9 @@ _run_check_dependencies_isolated() {
 	# Function already verifies signature, so if it succeeded, signature is there
 	file_has_signature "${actual_install_root}/send-to-slack"
 	[[ -d "${actual_install_root}/lib" ]]
-	[[ -f "${actual_install_root}/lib/parse-payload.sh" ]]
 	[[ -f "${actual_install_root}/lib/parse/payload.sh" ]]
 	[[ -f "${actual_install_root}/lib/parse/blocks.sh" ]]
-	[[ -f "${actual_install_root}/lib/block-kit/create-blocks.sh" ]]
+	[[ -f "${actual_install_root}/lib/block-kit/create-block.sh" ]]
 	[[ -f "${actual_install_root}/lib/block-kit/blocks/table.sh" ]]
 	[[ -f "${actual_install_root}/lib/crosspost.sh" ]]
 	[[ -f "${actual_install_root}/lib/replies.sh" ]]

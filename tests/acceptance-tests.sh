@@ -43,7 +43,7 @@ setup_file() {
 
 setup() {
 	source "$SCRIPT"
-	source "$GIT_ROOT/lib/parse-payload.sh"
+	source "$GIT_ROOT/lib/parse/payload.sh"
 
 	_SLACK_WORKSPACE=$(mktemp -d "${BATS_TEST_TMPDIR}/acceptance-tests.workspace.XXXXXX")
 	export _SLACK_WORKSPACE
