@@ -56,13 +56,13 @@ Webhook resources use `source.webhook_url` instead of `slack_bot_user_oauth_toke
 Start a local Concourse server:
 
 ```bash
-make concourse-up
+make concourse-start
 ```
 
 Stop the server:
 
 ```bash
-make concourse-down
+make concourse-stop
 ```
 
 ### Loading Example Pipelines

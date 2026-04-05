@@ -8,7 +8,8 @@ SHELL_FILES   := $(shell find . -name "*.sh" -type f)
 BATS_COMMAND  := bats --timing --verbose-run
 
 .PHONY: lint test test-smoke test-acceptance test-all test-in-docker \
-        concourse-up concourse-down concourse-load-examples concourse-clean-restart
+        concourse-start concourse-stop concourse-stop-clean concourse-load-examples \
+        concourse-clean-restart concourse-run-all-examples
 
 #################################################
 # Lint
@@ -41,11 +42,11 @@ test-in-docker:
 # Concourse
 #################################################
 
-concourse-up:
+concourse-start:
 	docker-compose -f concourse/server.yaml up -d
 
-concourse-down:
-	docker-compose -f concourse/server.yaml down
+concourse-stop:
+	docker-compose -f concourse/server.yaml down -v --remove-orphans
 
 concourse-load-examples:
 	@for file in examples/*.yaml; do \
@@ -63,8 +64,8 @@ concourse-load-examples:
 
 concourse-clean-restart:
 	clear && \
-		$(MAKE) concourse-down && \
-		$(MAKE) concourse-up && \
+		$(MAKE) concourse-stop && \
+		$(MAKE) concourse-start && \
 		./ci/build.sh
 
 concourse-run-all-examples: concourse-clean-restart

@@ -689,13 +689,11 @@ Some smoke and acceptance tests for Incoming Webhooks run only when `SLACK_WEBHO
 ### Local Concourse Development
 
 ```bash
-make concourse-up                  # Start local Concourse server
-make concourse-down                # Stop local Concourse server
+make concourse-start               # Start local Concourse server
+make concourse-stop                # Stop local Concourse server, remove compose orphans
 make concourse-load-examples       # Load example pipelines
 make concourse-run-all-examples    # Restart stack, rebuild image, then run all example jobs (see below)
 ```
-
-`make concourse-run-all-examples` depends on `concourse-clean-restart`, which runs `make concourse-down`, `make concourse-up`, and `./ci/build.sh` before [ci/run-all-examples.sh](ci/run-all-examples.sh). Expect extra Docker build time compared to loading pipelines alone.
 
 Environment variables for `make concourse-load-examples`, each passed to `fly set-pipeline -v`:
 

@@ -1,6 +1,6 @@
 services:
   concourse-db:
-    image: postgres
+    image: postgres:16
     environment:
       POSTGRES_DB: concourse
       POSTGRES_PASSWORD: concourse_pass
