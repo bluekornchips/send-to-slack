@@ -152,136 +152,31 @@ check_dependencies() {
 	return 0
 }
 
-# Health check function
-#
-# Checks dependencies and optionally Slack API connectivity
-#
-# Returns:
-#   0 if all checks pass
-#   1 if any check fails
-health_check() {
-	local errors=0
-
-	echo "health_check:: Starting health check."
-
-	# Check dependencies
-	if ! command -v jq >/dev/null 2>&1; then
-		echo "health_check:: jq not found in PATH" >&2
-		errors=$((errors + 1))
-	else
-		echo "health_check:: jq found: $(command -v jq)"
-	fi
-
-	if ! command -v curl >/dev/null 2>&1; then
-		echo "health_check:: curl not found in PATH" >&2
-		errors=$((errors + 1))
-	else
-		echo "health_check:: curl found: $(command -v curl)"
-	fi
-
-	# Check Slack API connectivity if token is provided
-	if [[ -n "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
-		echo "health_check:: Testing Slack API connectivity."
-		if [[ "${DRY_RUN}" == "true" || "${SKIP_SLACK_API_CHECK}" == "true" ]]; then
-			echo "health_check:: Slack API connectivity check skipped (DRY_RUN or SKIP_SLACK_API_CHECK set)"
-		else
-			local response
-			local http_code
-			http_code=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-				-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
-				--max-time 5 \
-				--connect-timeout 5 \
-				"https://slack.com/api/auth.test" 2>/dev/null)
-
-			if [[ "$http_code" == "200" ]]; then
-				response=$(curl -s -X POST \
-					-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
-					--max-time 5 \
-					--connect-timeout 5 \
-					"https://slack.com/api/auth.test" 2>/dev/null)
-
-				if echo "$response" | jq -e '.ok == true' >/dev/null 2>&1; then
-					local team
-					local user
-					team=$(echo "$response" | jq -r '.team // "unknown"' 2>/dev/null)
-					user=$(echo "$response" | jq -r '.user // "unknown"' 2>/dev/null)
-					echo "health_check:: Slack API accessible - Team: $team, User: $user"
-				else
-					local error
-					error=$(echo "$response" | jq -r '.error // "unknown"' 2>/dev/null)
-					echo "health_check:: Slack API authentication failed: $error" >&2
-					if [[ "$error" != "invalid_auth" ]]; then
-						errors=$((errors + 1))
-					fi
-				fi
-			else
-				echo "health_check:: Slack API not accessible (HTTP $http_code)" >&2
-				errors=$((errors + 1))
-			fi
-		fi
-	else
-		echo "health_check:: SLACK_BOT_USER_OAUTH_TOKEN not set, skipping API connectivity check"
-	fi
-
-	if [[ "$errors" -eq 0 ]]; then
-		echo "health_check:: Health check passed"
-		return 0
-	else
-		echo "health_check:: Health check failed with $errors error(s)" >&2
-		return 1
-	fi
-}
-
-# Process input from stdin or file specified via -f|--file option
+# Process input from stdin or from SEND_TO_SLACK_CLI_INPUT_FILE
 #
 # Arguments:
 #   $1 - output_file: Path to write the input payload to
-#   $@ - remaining arguments: Command line arguments, may include -f|--file <path>
+#
+# Inputs:
+# - SEND_TO_SLACK_CLI_INPUT_FILE: when set to a non-empty path, read that file
 #
 # Side Effects:
-# - Writes input payload to specified output_file
-# - Outputs error messages to stderr
+# - Writes input payload to output_file
+# - May export SEND_TO_SLACK_INPUT_SOURCE=stdin
 #
 # Returns:
-# - 0 on successful input processing
-# - 1 if argument parsing, validation, or input reading fails
+# - 0 on success
+# - 1 on validation or read failure
 process_input_to_file() {
 	local output_file="$1"
-	shift
-
-	local input_file=""
+	local input_file="${SEND_TO_SLACK_CLI_INPUT_FILE:-}"
 	local use_stdin="false"
 
-	# Prepare output file
-	if ! touch "${output_file}" && chmod 0600 "${output_file}"; then
+	if ! { touch "${output_file}" && chmod 0600 "${output_file}"; }; then
 		echo "process_input_to_file:: failed to secure output file ${output_file}" >&2
 		return 1
 	fi
 
-	# Parse command line arguments
-	while [[ $# -gt 0 ]]; do
-		case $1 in
-		-f | -file | --file)
-			if [[ -n "${input_file}" ]]; then
-				echo "process_input_to_file:: -f|-file|--file option can only be specified once" >&2
-				return 1
-			fi
-			if [[ $# -lt 2 ]]; then
-				echo "process_input_to_file:: -f|-file|--file requires a file path argument" >&2
-				return 1
-			fi
-			input_file="$2"
-			shift 2
-			;;
-		*)
-			echo "process_input_to_file:: unknown option: $1" >&2
-			echo "process_input_to_file:: use -f|-file|--file <path> to specify input file, or provide input via stdin" >&2
-			return 1
-			;;
-		esac
-	done
-
-	# Use file if specified, otherwise use stdin
 	if [[ -n "${input_file}" ]]; then
 		if [[ ! -f "${input_file}" ]]; then
 			echo "process_input_to_file:: input file does not exist: ${input_file}" >&2
@@ -296,7 +191,6 @@ process_input_to_file() {
 		use_stdin="true"
 	fi
 
-	# Read from stdin or file and write to target file
 	echo "process_input_to_file:: reading input into ${output_file}" >&2
 
 	if [[ "${use_stdin}" == "true" ]]; then
@@ -339,9 +233,7 @@ find_root_dir() {
 	local script_path
 	local script_dir
 	local parent_dir
-	local git_root
 
-	# Get the actual path of the script, resolving symlinks
 	script_path="${BASH_SOURCE[0]}"
 	if [[ -L "$script_path" ]]; then
 		script_path=$(readlink -f "$script_path" 2>/dev/null || readlink "$script_path")
@@ -354,9 +246,7 @@ find_root_dir() {
 	fi
 
 	parent_dir=$(cd "${script_dir}/.." && pwd)
-	git_root=$(git -C "$script_dir" rev-parse --show-toplevel 2>/dev/null || true)
 
-	# Prefer installed layout, then repo layout, then git root
 	if [[ -f "${script_dir}/lib/parse/payload.sh" ]]; then
 		echo "$script_dir"
 		return 0
@@ -367,12 +257,7 @@ find_root_dir() {
 		return 0
 	fi
 
-	if [[ -n "$git_root" && -f "${git_root}/lib/parse/payload.sh" ]]; then
-		echo "$git_root"
-		return 0
-	fi
-
-	echo "find_root_dir:: cannot locate lib/parse/payload.sh (checked: ${script_dir}, ${parent_dir}, ${git_root:-none})" >&2
+	echo "find_root_dir:: cannot locate lib/parse/payload.sh (checked: ${script_dir}, ${parent_dir})" >&2
 
 	return 1
 }
@@ -411,15 +296,16 @@ initialize_script_environment() {
 #   $@ - Command line arguments
 #
 # Side Effects:
-#   Sets global main_args array and health_check_mode variable
-#   May call print_version and exit
+#   Sets health_check_mode, SEND_TO_SLACK_CLI_INPUT_FILE, clears main_args then fills it
 #
 # Returns:
 #   0 on success
+#   1 on parse error
 #   2 if version or help was requested
 parse_main_args() {
 	main_args=()
 	health_check_mode=false
+	SEND_TO_SLACK_CLI_INPUT_FILE=""
 
 	while [[ $# -gt 0 ]]; do
 		case $1 in
@@ -440,11 +326,184 @@ parse_main_args() {
 			health_check_mode=true
 			shift
 			;;
+		-f | -file | --file)
+			if [[ -n "${SEND_TO_SLACK_CLI_INPUT_FILE}" ]]; then
+				echo "parse_main_args:: -f|-file|--file option can only be specified once" >&2
+				return 1
+			fi
+			if [[ $# -lt 2 ]]; then
+				echo "parse_main_args:: -f|-file|--file requires a file path argument" >&2
+				return 1
+			fi
+			SEND_TO_SLACK_CLI_INPUT_FILE="$2"
+			shift 2
+			;;
 		*)
-			main_args+=("$1")
-			shift
+			echo "parse_main_args:: unknown option: $1" >&2
+			echo "parse_main_args:: use -h for usage" >&2
+			return 1
 			;;
 		esac
+	done
+
+	export SEND_TO_SLACK_CLI_INPUT_FILE
+
+	return 0
+}
+
+# Create temp workspace and register cleanup trap
+#
+# Side Effects:
+# - Sets and exports _SLACK_WORKSPACE
+# - Installs EXIT and ERR trap to remove the directory
+#
+# Returns:
+# - 0 on success
+# - 1 if mktemp fails
+init_slack_workspace() {
+	_SLACK_WORKSPACE=$(mktemp -d "${TMPDIR:-/tmp}/send-to-slack.run.XXXXXX")
+	if [[ -z "${_SLACK_WORKSPACE}" ]]; then
+		echo "init_slack_workspace:: mktemp failed" >&2
+		return 1
+	fi
+	export _SLACK_WORKSPACE
+	trap 'rm -rf "$_SLACK_WORKSPACE"' EXIT ERR
+
+	return 0
+}
+
+# UTC timestamp for Concourse version JSON
+#
+# Outputs:
+# - ISO-like UTC timestamp string
+#
+# Returns:
+# - 0 always
+get_timestamp_utc() {
+	date -u +%Y-%m-%dT%H:%M:%SZ
+
+	return 0
+}
+
+# Apply params.debug overrides to logging globals
+#
+# Inputs:
+# - $1 - input_payload: path to raw input JSON
+#
+# Side Effects:
+# - May set SHOW_METADATA, SHOW_PAYLOAD, LOG_VERBOSE
+#
+# Returns:
+# - 0 always
+apply_debug_from_payload() {
+	local input_payload="$1"
+	local debug_enabled
+
+	debug_enabled=$(jq -r '.params.debug // false' "${input_payload}")
+	if [[ "$debug_enabled" == "true" ]]; then
+		SHOW_METADATA="true"
+		SHOW_PAYLOAD="true"
+		export SHOW_METADATA
+		export SHOW_PAYLOAD
+		export LOG_VERBOSE="true"
+	fi
+
+	return 0
+}
+
+# Emit Concourse resource JSON to stdout or SEND_TO_SLACK_OUTPUT
+#
+# Inputs:
+# - $1 - timestamp: version.timestamp string
+# - $2 - meta_ts: message ts for version.message_ts when non-empty
+#
+# Inputs from environment:
+# - METADATA: JSON value for metadata field
+# - SEND_TO_SLACK_OUTPUT: optional file path
+#
+# Returns:
+# - 0 on success
+# - 1 if jq fails
+emit_concourse_output() {
+	local timestamp="$1"
+	local meta_ts="$2"
+	local json_output
+
+	if ! json_output=$(jq -n \
+		--arg timestamp "${timestamp}" \
+		--arg version_message_ts "${meta_ts}" \
+		--argjson metadata "${METADATA}" \
+		'{
+      version: (
+        if $version_message_ts != "" then { timestamp: $timestamp, message_ts: $version_message_ts }
+        else { timestamp: $timestamp }
+        end
+      ),
+      metadata: $metadata
+    }'); then
+		echo "emit_concourse_output:: failed to build output JSON" >&2
+		return 1
+	fi
+
+	if [[ -n "${SEND_TO_SLACK_OUTPUT:-}" ]]; then
+		jq -r '.' <<<"${json_output}" >"${SEND_TO_SLACK_OUTPUT}"
+		echo "main:: output written to ${SEND_TO_SLACK_OUTPUT}"
+	else
+		jq -r '.' <<<"${json_output}"
+	fi
+
+	return 0
+}
+
+# Source API, metadata, and mention resolution libraries
+#
+# Inputs:
+# - $1 - root_dir: repository or install root
+#
+# Returns:
+# - 0 on success
+# - 1 if a required file is missing
+source_send_to_slack_libs_core() {
+	local root_dir="$1"
+	local path
+
+	for path in \
+		"${root_dir}/lib/slack/api.sh" \
+		"${root_dir}/lib/metadata.sh" \
+		"${root_dir}/lib/slack/utils/resolve-mentions.sh"; do
+		if [[ ! -f "$path" ]]; then
+			echo "main:: cannot locate required library at ${path}" >&2
+			return 1
+		fi
+		# shellcheck disable=SC1090
+		source "$path"
+	done
+
+	return 0
+}
+
+# Source payload parsing, crosspost, and replies libraries
+#
+# Inputs:
+# - $1 - root_dir: repository or install root
+#
+# Returns:
+# - 0 on success
+# - 1 if a required file is missing
+source_send_to_slack_libs_message() {
+	local root_dir="$1"
+	local path
+
+	for path in \
+		"${root_dir}/lib/parse/payload.sh" \
+		"${root_dir}/lib/slack/crosspost.sh" \
+		"${root_dir}/lib/slack/replies.sh"; do
+		if [[ ! -f "$path" ]]; then
+			echo "main:: cannot locate required library at ${path}" >&2
+			return 1
+		fi
+		# shellcheck disable=SC1090
+		source "$path"
 	done
 
 	return 0
@@ -454,13 +513,11 @@ parse_main_args() {
 #
 # Inputs:
 # - Reads JSON payload from stdin or from file specified with -f|--file
-# - Command line arguments: -f|--file <path>, optional
 #
 # Side Effects:
 # - Sends message to Slack API
 # - Outputs informational messages to stdout for logging
-# - Outputs only JSON to stdout at the end
-# - Sets global environment variables, PAYLOAD, etc.
+# - Outputs JSON to stdout at the end unless SEND_TO_SLACK_OUTPUT is set
 #
 # Returns:
 # - 0 on successful message delivery and output generation
@@ -470,18 +527,16 @@ main() {
 	local timestamp
 	local root_dir
 	local parse_result
+	local update_rc
 
 	if ! root_dir=$(initialize_script_environment); then
 		return 1
 	fi
 
-	# Parse arguments
-	# If help/version is requested, parse_main_args will output and return 2
 	parse_result=0
 	parse_main_args "$@" || parse_result=$?
 
 	if [[ "$parse_result" -eq 2 ]]; then
-		# Version or help was requested and already printed
 		return 0
 	fi
 
@@ -489,6 +544,13 @@ main() {
 		echo "main:: failed to parse arguments" >&2
 		return 1
 	fi
+
+	if [[ ! -f "${root_dir}/lib/health-check.sh" ]]; then
+		echo "main:: cannot locate health-check.sh at ${root_dir}/lib/health-check.sh" >&2
+		return 1
+	fi
+	# shellcheck disable=SC1091
+	source "${root_dir}/lib/health-check.sh"
 
 	local version
 	if ! version=$(get_version "$root_dir"); then
@@ -503,27 +565,11 @@ main() {
 		return 0
 	fi
 
+	# Install root for lib helpers, lib/parse/payload.sh and Block Kit expect this before load
 	SEND_TO_SLACK_ROOT="$root_dir"
 	export SEND_TO_SLACK_ROOT
 
-	if [[ -f "${root_dir}/lib/slack/api.sh" ]]; then
-		source "${root_dir}/lib/slack/api.sh"
-	else
-		echo "main:: cannot locate slack api at ${root_dir}/lib/slack/api.sh" >&2
-		return 1
-	fi
-
-	if [[ -f "${root_dir}/lib/metadata.sh" ]]; then
-		source "${root_dir}/lib/metadata.sh"
-	else
-		echo "main:: cannot locate metadata.sh at ${root_dir}/lib/metadata.sh" >&2
-		return 1
-	fi
-
-	if [[ -f "${root_dir}/lib/slack/utils/resolve-mentions.sh" ]]; then
-		source "${root_dir}/lib/slack/utils/resolve-mentions.sh"
-	else
-		echo "main:: cannot locate resolve-mentions.sh at ${root_dir}/lib/slack/utils/resolve-mentions.sh" >&2
+	if ! source_send_to_slack_libs_core "${root_dir}"; then
 		return 1
 	fi
 
@@ -537,30 +583,20 @@ main() {
 
 	echo "main:: starting task to send notification to Slack from Concourse"
 
-	_SLACK_WORKSPACE=$(mktemp -d /tmp/send-to-slack.run.XXXXXX)
-	export _SLACK_WORKSPACE
-	trap 'rm -rf "$_SLACK_WORKSPACE"' EXIT ERR
+	if ! init_slack_workspace; then
+		return 1
+	fi
 
 	input_payload="${_SLACK_WORKSPACE}/input_payload"
 
-	# Process input and write to the designated file in our temp dir
-	if ! process_input_to_file "${input_payload}" "${main_args[@]}"; then
+	if ! process_input_to_file "${input_payload}"; then
 		echo "main:: failed to process input" >&2
 		return 1
 	fi
 
-	timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+	timestamp=$(get_timestamp_utc)
 
-	# Check if params.debug is true and override show_payload/show_metadata
-	local debug_enabled
-	debug_enabled=$(jq -r '.params.debug // false' "${input_payload}")
-	if [[ "$debug_enabled" == "true" ]]; then
-		SHOW_METADATA="true"
-		SHOW_PAYLOAD="true"
-		export SHOW_METADATA
-		export SHOW_PAYLOAD
-		export LOG_VERBOSE="true"
-	fi
+	apply_debug_from_payload "${input_payload}"
 
 	if [[ -n "${SEND_TO_SLACK_INPUT_SOURCE:-}" ]]; then
 		echo "main:: input source: ${SEND_TO_SLACK_INPUT_SOURCE}" >&2
@@ -568,30 +604,12 @@ main() {
 
 	echo "main:: parsing payload"
 
-	# Ensure file still exists before parsing
 	if [[ ! -f "${input_payload}" ]]; then
 		echo "main:: input file disappeared before parsing: ${input_payload}" >&2
 		return 1
 	fi
 
-	if [[ -f "${root_dir}/lib/parse/payload.sh" ]]; then
-		source "${root_dir}/lib/parse/payload.sh"
-	else
-		echo "main:: cannot locate lib/parse/payload.sh at ${root_dir}/lib/parse/payload.sh" >&2
-		return 1
-	fi
-
-	if [[ -f "${root_dir}/lib/slack/crosspost.sh" ]]; then
-		source "${root_dir}/lib/slack/crosspost.sh"
-	else
-		echo "main:: cannot locate crosspost.sh at ${root_dir}/lib/slack/crosspost.sh" >&2
-		return 1
-	fi
-
-	if [[ -f "${root_dir}/lib/slack/replies.sh" ]]; then
-		source "${root_dir}/lib/slack/replies.sh"
-	else
-		echo "main:: cannot locate replies.sh at ${root_dir}/lib/slack/replies.sh" >&2
+	if ! source_send_to_slack_libs_message "${root_dir}"; then
 		return 1
 	fi
 
@@ -605,49 +623,16 @@ main() {
 	parsed_payload=$(cat "${parsed_payload_file}")
 	rm -f "${parsed_payload_file}"
 
-	local update_ts
-	local message_ts_file
-	update_ts=$(jq -r '.params.message_ts // empty' "${input_payload}")
-	message_ts_file=$(jq -r '.params.message_ts_file // empty' "${input_payload}")
+	update_rc=0
+	run_chat_update_from_input "${input_payload}" "${parsed_payload}" || update_rc=$?
 
-	if [[ -z "$update_ts" ]] && [[ -n "$message_ts_file" ]]; then
-		if [[ ! -f "$message_ts_file" ]]; then
-			echo "main:: params.message_ts_file: file not found: ${message_ts_file}" >&2
-
-			return 1
-		fi
-		update_ts=$(<"$message_ts_file")
+	if [[ "$update_rc" -eq 1 ]]; then
+		return 1
 	fi
 
-	if [[ -n "$update_ts" ]]; then
-		echo "main:: updating existing Slack message via chat.update"
-		local update_channel
-		update_channel=$(jq -r '.params.channel // empty' "${input_payload}")
-
-		if [[ -z "$update_channel" || "$update_channel" == "null" ]]; then
-			echo "main:: params.channel is required when params.message_ts is set" >&2
-			return 1
-		fi
-
-		if [[ "${DELIVERY_METHOD:-api}" != "api" ]]; then
-			echo "main:: params.message_ts requires API delivery, not webhook" >&2
-			return 1
-		fi
-
-		local update_channel_resolved
-		update_channel_resolved="$update_channel"
-		if [[ "${DRY_RUN:-}" != "true" ]]; then
-			if ! update_channel_resolved=$(resolve_channel_id "$update_channel"); then
-				echo "main:: failed to resolve params.channel for chat.update, channel ID is required" >&2
-				return 1
-			fi
-		fi
-
-		if ! update_message "$update_channel_resolved" "$update_ts" "$parsed_payload"; then
-			echo "main:: failed to update Slack message" >&2
-			return 1
-		fi
-	else
+	if [[ "$update_rc" -eq 0 ]]; then
+		:
+	elif [[ "$update_rc" -eq 2 ]]; then
 		echo "main:: sending notification"
 		if ! send_notification "$parsed_payload"; then
 			echo "main:: failed to send notification" >&2
@@ -658,7 +643,6 @@ main() {
 			if [[ -n "${EPHEMERAL_USER:-}" ]]; then
 				echo "main:: chat.postEphemeral does not support thread replies or crosspost, skipping send_thread_replies and crosspost_notification" >&2
 			else
-				# Capture ts from primary message for use as thread anchor in replies
 				local primary_ts
 				if [[ -n "${RESPONSE:-}" ]] && jq . >/dev/null 2>&1 <<<"$RESPONSE"; then
 					primary_ts=$(echo "$RESPONSE" | jq -r '.ts // empty')
@@ -666,7 +650,6 @@ main() {
 					primary_ts=""
 				fi
 
-				# Resolve thread_ts for replies, prefer parsed_payload.thread_ts, then primary ts
 				local reply_thread_ts
 				reply_thread_ts=$(echo "$parsed_payload" | jq -r '.thread_ts // empty')
 				if [[ -z "$reply_thread_ts" || "$reply_thread_ts" == "null" ]]; then
@@ -686,6 +669,9 @@ main() {
 			echo "main:: delivery method webhook does not support thread replies, skipping send_thread_replies" >&2
 			echo "main:: delivery method webhook does not support crosspost, skipping crosspost_notification" >&2
 		fi
+	else
+		echo "main:: unexpected run_chat_update_from_input exit code: ${update_rc}" >&2
+		return 1
 	fi
 
 	local meta_ts=""
@@ -704,27 +690,8 @@ main() {
 		return 1
 	fi
 
-	# Output version JSON for Concourse
-	# If SEND_TO_SLACK_OUTPUT is set, write to that file, otherwise write to stdout
-	local json_output
-	json_output=$(jq -n \
-		--arg timestamp "${timestamp}" \
-		--arg version_message_ts "${meta_ts}" \
-		--argjson metadata "${METADATA}" \
-		'{
-      version: (
-        if $version_message_ts != "" then { timestamp: $timestamp, message_ts: $version_message_ts }
-        else { timestamp: $timestamp }
-        end
-      ),
-      metadata: $metadata
-    }')
-
-	if [[ -n "${SEND_TO_SLACK_OUTPUT}" ]]; then
-		jq -r '.' <<<"${json_output}" >"${SEND_TO_SLACK_OUTPUT}"
-		echo "main:: output written to ${SEND_TO_SLACK_OUTPUT}"
-	else
-		jq -r '.' <<<"${json_output}"
+	if ! emit_concourse_output "${timestamp}" "${meta_ts}"; then
+		return 1
 	fi
 
 	echo "main:: finished running send-to-slack.sh successfully"

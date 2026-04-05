@@ -69,6 +69,7 @@ teardown() {
 
 	[[ -d "${actual_install_root}/lib" ]]
 	[[ -f "${actual_install_root}/lib/metadata.sh" ]]
+	[[ -f "${actual_install_root}/lib/health-check.sh" ]]
 	[[ -f "${actual_install_root}/lib/parse/payload.sh" ]]
 	[[ -f "${actual_install_root}/lib/parse/blocks.sh" ]]
 	[[ -f "${actual_install_root}/lib/slack/block-kit/create-block.sh" ]]
@@ -133,6 +134,7 @@ teardown() {
 	actual_install_root=$(dirname "$symlink_target")
 
 	[[ -d "${actual_install_root}/lib" ]]
+	[[ -f "${actual_install_root}/lib/health-check.sh" ]]
 	[[ -f "${actual_install_root}/lib/parse/payload.sh" ]]
 	[[ -f "${actual_install_root}/lib/parse/blocks.sh" ]]
 	[[ -f "${actual_install_root}/lib/slack/block-kit/create-block.sh" ]]
@@ -231,7 +233,7 @@ _run_check_dependencies_isolated() {
 	mkdir -p "${source_dir}/bin" "${source_dir}/lib/slack/block-kit/blocks" "${source_dir}/lib/slack/utils" "${source_dir}/lib/parse"
 
 	cp "${GIT_ROOT}/bin/send-to-slack.sh" "${source_dir}/bin/send-to-slack.sh"
-	cp "${GIT_ROOT}/lib/metadata.sh" "${source_dir}/lib/"
+	cp "${GIT_ROOT}/lib/metadata.sh" "${GIT_ROOT}/lib/health-check.sh" "${source_dir}/lib/"
 	cp "${GIT_ROOT}/lib/parse"/*.sh "${source_dir}/lib/parse/"
 	cp "${GIT_ROOT}/lib/slack/api.sh" "${GIT_ROOT}/lib/slack/crosspost.sh" "${GIT_ROOT}/lib/slack/replies.sh" "${source_dir}/lib/slack/"
 	cp "${GIT_ROOT}/lib/slack/utils"/*.sh "${source_dir}/lib/slack/utils/"
@@ -265,6 +267,7 @@ _run_check_dependencies_isolated() {
 	file_has_signature "${actual_install_root}/send-to-slack"
 	[[ -d "${actual_install_root}/lib" ]]
 	[[ -f "${actual_install_root}/lib/metadata.sh" ]]
+	[[ -f "${actual_install_root}/lib/health-check.sh" ]]
 	[[ -f "${actual_install_root}/lib/parse/payload.sh" ]]
 	[[ -f "${actual_install_root}/lib/parse/blocks.sh" ]]
 	[[ -f "${actual_install_root}/lib/slack/block-kit/create-block.sh" ]]

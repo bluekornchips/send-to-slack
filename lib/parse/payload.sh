@@ -2,12 +2,8 @@
 #
 # Payload loading, sanitization, validation, and delivery configuration
 # Sources lib/parse/blocks.sh at end of file for process_blocks and full parse flow
+# SEND_TO_SLACK_ROOT is set by bin/send-to-slack.sh before this file is sourced
 #
-
-if [[ -z "${SEND_TO_SLACK_ROOT:-}" ]]; then
-	SEND_TO_SLACK_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-	export SEND_TO_SLACK_ROOT
-fi
 
 DEFAULT_DRY_RUN="false"
 
@@ -546,4 +542,5 @@ parse_payload() {
 }
 
 # Block assembly, Slack limits, legacy attachments, Block Kit via create_block
-source "${SEND_TO_SLACK_ROOT}/lib/parse/blocks.sh"
+# shellcheck disable=SC1091
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/blocks.sh"

@@ -812,3 +812,30 @@ mock_curl_permalink_failure() {
 	jq -e '.channel == "C111" and .ts == "1712000000.000100"' "$body_capture" >/dev/null
 	rm -f "$body_capture"
 }
+
+########################################################
+# run_chat_update_from_input
+########################################################
+
+@test "run_chat_update_from_input:: returns 2 when no message_ts" {
+	local pf
+	pf=$(mktemp "${BATS_TEST_TMPDIR}/slack-api-tests.ruci-no-ts.XXXXXX")
+	jq -n '{params: {channel: "#general"}}' >"$pf"
+
+	run run_chat_update_from_input "$pf" '{"text":"hello"}'
+	[[ "$status" -eq 2 ]]
+	rm -f "$pf"
+}
+
+@test "run_chat_update_from_input:: dry run succeeds with message_ts" {
+	local pf
+	pf=$(mktemp "${BATS_TEST_TMPDIR}/slack-api-tests.ruci-dry.XXXXXX")
+	jq -n '{params: {channel: "#general", message_ts: "111.222"}}' >"$pf"
+	DRY_RUN="true"
+	export DRY_RUN
+
+	run run_chat_update_from_input "$pf" '{"text":"hello"}'
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "main:: updating existing Slack message via chat.update"
+	rm -f "$pf"
+}

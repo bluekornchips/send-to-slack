@@ -543,6 +543,72 @@ EOF
 	return 0
 }
 
+# Resolve message_ts and run chat.update when params request an update
+#
+# Inputs:
+# - $1 - input_payload: path to raw Concourse-style input JSON
+# - $2 - parsed_payload: JSON string from parse_payload
+#
+# Side Effects:
+# - May call update_message and set RESPONSE
+#
+# Returns:
+# - 0 if chat.update completed successfully
+# - 1 on validation or API failure
+# - 2 if no update was requested, caller should send a new message
+run_chat_update_from_input() {
+	local input_payload="$1"
+	local parsed_payload="$2"
+	local update_ts
+	local message_ts_file
+
+	update_ts=$(jq -r '.params.message_ts // empty' "${input_payload}")
+	message_ts_file=$(jq -r '.params.message_ts_file // empty' "${input_payload}")
+
+	if [[ -z "$update_ts" ]] && [[ -n "$message_ts_file" ]]; then
+		if [[ ! -f "$message_ts_file" ]]; then
+			echo "main:: params.message_ts_file: file not found: ${message_ts_file}" >&2
+
+			return 1
+		fi
+		update_ts=$(<"$message_ts_file")
+	fi
+
+	if [[ -z "$update_ts" ]]; then
+		return 2
+	fi
+
+	echo "main:: updating existing Slack message via chat.update"
+	local update_channel
+	update_channel=$(jq -r '.params.channel // empty' "${input_payload}")
+
+	if [[ -z "$update_channel" || "$update_channel" == "null" ]]; then
+		echo "main:: params.channel is required when params.message_ts is set" >&2
+		return 1
+	fi
+
+	if [[ "${DELIVERY_METHOD:-api}" != "api" ]]; then
+		echo "main:: params.message_ts requires API delivery, not webhook" >&2
+		return 1
+	fi
+
+	local update_channel_resolved
+	update_channel_resolved="$update_channel"
+	if [[ "${DRY_RUN:-}" != "true" ]]; then
+		if ! update_channel_resolved=$(resolve_channel_id "$update_channel"); then
+			echo "main:: failed to resolve params.channel for chat.update, channel ID is required" >&2
+			return 1
+		fi
+	fi
+
+	if ! update_message "$update_channel_resolved" "$update_ts" "$parsed_payload"; then
+		echo "main:: failed to update Slack message" >&2
+		return 1
+	fi
+
+	return 0
+}
+
 # Send payload using Slack Incoming Webhook URL
 #
 # Arguments:
