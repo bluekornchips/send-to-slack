@@ -6,18 +6,19 @@
 #
 
 ########################################################
-# Default values
+# Defaults
 ########################################################
-SHOW_METADATA="true"
-SHOW_PAYLOAD="true"
+SHOW_METADATA_="true"
+SHOW_PAYLOAD_="true"
 
-# Display usage information
-#
-# Side Effects:
-# - Outputs usage message to stdout
-#
-# Returns:
-# - 0 always
+########################################################
+# Constants
+########################################################
+GITHUB_URL="https://github.com/bluekornchips/send-to-slack"
+REQUIRED_COMMANDS=("jq" "curl")
+LIB_FILES=("slack-api.sh" "metadata.sh" "parse-payload.sh" "resolve-mentions.sh")
+BIN_FILES=("crosspost.sh" "replies.sh")
+
 usage() {
 	cat <<EOF
 Usage: send-to-slack [OPTIONS]
@@ -31,8 +32,9 @@ OPTIONS:
   --health-check        Validate dependencies and Slack API connectivity without sending
 
 For more information, see: https://github.com/bluekornchips/send-to-slack
+
 EOF
-	return 0
+	return 1
 }
 
 # Resolve version from known locations
@@ -47,24 +49,22 @@ EOF
 # - 0 on success, 1 on missing
 get_version() {
 	local root_path="$1"
-	local version_path
+	[[ -z "$root_path" ]] && return 1
+
+	local version_path="${root_path}/VERSION"
 	local version_value
-
-	if [[ -z "$root_path" ]]; then
-		return 1
-	fi
-
-	version_path="${root_path}/VERSION"
 
 	if [[ -f "$version_path" ]]; then
 		version_value=$(tr -d '\r' <"$version_path" | tr -d '\n')
-		if [[ -n "$version_value" ]]; then
-			echo "$version_value"
-			return 0
+		if [[ -z "$version_value" ]]; then
+			echo "get_version:: VERSION file is empty: ${version_path}" >&2
+			return 1
 		fi
 	fi
 
-	return 1
+	echo "$version_value"
+
+	return 0
 }
 
 # Resolve commit from git metadata when available
@@ -79,22 +79,21 @@ get_version() {
 # - 0 on success, 1 on missing
 get_commit() {
 	local root_path="$1"
-	local commit_value
+	[[ -z "$root_path" ]] && return 1
 
-	if [[ -z "$root_path" ]]; then
-		return 1
-	fi
+	local commit_value
 
 	if command -v git >/dev/null 2>&1 && [[ -d "${root_path}/.git" ]]; then
 		if commit_value=$(git -C "$root_path" rev-parse --short HEAD 2>/dev/null); then
 			if [[ -n "$commit_value" ]]; then
-				echo "$commit_value"
-				return 0
+				echo "get_commit:: git commit is empty: ${commit_value}" >&2
+				return 1
 			fi
 		fi
 	fi
 
-	return 1
+	echo "$commit_value"
+	return 0
 }
 
 # Print version information for CLI output
@@ -109,21 +108,20 @@ get_commit() {
 # - 0 always
 print_version() {
 	local root_path="$1"
-	local version
-	local commit
-	local github_url="https://github.com/bluekornchips/send-to-slack"
+	[[ -z "$root_path" ]] && return 1
 
-	if ! version=$(get_version "$root_path"); then
-		version="unknown"
-	fi
+	local version="unknown"
+	local commit="unknown"
 
-	if ! commit=$(get_commit "$root_path"); then
-		commit="unknown"
-	fi
+	version=$(get_version "$root_path")
+	commit=$(get_commit "$root_path")
 
-	echo "send-to-slack, (${github_url})"
-	echo "version: ${version}"
-	echo "commit: ${commit}"
+	cat <<EOF
+send-to-slack, (${GITHUB_URL})
+version: ${version}
+commit: ${commit}
+
+EOF
 
 	return 0
 }
@@ -135,9 +133,8 @@ print_version() {
 #   1 if any dependency is missing
 check_dependencies() {
 	local missing_deps=()
-	local required_commands=("jq" "curl")
 
-	for cmd in "${required_commands[@]}"; do
+	for cmd in "${REQUIRED_COMMANDS[@]}"; do
 		if ! command -v "$cmd" >/dev/null 2>&1; then
 			missing_deps+=("$cmd")
 		fi
@@ -154,82 +151,75 @@ check_dependencies() {
 
 # Health check function
 #
-# Checks dependencies and optionally Slack API connectivity
+# Checks Slack API connectivity
 #
 # Returns:
 #   0 if all checks pass
 #   1 if any check fails
+
+# TODO: Move to lib/health-check.sh
 health_check() {
 	local errors=0
 
 	echo "health_check:: Starting health check."
 
-	# Check dependencies
-	if ! command -v jq >/dev/null 2>&1; then
-		echo "health_check:: jq not found in PATH" >&2
-		errors=$((errors + 1))
-	else
-		echo "health_check:: jq found: $(command -v jq)"
-	fi
-
-	if ! command -v curl >/dev/null 2>&1; then
-		echo "health_check:: curl not found in PATH" >&2
-		errors=$((errors + 1))
-	else
-		echo "health_check:: curl found: $(command -v curl)"
-	fi
-
 	# Check Slack API connectivity if token is provided
-	if [[ -n "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
-		echo "health_check:: Testing Slack API connectivity."
-		if [[ "${DRY_RUN}" == "true" || "${SKIP_SLACK_API_CHECK}" == "true" ]]; then
-			echo "health_check:: Slack API connectivity check skipped (DRY_RUN or SKIP_SLACK_API_CHECK set)"
+	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
+		echo "health_check:: SLACK_BOT_USER_OAUTH_TOKEN not set, skipping API connectivity check"
+		return 0
+	fi
+
+	if [[ "${DRY_RUN}" == "true" || "${SKIP_SLACK_API_CHECK}" == "true" ]]; then
+		echo "health_check:: Slack API connectivity check skipped (DRY_RUN or SKIP_SLACK_API_CHECK set)"
+		return 0
+	fi
+
+	echo "health_check:: Testing Slack API connectivity."
+	local response
+	local http_code
+
+	http_code=$(curl -s -o /dev/null \
+		-w "%{http_code}" \
+		-X POST \
+		-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
+		--max-time 5 \
+		--connect-timeout 5 \
+		"https://slack.com/api/auth.test" 2>/dev/null)
+
+	if [[ "$http_code" == "200" ]]; then
+		response=$(curl -s -X POST \
+			-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
+			--max-time 5 \
+			--connect-timeout 5 \
+			"https://slack.com/api/auth.test" 2>/dev/null)
+
+		if echo "$response" | jq -e '.ok == true' >/dev/null 2>&1; then
+			local team
+			local user
+			team=$(echo "$response" | jq -r '.team // "unknown"' 2>/dev/null)
+			user=$(echo "$response" | jq -r '.user // "unknown"' 2>/dev/null)
+			echo "health_check:: Slack API accessible - Team: $team, User: $user"
 		else
-			local response
-			local http_code
-			http_code=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-				-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
-				--max-time 5 \
-				--connect-timeout 5 \
-				"https://slack.com/api/auth.test" 2>/dev/null)
-
-			if [[ "$http_code" == "200" ]]; then
-				response=$(curl -s -X POST \
-					-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
-					--max-time 5 \
-					--connect-timeout 5 \
-					"https://slack.com/api/auth.test" 2>/dev/null)
-
-				if echo "$response" | jq -e '.ok == true' >/dev/null 2>&1; then
-					local team
-					local user
-					team=$(echo "$response" | jq -r '.team // "unknown"' 2>/dev/null)
-					user=$(echo "$response" | jq -r '.user // "unknown"' 2>/dev/null)
-					echo "health_check:: Slack API accessible - Team: $team, User: $user"
-				else
-					local error
-					error=$(echo "$response" | jq -r '.error // "unknown"' 2>/dev/null)
-					echo "health_check:: Slack API authentication failed: $error" >&2
-					if [[ "$error" != "invalid_auth" ]]; then
-						errors=$((errors + 1))
-					fi
-				fi
-			else
-				echo "health_check:: Slack API not accessible (HTTP $http_code)" >&2
+			local error
+			error=$(echo "$response" | jq -r '.error // "unknown"' 2>/dev/null)
+			echo "health_check:: Slack API authentication failed: $error" >&2
+			if [[ "$error" != "invalid_auth" ]]; then
 				errors=$((errors + 1))
 			fi
 		fi
 	else
-		echo "health_check:: SLACK_BOT_USER_OAUTH_TOKEN not set, skipping API connectivity check"
+		echo "health_check:: Slack API not accessible (HTTP $http_code)" >&2
+		errors=$((errors + 1))
 	fi
 
-	if [[ "$errors" -eq 0 ]]; then
-		echo "health_check:: Health check passed"
-		return 0
-	else
+	if [[ "$errors" -ne 0 ]]; then
 		echo "health_check:: Health check failed with $errors error(s)" >&2
 		return 1
 	fi
+
+	echo "health_check:: Health check passed"
+
+	return 0
 }
 
 # Process input from stdin or file specified via -f|--file option
@@ -335,6 +325,8 @@ process_input_to_file() {
 # Returns:
 #   0 on success
 #   1 if root directory cannot be located
+
+#TODO: Remove git root detection
 find_root_dir() {
 	local script_path
 	local script_dir
@@ -394,7 +386,6 @@ initialize_script_environment() {
 	fi
 
 	lib_dir="${root_dir}/lib"
-
 	if [[ ! -f "${lib_dir}/parse-payload.sh" ]]; then
 		echo "initialize_script_environment:: cannot locate parse-payload.sh (lib_dir: ${lib_dir})" >&2
 		return 1
@@ -417,6 +408,8 @@ initialize_script_environment() {
 # Returns:
 #   0 on success
 #   2 if version or help was requested
+
+#TODO: Combine (current line 249) "	# Parse command line arguments" into this function
 parse_main_args() {
 	main_args=()
 	health_check_mode=false
@@ -480,10 +473,7 @@ main() {
 	parse_result=0
 	parse_main_args "$@" || parse_result=$?
 
-	if [[ "$parse_result" -eq 2 ]]; then
-		# Version or help was requested and already printed
-		return 0
-	fi
+	[[ "$parse_result" -eq 2 ]] && return 0
 
 	if [[ "$parse_result" -ne 0 ]]; then
 		echo "main:: failed to parse arguments" >&2
@@ -494,49 +484,37 @@ main() {
 	if ! version=$(get_version "$root_dir"); then
 		version="unknown"
 	fi
-	echo "main:: send-to-slack ${version}"
 
 	if [[ "$health_check_mode" == "true" ]]; then
-		if ! health_check; then
-			return 1
-		fi
+		health_check || return 1
 		return 0
 	fi
 
 	SEND_TO_SLACK_BIN_DIR="$root_dir"
 	export SEND_TO_SLACK_BIN_DIR
 
-	if [[ -f "${root_dir}/lib/slack-api.sh" ]]; then
-		source "${root_dir}/lib/slack-api.sh"
-	else
-		echo "main:: cannot locate slack-api.sh at ${root_dir}/lib/slack-api.sh" >&2
-		return 1
-	fi
+	# TODO: move to new function, _load_lib_files
+	for lib_file in "${LIB_FILES[@]}"; do
+		if [[ ! -f "${root_dir}/lib/${lib_file}" ]]; then
+			echo "main:: cannot locate ${lib_file} at ${root_dir}/lib/${lib_file}" >&2
+			return 1
+		fi
+		source "${root_dir}/lib/${lib_file}"
+	done
 
-	if [[ -f "${root_dir}/lib/metadata.sh" ]]; then
-		source "${root_dir}/lib/metadata.sh"
-	else
-		echo "main:: cannot locate metadata.sh at ${root_dir}/lib/metadata.sh" >&2
-		return 1
-	fi
+	for bin_file in "${BIN_FILES[@]}"; do
+		if [[ ! -f "${root_dir}/bin/${bin_file}" ]]; then
+			echo "main:: cannot locate ${bin_file} at ${root_dir}/bin/${bin_file}" >&2
+			return 1
+		fi
+		source "${root_dir}/bin/${bin_file}"
+	done
 
-	if [[ -f "${root_dir}/lib/resolve-mentions.sh" ]]; then
-		source "${root_dir}/lib/resolve-mentions.sh"
-	else
-		echo "main:: cannot locate resolve-mentions.sh at ${root_dir}/lib/resolve-mentions.sh" >&2
-		return 1
-	fi
-
-	export METADATA
-	export SHOW_METADATA
-	export SHOW_PAYLOAD
-
-	if ! check_dependencies; then
-		return 1
-	fi
+	check_dependencies || return 1
 
 	echo "main:: starting task to send notification to Slack from Concourse"
 
+	# TODO: Move to
 	_SLACK_WORKSPACE=$(mktemp -d /tmp/send-to-slack.run.XXXXXX)
 	export _SLACK_WORKSPACE
 	trap 'rm -rf "$_SLACK_WORKSPACE"' EXIT ERR
@@ -549,6 +527,7 @@ main() {
 		return 1
 	fi
 
+	# TODO: Make this cross-platform compatible
 	timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 	# Check if params.debug is true and override show_payload/show_metadata
@@ -568,39 +547,13 @@ main() {
 
 	echo "main:: parsing payload"
 
-	# Ensure file still exists before parsing
-	if [[ ! -f "${input_payload}" ]]; then
-		echo "main:: input file disappeared before parsing: ${input_payload}" >&2
-		return 1
-	fi
-
-	if [[ -f "${root_dir}/lib/parse-payload.sh" ]]; then
-		source "${root_dir}/lib/parse-payload.sh"
-	else
-		echo "main:: cannot locate parse-payload.sh at ${root_dir}/lib/parse-payload.sh" >&2
-		return 1
-	fi
-
-	if [[ -f "${root_dir}/bin/crosspost.sh" ]]; then
-		source "${root_dir}/bin/crosspost.sh"
-	else
-		echo "main:: cannot locate crosspost.sh at ${root_dir}/bin/crosspost.sh" >&2
-		return 1
-	fi
-
-	if [[ -f "${root_dir}/bin/replies.sh" ]]; then
-		source "${root_dir}/bin/replies.sh"
-	else
-		echo "main:: cannot locate replies.sh at ${root_dir}/bin/replies.sh" >&2
-		return 1
-	fi
-
 	local parsed_payload_file
 	parsed_payload_file="${_SLACK_WORKSPACE}/parsed_payload"
 	if ! parse_payload "${input_payload}" >"${parsed_payload_file}"; then
 		echo "main:: failed to parse payload" >&2
 		return 1
 	fi
+
 	local parsed_payload
 	parsed_payload=$(cat "${parsed_payload_file}")
 	rm -f "${parsed_payload_file}"
@@ -674,7 +627,7 @@ main() {
 				fi
 
 				if ! send_thread_replies "${input_payload}" "$reply_thread_ts" "$parsed_payload"; then
-					echo "main:: send_thread_replies encountered failures, continuing" >&2
+					echo "main:: send_thread_replies aborted, invalid input or environment, continuing" >&2
 				fi
 
 				if ! crosspost_notification "${input_payload}"; then
