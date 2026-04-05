@@ -87,14 +87,13 @@ send_thread_replies() {
 		fi
 
 		local reply_source_file
-		local reply_blocks_file
-
 		if ! reply_source_file=$(mktemp "$_SLACK_WORKSPACE/thread-reply.source.XXXXXX"); then
 			echo "send_thread_replies:: warning: mktemp failed for reply $((i + 1)) source, skipping" >&2
 			rm -f "${reply_payload_file}"
 			continue
 		fi
 
+		local reply_blocks_file
 		if ! reply_blocks_file=$(mktemp "$_SLACK_WORKSPACE/thread-reply.blocks.XXXXXX"); then
 			echo "send_thread_replies:: warning: mktemp failed for reply $((i + 1)) blocks, skipping" >&2
 			rm -f "${reply_payload_file}" "${reply_source_file}"

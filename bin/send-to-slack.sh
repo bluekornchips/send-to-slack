@@ -581,17 +581,17 @@ main() {
 		return 1
 	fi
 
-	if [[ -f "${root_dir}/bin/crosspost.sh" ]]; then
-		source "${root_dir}/bin/crosspost.sh"
+	if [[ -f "${root_dir}/lib/crosspost.sh" ]]; then
+		source "${root_dir}/lib/crosspost.sh"
 	else
-		echo "main:: cannot locate crosspost.sh at ${root_dir}/bin/crosspost.sh" >&2
+		echo "main:: cannot locate crosspost.sh at ${root_dir}/lib/crosspost.sh" >&2
 		return 1
 	fi
 
-	if [[ -f "${root_dir}/bin/replies.sh" ]]; then
-		source "${root_dir}/bin/replies.sh"
+	if [[ -f "${root_dir}/lib/replies.sh" ]]; then
+		source "${root_dir}/lib/replies.sh"
 	else
-		echo "main:: cannot locate replies.sh at ${root_dir}/bin/replies.sh" >&2
+		echo "main:: cannot locate replies.sh at ${root_dir}/lib/replies.sh" >&2
 		return 1
 	fi
 

@@ -217,13 +217,13 @@ install_from_source() {
 		return 1
 	fi
 
-	if [[ ! -f "${source_dir}/bin/crosspost.sh" ]]; then
-		echo "install_from_source:: missing bin/crosspost.sh" >&2
+	if [[ ! -f "${source_dir}/lib/crosspost.sh" ]]; then
+		echo "install_from_source:: missing lib/crosspost.sh" >&2
 		return 1
 	fi
 
-	if [[ ! -f "${source_dir}/bin/replies.sh" ]]; then
-		echo "install_from_source:: missing bin/replies.sh" >&2
+	if [[ ! -f "${source_dir}/lib/replies.sh" ]]; then
+		echo "install_from_source:: missing lib/replies.sh" >&2
 		return 1
 	fi
 
@@ -244,7 +244,7 @@ install_from_source() {
 		fi
 	fi
 
-	if ! install -d -m 755 "${install_root}/lib/blocks" "${install_root}/lib/parse" "${install_root}/bin" "$(dirname "$target_binary")"; then
+	if ! install -d -m 755 "${install_root}/lib/blocks" "${install_root}/lib/parse" "$(dirname "$target_binary")"; then
 		echo "install_from_source:: failed to create installation directories" >&2
 		return 1
 	fi
@@ -271,11 +271,6 @@ install_from_source() {
 
 	if ! cp "${source_dir}/lib/blocks"/*.sh "${install_root}/lib/blocks/"; then
 		echo "install_from_source:: failed to copy lib/blocks files" >&2
-		return 1
-	fi
-
-	if ! cp "${source_dir}/bin/crosspost.sh" "${source_dir}/bin/replies.sh" "${install_root}/bin/"; then
-		echo "install_from_source:: failed to copy bin helper scripts" >&2
 		return 1
 	fi
 

@@ -71,8 +71,8 @@ teardown() {
 	[[ -f "${actual_install_root}/lib/parse-payload.sh" ]]
 	[[ -f "${actual_install_root}/lib/parse/payload.sh" ]]
 	[[ -f "${actual_install_root}/lib/parse/blocks.sh" ]]
-	[[ -f "${actual_install_root}/bin/crosspost.sh" ]]
-	[[ -f "${actual_install_root}/bin/replies.sh" ]]
+	[[ -f "${actual_install_root}/lib/crosspost.sh" ]]
+	[[ -f "${actual_install_root}/lib/replies.sh" ]]
 
 	rm -rf "${actual_install_root}"
 }
@@ -228,7 +228,6 @@ _run_check_dependencies_isolated() {
 	mkdir -p "${source_dir}/bin" "${source_dir}/lib/blocks" "${source_dir}/lib/parse"
 
 	cp "${GIT_ROOT}/bin/send-to-slack.sh" "${source_dir}/bin/send-to-slack.sh"
-	cp "${GIT_ROOT}/bin/crosspost.sh" "${GIT_ROOT}/bin/replies.sh" "${source_dir}/bin/"
 	cp "${GIT_ROOT}/lib"/*.sh "${source_dir}/lib/"
 	cp "${GIT_ROOT}/lib/parse"/*.sh "${source_dir}/lib/parse/"
 	cp "${GIT_ROOT}/lib/blocks"/*.sh "${source_dir}/lib/blocks/"
@@ -262,8 +261,8 @@ _run_check_dependencies_isolated() {
 	[[ -f "${actual_install_root}/lib/parse-payload.sh" ]]
 	[[ -f "${actual_install_root}/lib/parse/payload.sh" ]]
 	[[ -f "${actual_install_root}/lib/parse/blocks.sh" ]]
-	[[ -f "${actual_install_root}/bin/crosspost.sh" ]]
-	[[ -f "${actual_install_root}/bin/replies.sh" ]]
+	[[ -f "${actual_install_root}/lib/crosspost.sh" ]]
+	[[ -f "${actual_install_root}/lib/replies.sh" ]]
 	if [[ -f "${source_dir}/VERSION" ]]; then
 		[[ -f "${actual_install_root}/VERSION" ]]
 	fi

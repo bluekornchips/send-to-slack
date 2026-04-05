@@ -21,8 +21,6 @@ COPY ./concourse/resource-type/scripts/out.sh /opt/resource/out
 
 # Core tool and support libs.
 COPY ./bin/send-to-slack.sh /opt/resource/send-to-slack
-COPY ./bin/crosspost.sh /opt/resource/bin/crosspost.sh
-COPY ./bin/replies.sh /opt/resource/bin/replies.sh
 COPY ./lib/ /opt/resource/lib/
 COPY ./VERSION /opt/resource/VERSION
 
@@ -30,8 +28,6 @@ ENV PATH="/opt/resource:${PATH}"
 
 RUN chmod +x /opt/resource/check /opt/resource/in /opt/resource/out && \
     chmod +x /opt/resource/send-to-slack && \
-    chmod +x /opt/resource/bin/crosspost.sh && \
-    chmod +x /opt/resource/bin/replies.sh && \
     chmod +x /opt/resource/lib/*.sh && \
     chmod +x /opt/resource/lib/parse/*.sh && \
     chmod +x /opt/resource/lib/blocks/*.sh

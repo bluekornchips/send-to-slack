@@ -124,7 +124,6 @@ teardown() {
 	mkdir -p "${source_dir}/bin" "${source_dir}/lib/blocks" "${source_dir}/lib/parse"
 
 	cp "${GIT_ROOT}/bin/send-to-slack.sh" "${source_dir}/bin/send-to-slack.sh"
-	cp "${GIT_ROOT}/bin/crosspost.sh" "${GIT_ROOT}/bin/replies.sh" "${source_dir}/bin/"
 	cp "${GIT_ROOT}/lib"/*.sh "${source_dir}/lib/"
 	cp "${GIT_ROOT}/lib/parse"/*.sh "${source_dir}/lib/parse/"
 	cp "${GIT_ROOT}/lib/blocks"/*.sh "${source_dir}/lib/blocks/"
