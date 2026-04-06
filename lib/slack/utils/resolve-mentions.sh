@@ -105,19 +105,19 @@ resolve_user_id() {
 		return 1
 	fi
 
-	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
-		echo "resolve_user_id:: SLACK_BOT_USER_OAUTH_TOKEN environment variable is required" >&2
-		return 1
-	fi
-
 	# Remove @ prefix if present
 	local user_name="${user_ref#@}"
 
-	# If user already looks like a valid ID, return it
+	# If user already looks like a valid ID, return it without requiring a token
 	if [[ "$user_name" =~ ^U[A-Z0-9]{8,}$ ]]; then
 		echo "resolve_user_id:: already valid ID: ${user_name}" >&2
 		echo "${user_name}"
 		return 0
+	fi
+
+	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
+		echo "resolve_user_id:: SLACK_BOT_USER_OAUTH_TOKEN environment variable is required" >&2
+		return 1
 	fi
 
 	echo "resolve_user_id:: resolving @${user_name}" >&2
@@ -209,21 +209,21 @@ resolve_channel_id() {
 		return 1
 	fi
 
-	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
-		echo "resolve_channel_id:: SLACK_BOT_USER_OAUTH_TOKEN environment variable is required" >&2
-		return 1
-	fi
-
 	# Remove # prefix if present
 	local channel_name="${channel_ref#\#}"
 
-	# If already a valid conversation ID, return it
+	# If already a valid conversation ID, return it without requiring a token
 	# Supports: C (public), G (private/groups), D (direct), Z (shared)
 	# Ref: https://docs.slack.dev/reference/conversations-api#channel_id
 	if [[ "$channel_name" =~ ^[CGDZ][A-Z0-9]{8,}$ ]]; then
 		echo "resolve_channel_id:: already valid ID: ${channel_name}" >&2
 		echo "${channel_name}"
 		return 0
+	fi
+
+	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
+		echo "resolve_channel_id:: SLACK_BOT_USER_OAUTH_TOKEN environment variable is required" >&2
+		return 1
 	fi
 
 	echo "resolve_channel_id:: resolving #${channel_name}" >&2
@@ -315,16 +315,16 @@ resolve_dm_id() {
 		return 1
 	fi
 
-	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
-		echo "resolve_dm_id:: SLACK_BOT_USER_OAUTH_TOKEN environment variable is required" >&2
-		return 1
-	fi
-
-	# If already a valid DM ID, return it as-is
+	# If already a valid DM ID, return it as-is without requiring a token
 	if [[ "$dm_ref" =~ ^D[A-Z0-9]{8,}$ ]]; then
 		echo "resolve_dm_id:: already valid DM ID: ${dm_ref}" >&2
 		echo "$dm_ref"
 		return 0
+	fi
+
+	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
+		echo "resolve_dm_id:: SLACK_BOT_USER_OAUTH_TOKEN environment variable is required" >&2
+		return 1
 	fi
 
 	echo "resolve_dm_id:: resolving DM for ${dm_ref}" >&2
