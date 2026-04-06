@@ -192,15 +192,11 @@ _validate_thread_replies() {
 # Build Slack API payload JSON from channel, block files, and optional fields
 #
 # Arguments:
-#   $1 - channel: channel id or name
-#   $2 - blocks_file: path to JSON array of blocks
-#   $3 - attachments_file: path to JSON array of attachments
-#   $4 - thread_ts: converted thread timestamp or empty
-#   $5 - text_field: params.text value or empty
-#   $6 - thread_replies_raw: JSON array string for thread replies or empty
-#   $7 - delivery_method: api or webhook, defaults to DELIVERY_METHOD or api
+#   $1 - thread_ts: converted thread timestamp or empty
+#   $2 - text_field: params.text value or empty
+#   $3 - thread_replies_raw: JSON array string for thread replies or empty
 #
-# Uses global variables: INPUT_PAYLOAD, EPHEMERAL_USER
+# Uses global variables: CHANNEL, BLOCKS_FILE, ATTACHMENTS_FILE, DELIVERY_METHOD, INPUT_PAYLOAD, EPHEMERAL_USER
 #
 # Outputs:
 #   Writes complete Slack API payload JSON to stdout
@@ -209,35 +205,31 @@ _validate_thread_replies() {
 #   0 on success
 #   1 if text length exceeds MAX_TEXT_LENGTH
 _build_slack_payload() {
-	local channel="$1"
-	local blocks_file="$2"
-	local attachments_file="$3"
-	local thread_ts="$4"
-	local text_field="$5"
-	local thread_replies_raw="$6"
-	local delivery_method="${7:-${DELIVERY_METHOD:-api}}"
+	local thread_ts="$1"
+	local text_field="$2"
+	local thread_replies_raw="$3"
 
-	if [[ -z "$channel" && "$delivery_method" != "webhook" ]]; then
+	if [[ -z "${CHANNEL:-}" && "${DELIVERY_METHOD:-api}" != "webhook" ]]; then
 		echo "_build_slack_payload:: channel is required" >&2
 		return 1
 	fi
 
-	if [[ -z "$blocks_file" ]] || [[ -z "$attachments_file" ]]; then
+	if [[ -z "${BLOCKS_FILE:-}" ]] || [[ -z "${ATTACHMENTS_FILE:-}" ]]; then
 		echo "_build_slack_payload:: blocks_file and attachments_file are required" >&2
 		return 1
 	fi
 
 	local payload
-	if [[ -n "$channel" ]]; then
+	if [[ -n "${CHANNEL:-}" ]]; then
 		payload=$(jq -n \
-			--arg channel "$channel" \
-			--slurpfile blocks "$blocks_file" \
-			--slurpfile attachments "$attachments_file" \
+			--arg channel "${CHANNEL}" \
+			--slurpfile blocks "${BLOCKS_FILE}" \
+			--slurpfile attachments "${ATTACHMENTS_FILE}" \
 			'{ "channel": $channel, "blocks": $blocks[0], "attachments": $attachments[0] }')
 	else
 		payload=$(jq -n \
-			--slurpfile blocks "$blocks_file" \
-			--slurpfile attachments "$attachments_file" \
+			--slurpfile blocks "${BLOCKS_FILE}" \
+			--slurpfile attachments "${ATTACHMENTS_FILE}" \
 			'{ "blocks": $blocks[0], "attachments": $attachments[0] }')
 	fi
 
@@ -382,8 +374,7 @@ process_blocks() {
 	text_field=$(jq -r '.params.text // empty' "$INPUT_PAYLOAD")
 
 	local payload
-	# shellcheck disable=SC2153
-	if ! payload=$(_build_slack_payload "$CHANNEL" "$BLOCKS_FILE" "$ATTACHMENTS_FILE" "$thread_ts" "$text_field" "$thread_replies_raw" "${DELIVERY_METHOD:-api}"); then
+	if ! payload=$(_build_slack_payload "$thread_ts" "$text_field" "$thread_replies_raw"); then
 		return 1
 	fi
 
@@ -470,6 +461,28 @@ _extract_block_type_and_value() {
 	return 0
 }
 
+# Remove temp files created by _process_blocks_append_block
+#
+# Arguments:
+#   $1 - create_block_out: temp path for create_block output
+#   $2 - merge_tmp: temp path for jq merge output
+#
+# Returns:
+#   0 always
+_cleanup_process_blocks_append_tmp_files() {
+	local create_block_out="$1"
+	local merge_tmp="$2"
+
+	if [[ -n "$create_block_out" ]]; then
+		rm -f "$create_block_out"
+	fi
+	if [[ -n "$merge_tmp" ]]; then
+		rm -f "$merge_tmp"
+	fi
+
+	return 0
+}
+
 # Helper used by process_blocks to process a single block_item and append to blocks/attachments
 #
 # Inputs:
@@ -510,25 +523,37 @@ _process_blocks_append_block() {
 	# Allocate a per-block output file and set CREATE_BLOCK_OUTPUT_FILE for create_block
 	local create_block_out
 	create_block_out=$(mktemp "$_SLACK_WORKSPACE/process_blocks.block_out.XXXXXX")
+	if [[ -z "$create_block_out" ]]; then
+		echo "_process_blocks_append_block:: failed to create create_block temp file" >&2
+		return 1
+	fi
 	CREATE_BLOCK_OUTPUT_FILE="$create_block_out"
 	export CREATE_BLOCK_OUTPUT_FILE
 
 	# Allocate a temp file for in-place jq updates to BLOCKS_FILE / ATTACHMENTS_FILE
 	local merge_tmp
 	merge_tmp=$(mktemp "$_SLACK_WORKSPACE/process_blocks.merge_tmp.XXXXXX")
+	if [[ -z "$merge_tmp" ]]; then
+		echo "_process_blocks_append_block:: failed to create merge temp file" >&2
+		_cleanup_process_blocks_append_tmp_files "$create_block_out" ""
+		return 1
+	fi
 
 	if ! _validate_block_input_size "$block_value" "$block_type"; then
 		echo "_process_blocks_append_block:: block input too large for type '$block_type'" >&2
+		_cleanup_process_blocks_append_tmp_files "$create_block_out" "$merge_tmp"
 		return 1
 	fi
 
 	if [[ "$block_type" == "file" ]] && [[ "${DELIVERY_METHOD:-api}" == "webhook" ]]; then
 		echo "_process_blocks_append_block:: file uploads are not supported for webhook delivery" >&2
+		_cleanup_process_blocks_append_tmp_files "$create_block_out" "$merge_tmp"
 		return 1
 	fi
 
 	if ! create_block "$block_value" "$block_type"; then
 		echo "_process_blocks_append_block:: failed to create block type '$block_type': $block_item" >&2
+		_cleanup_process_blocks_append_tmp_files "$create_block_out" "$merge_tmp"
 		return 1
 	fi
 
@@ -538,9 +563,13 @@ _process_blocks_append_block() {
 	if jq -e 'type == "array"' "$CREATE_BLOCK_OUTPUT_FILE" >/dev/null 2>&1; then
 		local array_item
 		while IFS= read -r array_item; do
-			_process_blocks_append_block "$array_item" || return 1
+			if ! _process_blocks_append_block "$array_item"; then
+				_cleanup_process_blocks_append_tmp_files "$create_block_out" "$merge_tmp"
+				return 1
+			fi
 		done < <(jq -c '.[]' "$CREATE_BLOCK_OUTPUT_FILE")
 
+		_cleanup_process_blocks_append_tmp_files "$create_block_out" "$merge_tmp"
 		return 0
 	fi
 
@@ -555,17 +584,37 @@ _process_blocks_append_block() {
 		if [[ -n "$block_color" ]] && [[ ! "$block_color" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
 			block_color=$(_resolve_block_color "$block_color")
 		fi
-		jq --slurpfile block "$CREATE_BLOCK_OUTPUT_FILE" \
+		if ! jq --slurpfile block "$CREATE_BLOCK_OUTPUT_FILE" \
 			--arg color "${block_color:-}" \
 			'. += [{ color: $color, blocks: [$block[0]]}]' \
-			"$ATTACHMENTS_FILE" >"$merge_tmp" && mv "$merge_tmp" "$ATTACHMENTS_FILE"
+			"$ATTACHMENTS_FILE" >"$merge_tmp"; then
+			echo "_process_blocks_append_block:: failed to append block to attachments" >&2
+			_cleanup_process_blocks_append_tmp_files "$create_block_out" "$merge_tmp"
+			return 1
+		fi
+		if ! mv "$merge_tmp" "$ATTACHMENTS_FILE"; then
+			echo "_process_blocks_append_block:: failed to update attachments file" >&2
+			_cleanup_process_blocks_append_tmp_files "$create_block_out" "$merge_tmp"
+			return 1
+		fi
 	else
-		jq --slurpfile block "$CREATE_BLOCK_OUTPUT_FILE" \
+		if ! jq --slurpfile block "$CREATE_BLOCK_OUTPUT_FILE" \
 			'. += [$block[0]]' \
-			"$BLOCKS_FILE" >"$merge_tmp" && mv "$merge_tmp" "$BLOCKS_FILE"
+			"$BLOCKS_FILE" >"$merge_tmp"; then
+			echo "_process_blocks_append_block:: failed to append block to blocks" >&2
+			_cleanup_process_blocks_append_tmp_files "$create_block_out" "$merge_tmp"
+			return 1
+		fi
+		if ! mv "$merge_tmp" "$BLOCKS_FILE"; then
+			echo "_process_blocks_append_block:: failed to update blocks file" >&2
+			_cleanup_process_blocks_append_tmp_files "$create_block_out" "$merge_tmp"
+			return 1
+		fi
 	fi
 
 	block_index=$((block_index + 1))
+
+	_cleanup_process_blocks_append_tmp_files "$create_block_out" "$merge_tmp"
 
 	return 0
 }

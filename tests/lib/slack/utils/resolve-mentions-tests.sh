@@ -9,12 +9,6 @@ RESOLVE_SCRIPT="$GIT_ROOT/lib/slack/utils/resolve-mentions.sh"
 [[ ! -f "$RESOLVE_SCRIPT" ]] && echo "Script not found: $RESOLVE_SCRIPT" >&2 && return 1
 
 setup_file() {
-	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
-		skip "SLACK_BOT_USER_OAUTH_TOKEN environment variable is not set"
-	fi
-
-	# For channel and DM tests, we need at least one channel and one user available
-	# These are validated in the individual tests
 	return 0
 }
 
@@ -129,4 +123,31 @@ setup() {
 	id1=$(resolve_dm_id "D123456789ABC")
 	id2=$(resolve_dm_id "$id1")
 	[[ "$id1" == "$id2" ]]
+}
+
+########################################################
+# Mention helper tests
+########################################################
+
+@test "collect_mention_user_ids:: deduplicates ids and resolves usernames" {
+	resolve_user_id() {
+		local user_ref="$1"
+		if [[ "$user_ref" == "alice" ]]; then
+			echo "UALICE0001"
+			return 0
+		fi
+
+		return 1
+	}
+
+	local payload_json
+	payload_json='{"blocks":[{"type":"section","text":{"type":"mrkdwn","text":"hello @alice and <@UKNOWN0001> and @alice"}}]}'
+
+	run collect_mention_user_ids "$payload_json"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "^UALICE0001$"
+	echo "$output" | grep -q "^UKNOWN0001$"
+	local alice_count
+	alice_count=$(echo "$output" | sed -n '/^UALICE0001$/p' | wc -l | tr -d ' ')
+	[[ "$alice_count" -eq 1 ]]
 }
