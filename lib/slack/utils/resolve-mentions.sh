@@ -13,6 +13,76 @@
 
 RESOLVE_MAX_PAGES=50
 
+# Check whether a value is present in a list.
+#
+# Arguments:
+#   $1 - needle: value to find
+#   $2.. - haystack values
+#
+# Returns:
+#   0 when found
+#   1 when not found
+_mentions_array_contains() {
+	local needle="$1"
+	shift
+	local item
+	for item in "$@"; do
+		if [[ "$item" == "$needle" ]]; then
+			return 0
+		fi
+	done
+
+	return 1
+}
+
+# Resolve mention tokens in payload text to Slack user IDs.
+#
+# Arguments:
+#   $1 - payload_json: complete Slack payload JSON string
+#
+# Outputs:
+#   Writes unique Slack user IDs, one per line
+#
+# Returns:
+#   0 on success
+collect_mention_user_ids() {
+	local payload_json="$1"
+	local text
+	local token
+	local normalized
+	local user_id
+	local mention_ids=()
+	local token_pattern='(<@[A-Za-z0-9._-]+>|@[A-Za-z0-9._-]+)'
+
+	while IFS= read -r text; do
+		[[ -z "$text" ]] && continue
+		while [[ "$text" =~ $token_pattern ]]; do
+			token="${BASH_REMATCH[1]}"
+			text="${text#*"${token}"}"
+			normalized="${token#<@}"
+			normalized="${normalized#@}"
+			normalized="${normalized%>}"
+
+			if [[ "$normalized" =~ ^U[A-Z0-9]{8,}$ ]]; then
+				user_id="$normalized"
+			else
+				if ! user_id=$(resolve_user_id "$normalized"); then
+					echo "collect_mention_user_ids:: could not resolve mention token: ${token}" >&2
+					continue
+				fi
+			fi
+
+			if ! _mentions_array_contains "$user_id" "${mention_ids[@]}"; then
+				mention_ids+=("$user_id")
+			fi
+		done
+	done < <(jq -r '.. | strings' <<<"$payload_json")
+
+	printf '%s\n' "${mention_ids[@]}"
+
+	return 0
+}
+
 # Resolve a user mention or name to a user ID.
 #
 # Accepts user mentions (@john), names (john), or IDs (U123456).
@@ -35,19 +105,19 @@ resolve_user_id() {
 		return 1
 	fi
 
-	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
-		echo "resolve_user_id:: SLACK_BOT_USER_OAUTH_TOKEN environment variable is required" >&2
-		return 1
-	fi
-
 	# Remove @ prefix if present
 	local user_name="${user_ref#@}"
 
-	# If user already looks like a valid ID, return it
+	# If user already looks like a valid ID, return it without requiring a token
 	if [[ "$user_name" =~ ^U[A-Z0-9]{8,}$ ]]; then
 		echo "resolve_user_id:: already valid ID: ${user_name}" >&2
 		echo "${user_name}"
 		return 0
+	fi
+
+	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
+		echo "resolve_user_id:: SLACK_BOT_USER_OAUTH_TOKEN environment variable is required" >&2
+		return 1
 	fi
 
 	echo "resolve_user_id:: resolving @${user_name}" >&2
@@ -139,21 +209,21 @@ resolve_channel_id() {
 		return 1
 	fi
 
-	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
-		echo "resolve_channel_id:: SLACK_BOT_USER_OAUTH_TOKEN environment variable is required" >&2
-		return 1
-	fi
-
 	# Remove # prefix if present
 	local channel_name="${channel_ref#\#}"
 
-	# If already a valid conversation ID, return it
+	# If already a valid conversation ID, return it without requiring a token
 	# Supports: C (public), G (private/groups), D (direct), Z (shared)
 	# Ref: https://docs.slack.dev/reference/conversations-api#channel_id
 	if [[ "$channel_name" =~ ^[CGDZ][A-Z0-9]{8,}$ ]]; then
 		echo "resolve_channel_id:: already valid ID: ${channel_name}" >&2
 		echo "${channel_name}"
 		return 0
+	fi
+
+	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
+		echo "resolve_channel_id:: SLACK_BOT_USER_OAUTH_TOKEN environment variable is required" >&2
+		return 1
 	fi
 
 	echo "resolve_channel_id:: resolving #${channel_name}" >&2
@@ -245,16 +315,16 @@ resolve_dm_id() {
 		return 1
 	fi
 
-	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
-		echo "resolve_dm_id:: SLACK_BOT_USER_OAUTH_TOKEN environment variable is required" >&2
-		return 1
-	fi
-
-	# If already a valid DM ID, return it as-is
+	# If already a valid DM ID, return it as-is without requiring a token
 	if [[ "$dm_ref" =~ ^D[A-Z0-9]{8,}$ ]]; then
 		echo "resolve_dm_id:: already valid DM ID: ${dm_ref}" >&2
 		echo "$dm_ref"
 		return 0
+	fi
+
+	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
+		echo "resolve_dm_id:: SLACK_BOT_USER_OAUTH_TOKEN environment variable is required" >&2
+		return 1
 	fi
 
 	echo "resolve_dm_id:: resolving DM for ${dm_ref}" >&2
