@@ -1626,4 +1626,3 @@ teardown() {
 	[[ "$(jq -r '.params.channel' "$TEST_PAYLOAD_FILE")" == "file-ch" ]]
 	rm -f "$pf"
 }
-

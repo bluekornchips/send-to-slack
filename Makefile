@@ -8,9 +8,8 @@ TEST_FILES     := $(shell find tests concourse -name '*-tests.sh' -type f \
 SHELL_FILES    := $(shell find . -name "*.sh" -type f)
 BATS_JOBS      ?= $(shell nproc 2>/dev/null || echo 4)
 BATS_FLAGS     := --timing --verbose-run --formatter pretty
-BATS_PARALLEL  := --jobs $(BATS_JOBS) --no-parallelize-within-files
 
-.PHONY: lint test test-smoke test-acceptance test-all test-in-docker \
+.PHONY: lint test test-serial test-smoke test-acceptance test-all test-in-docker \
         concourse-start concourse-stop concourse-stop-clean concourse-load-examples \
         concourse-clean-restart concourse-run-all-examples
 
@@ -31,7 +30,10 @@ lint:
 #################################################
 
 test:
-	@bats $(BATS_FLAGS) $(BATS_PARALLEL) $(TEST_FILES)
+	@bats $(BATS_FLAGS) --jobs $(BATS_JOBS) --no-parallelize-within-files $(TEST_FILES)
+
+test-serial:
+	@bats $(BATS_FLAGS) $(TEST_FILES)
 
 test-smoke:
 	@RUN_SMOKE_TEST=true bats $(BATS_FLAGS) tests/smoke-tests.sh
@@ -42,7 +44,7 @@ test-acceptance:
 test-all: test test-smoke test-acceptance
 
 test-in-docker:
-	@./tests/run-tests-in-docker.sh --make "make test"
+	@./tests/run-tests-in-docker.sh --make "make test-serial BATS_FLAGS='--timing --verbose-run --formatter tap'"
 
 #################################################
 # Concourse

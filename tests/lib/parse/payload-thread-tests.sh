@@ -451,4 +451,3 @@ teardown() {
 	echo "$payload_output" | jq -e '.thread_replies | length == 1' >/dev/null
 	echo "$payload_output" | jq -e '.thread_ts == "1234567890.123456"' >/dev/null
 }
-
