@@ -5,7 +5,8 @@ TAG           ?= $(TARGET_VERSION)
 
 TEST_FILES    := $(shell find tests concourse -name '*-tests.sh' -type f)
 SHELL_FILES   := $(shell find . -name "*.sh" -type f)
-BATS_COMMAND  := bats --timing --verbose-run
+BATS_JOBS     ?= $(shell nproc 2>/dev/null || echo 4)
+BATS_COMMAND  := bats --timing --verbose-run --formatter pretty --jobs $(BATS_JOBS) --no-parallelize-within-files
 
 .PHONY: lint test test-smoke test-acceptance test-all test-in-docker \
         concourse-start concourse-stop concourse-stop-clean concourse-load-examples \
