@@ -15,7 +15,7 @@ setup_file() {
 		fail "setup_file:: install script missing: $INSTALL_SCRIPT"
 	fi
 
-	TEST_HOME="$(mktemp -d "${BATS_FILE_TMPDIR}/install-home.XXXXXX")"
+	TEST_HOME="$(mktemp -d "${BATS_FILE_TMPDIR:-${TMPDIR:-/tmp}}/install-home.XXXXXX")"
 	export HOME="$TEST_HOME"
 
 	source "$INSTALL_SCRIPT"
@@ -339,7 +339,8 @@ _make_clone_fixture() {
 	printf '#!/usr/bin/env bash\n' >"${fixture_dir}/bin/send-to-slack.sh"
 	printf '# fixture\n' >"${fixture_dir}/lib/.keep"
 
-	git -C "$fixture_dir" init -q -b main
+	git -C "$fixture_dir" init -q
+	git -C "$fixture_dir" symbolic-ref HEAD refs/heads/main
 	git -C "$fixture_dir" config user.email "test@example.com"
 	git -C "$fixture_dir" config user.name "Test"
 	git -C "$fixture_dir" add -A

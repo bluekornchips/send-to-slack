@@ -242,10 +242,16 @@ find_root_dir() {
 	local script_path
 	local script_dir
 	local parent_dir
+	local link_target
 
 	script_path="${BASH_SOURCE[0]}"
 	if [[ -L "$script_path" ]]; then
-		script_path=$(readlink -f "$script_path" 2>/dev/null || readlink "$script_path")
+		link_target=$(readlink "$script_path" 2>/dev/null || true)
+		if [[ -z "$link_target" || "$link_target" != /* ]]; then
+			echo "find_root_dir:: expected absolute symlink target at ${script_path}" >&2
+			return 1
+		fi
+		script_path="$link_target"
 	fi
 
 	script_dir=$(cd "$(dirname "$script_path")" && pwd)

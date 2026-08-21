@@ -20,7 +20,7 @@ setup_file() {
 		fail "setup_file:: uninstall script missing: $UNINSTALL_SCRIPT"
 	fi
 
-	TEST_HOME="$(mktemp -d "${BATS_FILE_TMPDIR}/uninstall-home.XXXXXX")"
+	TEST_HOME="$(mktemp -d "${BATS_FILE_TMPDIR:-${TMPDIR:-/tmp}}/uninstall-home.XXXXXX")"
 	export HOME="$TEST_HOME"
 
 	source "$INSTALL_SCRIPT"
@@ -157,8 +157,7 @@ teardown() {
 	[[ "$status" -eq 0 ]]
 	[[ -L "$TARGET_PATH" ]]
 
-	# Get actual install_root from symlink
-	symlink_target=$(readlink -f "$TARGET_PATH" 2>/dev/null || readlink "$TARGET_PATH")
+	symlink_target=$(readlink "$TARGET_PATH")
 	install_root=$(dirname "$symlink_target")
 	[[ -d "$install_root" ]]
 	[[ -f "$symlink_target" ]]

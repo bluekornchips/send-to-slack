@@ -469,11 +469,20 @@ clone_repository() {
 		return 1
 	fi
 
-	temp_clone_dir=$(mktemp -d "${output_dir}/send-to-slack-${ref}.XXXXXX")
+	temp_clone_dir=$(mktemp -d "${output_dir}/send-to-slack.XXXXXX") || {
+		echo "clone_repository:: mktemp failed under ${output_dir}" >&2
+		return 1
+	}
 
 	# Try cloning with the ref as branch/tag
 	if ! clone_output=$(git clone --depth 1 --branch "$ref" "$REPO_URL" "$temp_clone_dir" 2>&1); then
-		# If that fails, clone main and checkout the ref
+		# Destination may already exist after a failed clone; recreate before retry.
+		rm -rf "$temp_clone_dir"
+		temp_clone_dir=$(mktemp -d "${output_dir}/send-to-slack.XXXXXX") || {
+			echo "clone_repository:: mktemp failed under ${output_dir}" >&2
+			return 1
+		}
+
 		if ! clone_output=$(git clone --depth 1 "$REPO_URL" "$temp_clone_dir" 2>&1); then
 			echo "clone_repository:: failed to clone repository: $clone_output" >&2
 			rm -rf "$temp_clone_dir"

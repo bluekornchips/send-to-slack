@@ -158,15 +158,10 @@ uninstall_binary() {
 
 	# If it's a symlink, check the actual file it points to
 	if [[ -L "$target" ]]; then
-		# Resolve symlink to absolute path
-		if command -v readlink >/dev/null 2>&1; then
-			actual_file=$(readlink -f "$target" 2>/dev/null || readlink "$target")
-			# Resolve relative symlinks if readlink -f failed
-			if [[ "$actual_file" != /* ]] && [[ -n "$actual_file" ]]; then
-				actual_file=$(cd "$(dirname "$target")" && cd "$(dirname "$actual_file")" 2>/dev/null && pwd)/$(basename "$actual_file")
-			fi
-		else
-			actual_file=$(readlink "$target")
+		actual_file=$(readlink "$target" 2>/dev/null || true)
+		if [[ -z "$actual_file" || "$actual_file" != /* ]]; then
+			echo "uninstall_binary:: failed to resolve absolute symlink: $target" >&2
+			return 1
 		fi
 
 		# Determine install_root based on actual file location
