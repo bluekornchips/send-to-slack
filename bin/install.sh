@@ -20,6 +20,7 @@ fi
 INSTALL_BASENAME="send-to-slack"
 INSTALL_SIGNATURE="# send-to-slack install signature: v1"
 GITHUB_REPO="${GITHUB_REPO:-${UPSTREAM_REPO}}"
+REPO_URL="${REPO_URL:-https://github.com/${GITHUB_REPO}.git}"
 # Set only during remote install so EXIT trap can remove the directory after main returns
 _INSTALL_TMPDIR=""
 
@@ -437,6 +438,7 @@ EOF
 # Inputs:
 # - $1 - git reference, branch/tag
 # - $2 - output directory
+# - REPO_URL, git remote URL, defaults to https://github.com/${GITHUB_REPO}.git
 # Outputs:
 # - Sets CLONE_DIR global variable to the cloned directory
 # Returns:
@@ -444,8 +446,8 @@ EOF
 clone_repository() {
 	local ref="$1"
 	local output_dir="$2"
-	local repo_url
-	local clone_dir
+	local clone_output
+	local temp_clone_dir
 
 	if [[ -z "$ref" ]]; then
 		echo "clone_repository:: ref is empty" >&2
@@ -462,18 +464,17 @@ clone_repository() {
 		return 1
 	fi
 
-	local repo
-	local clone_output
-	local temp_clone_dir
+	if [[ -z "$REPO_URL" ]]; then
+		echo "clone_repository:: REPO_URL is empty" >&2
+		return 1
+	fi
 
-	repo="${GITHUB_REPO:-bluekornchips/send-to-slack}"
-	repo_url="https://github.com/${repo}.git"
 	temp_clone_dir=$(mktemp -d "${output_dir}/send-to-slack-${ref}.XXXXXX")
 
 	# Try cloning with the ref as branch/tag
-	if ! clone_output=$(git clone --depth 1 --branch "$ref" "$repo_url" "$temp_clone_dir" 2>&1); then
+	if ! clone_output=$(git clone --depth 1 --branch "$ref" "$REPO_URL" "$temp_clone_dir" 2>&1); then
 		# If that fails, clone main and checkout the ref
-		if ! clone_output=$(git clone --depth 1 "$repo_url" "$temp_clone_dir" 2>&1); then
+		if ! clone_output=$(git clone --depth 1 "$REPO_URL" "$temp_clone_dir" 2>&1); then
 			echo "clone_repository:: failed to clone repository: $clone_output" >&2
 			rm -rf "$temp_clone_dir"
 			return 1
