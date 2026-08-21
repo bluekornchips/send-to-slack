@@ -3,7 +3,7 @@
 # parse_payload type-field and key-based block format tests.
 #
 
-load "payload-test-helper"
+load "payload-test-helper.sh"
 
 setup_file() {
 	payload_tests_setup_file

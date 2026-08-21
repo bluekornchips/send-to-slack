@@ -3,10 +3,12 @@ TARGET_VERSION ?= $(VERSION)
 SYSTEM_PREFIX  := /usr/local
 TAG            ?= $(TARGET_VERSION)
 
-TEST_FILES    := $(shell find tests concourse -name '*-tests.sh' -type f)
-SHELL_FILES   := $(shell find . -name "*.sh" -type f)
-BATS_JOBS     ?= $(shell nproc 2>/dev/null || echo 4)
-BATS_COMMAND  := bats --timing --verbose-run --formatter pretty --jobs $(BATS_JOBS) --no-parallelize-within-files
+TEST_FILES     := $(shell find tests concourse -name '*-tests.sh' -type f \
+	! -name 'smoke-tests.sh' ! -name 'acceptance-tests.sh')
+SHELL_FILES    := $(shell find . -name "*.sh" -type f)
+BATS_JOBS      ?= $(shell nproc 2>/dev/null || echo 4)
+BATS_FLAGS     := --timing --verbose-run --formatter pretty
+BATS_PARALLEL  := --jobs $(BATS_JOBS) --no-parallelize-within-files
 
 .PHONY: lint test test-smoke test-acceptance test-all test-in-docker \
         concourse-start concourse-stop concourse-stop-clean concourse-load-examples \
@@ -29,23 +31,17 @@ lint:
 #################################################
 
 test:
-	@clear
-	@$(BATS_COMMAND) $(TEST_FILES)
+	@bats $(BATS_FLAGS) $(BATS_PARALLEL) $(TEST_FILES)
 
 test-smoke:
-	@clear
-	@RUN_SMOKE_TEST=true $(BATS_COMMAND) $(TEST_FILES) -f "smoke_test::"
+	@RUN_SMOKE_TEST=true bats $(BATS_FLAGS) tests/smoke-tests.sh
 
 test-acceptance:
-	@clear
-	@RUN_ACCEPTANCE_TEST=true $(BATS_COMMAND) $(TEST_FILES) -f "acceptance::"
+	@RUN_ACCEPTANCE_TEST=true bats $(BATS_FLAGS) tests/acceptance-tests.sh
 
-test-all:
-	@clear
-	@RUN_SMOKE_TEST=true RUN_ACCEPTANCE_TEST=true $(BATS_COMMAND) $(TEST_FILES)
+test-all: test test-smoke test-acceptance
 
 test-in-docker:
-	@clear
 	@./tests/run-tests-in-docker.sh --make "make test"
 
 #################################################

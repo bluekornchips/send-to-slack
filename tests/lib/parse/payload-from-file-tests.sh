@@ -3,7 +3,7 @@
 # parse_payload block-level from_file tests.
 #
 
-load "payload-test-helper"
+load "payload-test-helper.sh"
 
 setup_file() {
 	payload_tests_setup_file

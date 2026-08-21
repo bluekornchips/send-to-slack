@@ -14,7 +14,6 @@ build
 # Test artifacts
 .bats/
 .test-workspace.*
-payload-tests.*
 send-to-slack-tests.*
 
 # Sensitive test data
