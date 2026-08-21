@@ -139,9 +139,13 @@ create_fields_section() {
 	local validated_fields="[]"
 	local field_index=0
 	local fields_work_file
+	local field_entries
 	fields_work_file=$(mktemp "${_SLACK_WORKSPACE:-/tmp}/section.validated-fields.XXXXXX")
+	trap 'rm -f "$fields_work_file"' RETURN ERR
+	field_entries=$(jq -r -c '.[]' <<<"$fields_json") || return 1
 
 	while read -r field_entry; do
+		[[ -z "$field_entry" ]] && continue
 		# Validate field is valid JSON
 		if ! jq . >/dev/null 2>&1 <<<"$field_entry"; then
 			echo "create_fields_section:: field at index $field_index must be valid JSON" >&2
@@ -173,7 +177,7 @@ create_fields_section() {
 		echo "$validated_field" >>"$fields_work_file"
 
 		field_index=$((field_index + 1))
-	done < <(jq -r -c '.[]' <<<"$fields_json")
+	done <<<"$field_entries"
 
 	validated_fields=$(jq -s '.' "$fields_work_file")
 

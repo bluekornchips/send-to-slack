@@ -273,8 +273,11 @@ run_all_jobs() {
 
 	for file in "${EXAMPLES_DIR}"/*.yaml; do
 		pipeline="$(basename "${file}" .yaml)"
+		local job_names
+		job_names=$(yq '.jobs[].name' "${file}") || return 1
 
 		while IFS= read -r job_name; do
+			[[ -z "${job_name}" ]] && continue
 			job_key="${pipeline}/${job_name}"
 
 			if [[ "${skipping}" == "true" ]]; then
@@ -301,7 +304,7 @@ run_all_jobs() {
 			fi
 
 			job_keys+=("${job_key}")
-		done < <(yq '.jobs[].name' "${file}")
+		done <<<"${job_names}"
 	done
 
 	if [[ "${skipping}" == "true" ]]; then

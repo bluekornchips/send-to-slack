@@ -1,42 +1,50 @@
-VERSION      := $(shell cat VERSION 2>/dev/null || echo "Unavailable")
+VERSION        := $(shell cat VERSION 2>/dev/null || echo "Unavailable")
 TARGET_VERSION ?= $(VERSION)
-SYSTEM_PREFIX := /usr/local
-TAG           ?= $(TARGET_VERSION)
+SYSTEM_PREFIX  := /usr/local
+TAG            ?= $(TARGET_VERSION)
 
-TEST_FILES    := $(shell find tests concourse -name '*-tests.sh' -type f)
-SHELL_FILES   := $(shell find . -name "*.sh" -type f)
-BATS_COMMAND  := bats --timing --verbose-run
+TEST_FILES     := $(shell find tests concourse -name '*-tests.sh' -type f \
+	! -name 'smoke-tests.sh' ! -name 'acceptance-tests.sh')
+SHELL_FILES    := $(shell find . -name "*.sh" -type f)
+BATS_JOBS      ?= $(shell nproc 2>/dev/null || echo 4)
+BATS_FLAGS     := --timing --verbose-run --formatter pretty
 
-.PHONY: lint test test-smoke test-acceptance test-all test-in-docker \
+.PHONY: lint test test-serial test-smoke test-acceptance test-all test-in-docker \
         concourse-start concourse-stop concourse-stop-clean concourse-load-examples \
         concourse-clean-restart concourse-run-all-examples
+
+.DEFAULT_GOAL := ci
 
 #################################################
 # Lint
 #################################################
 
 lint:
-	shellcheck --version >/dev/null 2>&1 || (echo "shellcheck is not installed" && exit 1)
-	shellcheck $(SHELL_FILES)
+	@command -v shellcheck >/dev/null 2>&1 || { echo "shellcheck is not installed" >&2; exit 1; }
+	@echo "lint: shellcheck $$(echo $(SHELL_FILES) | wc -w) files"
+	@shellcheck $(SHELL_FILES)
+	@echo "lint: shellcheck ok"
 
 #################################################
 # Testing
 #################################################
 
 test:
-	clear && $(BATS_COMMAND) $(TEST_FILES)
+	@bats $(BATS_FLAGS) --jobs $(BATS_JOBS) --no-parallelize-within-files $(TEST_FILES)
+
+test-serial:
+	@bats $(BATS_FLAGS) $(TEST_FILES)
 
 test-smoke:
-	clear && RUN_SMOKE_TEST=true $(BATS_COMMAND) $(TEST_FILES) -f "smoke_test::"
+	@RUN_SMOKE_TEST=true bats $(BATS_FLAGS) tests/smoke-tests.sh
 
 test-acceptance:
-	clear && RUN_ACCEPTANCE_TEST=true $(BATS_COMMAND) $(TEST_FILES) -f "acceptance::"
+	@RUN_ACCEPTANCE_TEST=true bats $(BATS_FLAGS) tests/acceptance-tests.sh
 
-test-all:
-	clear && RUN_SMOKE_TEST=true RUN_ACCEPTANCE_TEST=true $(BATS_COMMAND) $(TEST_FILES)
+test-all: test test-smoke test-acceptance
 
 test-in-docker:
-	clear && ./tests/run-tests-in-docker.sh --make "make test"
+	@./tests/run-tests-in-docker.sh --make "make test-serial BATS_FLAGS='--timing --verbose-run --formatter tap'"
 
 #################################################
 # Concourse
@@ -70,3 +78,5 @@ concourse-clean-restart:
 
 concourse-run-all-examples: concourse-clean-restart
 		./ci/run-all-examples.sh
+
+ci: lint test

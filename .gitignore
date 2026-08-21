@@ -14,13 +14,7 @@ build
 # Test artifacts
 .bats/
 .test-workspace.*
-payload-tests.*
 send-to-slack-tests.*
-
-# IDE and editor files
-.vscode/
-.cursor/
-.agent/
 
 # Sensitive test data
 *-payload.json

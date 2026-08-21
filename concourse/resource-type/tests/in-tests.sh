@@ -51,7 +51,7 @@ create_version_input_with_message_ts() {
 # main
 ########################################################
 @test "main:: successfully fetches resource with timestamp" {
-	create_version_input
+	create_version_input "${test_timestamp}"
 
 	run "$SCRIPT" "${TEST_DEST_DIR}" <"${TEST_PAYLOAD_FILE}"
 
@@ -63,7 +63,7 @@ create_version_input_with_message_ts() {
 }
 
 @test "main:: outputs correct JSON format with version" {
-	create_version_input
+	create_version_input "${test_timestamp}"
 
 	run "$SCRIPT" "${TEST_DEST_DIR}" <"${TEST_PAYLOAD_FILE}"
 
@@ -114,7 +114,7 @@ create_version_input_with_message_ts() {
 }
 
 @test "main:: does not fail when no destination directory is given" {
-	create_version_input
+	create_version_input "${test_timestamp}"
 
 	run "$SCRIPT" <"${TEST_PAYLOAD_FILE}"
 

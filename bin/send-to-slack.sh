@@ -49,15 +49,19 @@ _send_to_slack_lib_abs_paths() {
 # - Writes one path relative to root_dir per line, e.g. lib/parse/payload.sh
 #
 # Returns:
-# - 0 always
+# - 0 on success
+# - 1 if lib discovery fails
 _send_to_slack_lib_rel_paths() {
 	local root_dir="$1"
 	local abs
+	local abs_paths
+
+	abs_paths=$(_send_to_slack_lib_abs_paths "$root_dir") || return 1
 
 	while IFS= read -r abs; do
 		[[ -z "$abs" ]] && continue
 		printf '%s\n' "${abs#"${root_dir}/"}"
-	done < <(_send_to_slack_lib_abs_paths "$root_dir")
+	done <<<"$abs_paths"
 
 	return 0
 }
@@ -87,6 +91,9 @@ _load_libs() {
 
 	local deferred_blocks=""
 	local abs
+	local abs_paths
+
+	abs_paths=$(_send_to_slack_lib_abs_paths "$root_dir") || return 1
 
 	while IFS= read -r abs; do
 		[[ -z "$abs" ]] && continue
@@ -99,7 +106,7 @@ _load_libs() {
 			return 1
 		fi
 		source "$abs"
-	done < <(_send_to_slack_lib_abs_paths "$root_dir")
+	done <<<"$abs_paths"
 
 	if [[ -n "$deferred_blocks" ]]; then
 		if [[ ! -f "$deferred_blocks" ]]; then

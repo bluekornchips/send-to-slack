@@ -15,6 +15,9 @@ setup_file() {
 		fail "setup_file:: install script missing: $INSTALL_SCRIPT"
 	fi
 
+	TEST_HOME="$(mktemp -d "${BATS_FILE_TMPDIR}/install-home.XXXXXX")"
+	export HOME="$TEST_HOME"
+
 	source "$INSTALL_SCRIPT"
 
 	INSTALL_SIGNATURE_VALUE="$INSTALL_SIGNATURE"
@@ -27,6 +30,15 @@ setup_file() {
 	export INSTALL_SCRIPT
 	export INSTALL_SIGNATURE_VALUE
 	export INSTALL_BASENAME_VALUE
+	export TEST_HOME
+
+	return 0
+}
+
+teardown_file() {
+	if [[ -n "${TEST_HOME:-}" && -d "$TEST_HOME" ]]; then
+		rm -rf "$TEST_HOME"
+	fi
 
 	return 0
 }
@@ -319,29 +331,48 @@ _run_check_dependencies_isolated() {
 	[[ "$ARTIFACT_EXT" == ".tar.gz" ]]
 }
 
+# Build a local git fixture with the paths clone_repository success checks expect.
+_make_clone_fixture() {
+	local fixture_dir="$1"
+
+	mkdir -p "${fixture_dir}/bin" "${fixture_dir}/lib"
+	printf '#!/usr/bin/env bash\n' >"${fixture_dir}/bin/send-to-slack.sh"
+	printf '# fixture\n' >"${fixture_dir}/lib/.keep"
+
+	git -C "$fixture_dir" init -q -b main
+	git -C "$fixture_dir" config user.email "test@example.com"
+	git -C "$fixture_dir" config user.name "Test"
+	git -C "$fixture_dir" add -A
+	git -C "$fixture_dir" commit -q -m "clone fixture"
+
+	return 0
+}
+
 @test "install.sh:: clone_repository clones branch" {
 	if ! command -v "git" >/dev/null 2>&1; then
 		skip "git not available"
 	fi
 
-	# Skip if we can't reach GitHub, network issues in test environment.
-	if ! curl -s --max-time 2 https://github.com >/dev/null 2>&1; then
-		skip "GitHub not reachable"
-	fi
-
+	local fixture_dir
 	local temp_dir
 
+	fixture_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/clone-fixture.XXXXXX")
 	temp_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/clone-test.XXXXXX")
+	_make_clone_fixture "$fixture_dir"
+
+	REPO_URL="$fixture_dir"
 
 	if ! clone_repository "main" "$temp_dir"; then
-		skip "clone_repository failed, may be network issue"
+		echo "clone_repository failed for local fixture" >&2
+		return 1
 	fi
 	[[ -n "$CLONE_DIR" ]]
 	[[ -d "$CLONE_DIR" ]]
 	[[ -f "${CLONE_DIR}/bin/send-to-slack.sh" ]]
 	[[ -d "${CLONE_DIR}/lib" ]]
 
-	rm -rf "$temp_dir"
+	REPO_URL="https://github.com/${GITHUB_REPO}.git"
+	rm -rf "$fixture_dir" "$temp_dir"
 }
 
 @test "install.sh:: clone_repository fails with invalid ref" {
@@ -349,14 +380,20 @@ _run_check_dependencies_isolated() {
 		skip "git not available"
 	fi
 
+	local fixture_dir
 	local temp_dir
 
+	fixture_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/clone-fixture.XXXXXX")
 	temp_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/clone-test.XXXXXX")
+	_make_clone_fixture "$fixture_dir"
+
+	REPO_URL="$fixture_dir"
 
 	run clone_repository "nonexistent-branch-xyz123" "$temp_dir"
 	[[ "$status" -eq 1 ]]
 
-	rm -rf "$temp_dir"
+	REPO_URL="https://github.com/${GITHUB_REPO}.git"
+	rm -rf "$fixture_dir" "$temp_dir"
 }
 
 @test "install.sh:: verify_installation succeeds when binary exists" {

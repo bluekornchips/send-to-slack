@@ -20,6 +20,7 @@ fi
 INSTALL_BASENAME="send-to-slack"
 INSTALL_SIGNATURE="# send-to-slack install signature: v1"
 GITHUB_REPO="${GITHUB_REPO:-${UPSTREAM_REPO}}"
+REPO_URL="${REPO_URL:-https://github.com/${GITHUB_REPO}.git}"
 # Set only during remote install so EXIT trap can remove the directory after main returns
 _INSTALL_TMPDIR=""
 
@@ -175,22 +176,29 @@ file_has_signature() {
 # - One relative path per line, e.g. lib/parse/payload.sh
 #
 # Returns:
-# - 0 always
+# - 0 on success
+# - 1 if lib discovery fails
 _install_lib_rel_paths() {
 	local root_dir="$1"
 	local lib_root="${root_dir}/lib"
 	local abs
+	local abs_paths
 
-	while IFS= read -r abs; do
-		[[ -z "$abs" ]] && continue
-		printf '%s\n' "${abs#"${root_dir}/"}"
-	done < <(find "$lib_root" \
+	# Capture paths, then iterate without process substitution, some hosts lack /dev/fd.
+	if ! abs_paths=$(find "$lib_root" \
 		-mindepth 1 \
 		-maxdepth 4 \
 		-type f \
 		-name '*.sh' \
 		! -path "${lib_root}/slack/block-kit/blocks/*" |
-		LC_ALL=C sort)
+		LC_ALL=C sort); then
+		return 1
+	fi
+
+	while IFS= read -r abs; do
+		[[ -z "$abs" ]] && continue
+		printf '%s\n' "${abs#"${root_dir}/"}"
+	done <<<"$abs_paths"
 
 	return 0
 }
@@ -228,12 +236,16 @@ install_from_source() {
 	fi
 
 	local rel
+	local rel_paths
+	rel_paths=$(_install_lib_rel_paths "$source_dir") || return 1
+
 	while IFS= read -r rel; do
+		[[ -z "$rel" ]] && continue
 		if [[ ! -f "${source_dir}/${rel}" ]]; then
 			echo "install_from_source:: missing ${rel}" >&2
 			return 1
 		fi
-	done < <(_install_lib_rel_paths "$source_dir")
+	done <<<"$rel_paths"
 
 	if [[ ! -d "${source_dir}/lib/slack/block-kit/blocks" ]]; then
 		echo "install_from_source:: missing lib/slack/block-kit/blocks directory" >&2
@@ -279,8 +291,9 @@ install_from_source() {
 
 	local copy_manifest=()
 	while IFS= read -r rel; do
+		[[ -z "$rel" ]] && continue
 		copy_manifest+=("$rel")
-	done < <(_install_lib_rel_paths "$source_dir")
+	done <<<"$rel_paths"
 
 	for rel in "${copy_manifest[@]}"; do
 		local dest_parent
@@ -425,6 +438,7 @@ EOF
 # Inputs:
 # - $1 - git reference, branch/tag
 # - $2 - output directory
+# - REPO_URL, git remote URL, defaults to https://github.com/${GITHUB_REPO}.git
 # Outputs:
 # - Sets CLONE_DIR global variable to the cloned directory
 # Returns:
@@ -432,8 +446,8 @@ EOF
 clone_repository() {
 	local ref="$1"
 	local output_dir="$2"
-	local repo_url
-	local clone_dir
+	local clone_output
+	local temp_clone_dir
 
 	if [[ -z "$ref" ]]; then
 		echo "clone_repository:: ref is empty" >&2
@@ -450,18 +464,17 @@ clone_repository() {
 		return 1
 	fi
 
-	local repo
-	local clone_output
-	local temp_clone_dir
+	if [[ -z "$REPO_URL" ]]; then
+		echo "clone_repository:: REPO_URL is empty" >&2
+		return 1
+	fi
 
-	repo="${GITHUB_REPO:-bluekornchips/send-to-slack}"
-	repo_url="https://github.com/${repo}.git"
 	temp_clone_dir=$(mktemp -d "${output_dir}/send-to-slack-${ref}.XXXXXX")
 
 	# Try cloning with the ref as branch/tag
-	if ! clone_output=$(git clone --depth 1 --branch "$ref" "$repo_url" "$temp_clone_dir" 2>&1); then
+	if ! clone_output=$(git clone --depth 1 --branch "$ref" "$REPO_URL" "$temp_clone_dir" 2>&1); then
 		# If that fails, clone main and checkout the ref
-		if ! clone_output=$(git clone --depth 1 "$repo_url" "$temp_clone_dir" 2>&1); then
+		if ! clone_output=$(git clone --depth 1 "$REPO_URL" "$temp_clone_dir" 2>&1); then
 			echo "clone_repository:: failed to clone repository: $clone_output" >&2
 			rm -rf "$temp_clone_dir"
 			return 1

@@ -20,6 +20,9 @@ setup_file() {
 		fail "setup_file:: uninstall script missing: $UNINSTALL_SCRIPT"
 	fi
 
+	TEST_HOME="$(mktemp -d "${BATS_FILE_TMPDIR}/uninstall-home.XXXXXX")"
+	export HOME="$TEST_HOME"
+
 	source "$INSTALL_SCRIPT"
 	source "$UNINSTALL_SCRIPT"
 
@@ -34,6 +37,15 @@ setup_file() {
 	export UNINSTALL_SCRIPT
 	export INSTALL_SIGNATURE_VALUE
 	export INSTALL_BASENAME_VALUE
+	export TEST_HOME
+
+	return 0
+}
+
+teardown_file() {
+	if [[ -n "${TEST_HOME:-}" && -d "$TEST_HOME" ]]; then
+		rm -rf "$TEST_HOME"
+	fi
 
 	return 0
 }
@@ -82,9 +94,8 @@ teardown() {
 	local other_prefix
 	local other_target
 
-	# Clean up any existing installations that might interfere
+	# Clear only the test-owned user install root so parallel jobs stay isolated.
 	rm -rf "${HOME}/.local/share/send-to-slack"
-	rm -rf "/usr/local/send-to-slack"
 
 	other_prefix=$(mktemp -d "${BATS_TEST_TMPDIR}/send-to-slack-other.XXXXXX")
 	other_target="${other_prefix}/${INSTALL_BASENAME_VALUE}"
@@ -114,9 +125,8 @@ teardown() {
 	local install_root
 	local symlink_target
 
-	# Clean up any existing installations that might interfere
+	# Clear only the test-owned user install root so parallel jobs stay isolated.
 	rm -rf "${HOME}/.local/share/send-to-slack"
-	rm -rf "/usr/local/send-to-slack"
 
 	temp_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/send-to-slack-source.XXXXXX")
 	source_dir="${temp_dir}/send-to-slack-main"

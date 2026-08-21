@@ -8,7 +8,7 @@ set -eo pipefail
 DOCKER_IMAGE="${DOCKER_IMAGE:-}"
 DOCKER_IMAGE_NAME="${DOCKER_IMAGE_NAME:-send-to-slack}"
 DOCKER_IMAGE_TAG="${DOCKER_IMAGE_TAG:-local}"
-MAKE_COMMAND="${MAKE_COMMAND:-make test}"
+MAKE_COMMAND="${MAKE_COMMAND:-make test-serial BATS_FLAGS='--timing --verbose-run --formatter tap'}"
 
 # Get the project root directory
 GIT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "")"
@@ -175,11 +175,13 @@ cd /workspace && git init -q && git config user.email 'test@test.com' && git con
 EOF
 	)"
 
-	# Use --mount instead of -v for better error reporting and compatibility
+	# Run as the host user so bind-mounted files are not owned by root.
 	docker_flags=(
 		--rm
 		-i
 		--platform=linux/amd64
+		--user "$(id -u):$(id -g)"
+		-e HOME=/tmp
 		-e CHANNEL
 		-e SLACK_BOT_USER_OAUTH_TOKEN
 		--mount "type=bind,source=${workspace_dir},target=/workspace,readonly=false"
@@ -237,14 +239,14 @@ OPTIONS:
   -i, --image IMAGE    Docker image to use (optional)
                        Can be a repo:tag (e.g., "myrepo:tag") or image ID (e.g., "c56903e46f90")
                        If not provided, builds from Docker/Dockerfile.test
-  -m, --make COMMAND   Make command to run (default: make test)
+  -m, --make COMMAND   Make command to run (default: make test-serial with tap)
   -h, --help           Show this help message
 
 ENVIRONMENT VARIABLES:
   DOCKER_IMAGE         Docker image to use (same as -i/--image, optional)
   DOCKER_IMAGE_NAME    Image name when building (default: send-to-slack)
   DOCKER_IMAGE_TAG     Image tag when building (default: local)
-  MAKE_COMMAND         Command to run in container (default: make test)
+  MAKE_COMMAND         Command to run in container (default: make test-serial with tap)
   CHANNEL              Required: Slack channel for tests
   SLACK_BOT_USER_OAUTH_TOKEN  Required: Slack OAuth token for tests
 

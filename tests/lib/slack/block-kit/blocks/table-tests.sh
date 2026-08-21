@@ -327,7 +327,7 @@ teardown() {
 	[[ "$status" -eq 0 ]]
 
 	local context_text
-	context_text=$(cat "$TABLE_BLOCK_OUTPUT_FILE" | jq -r '.[0].elements[0].text')
+	context_text=$(jq -r '.[0].elements[0].text' <"$TABLE_BLOCK_OUTPUT_FILE")
 
 	echo "$context_text" | grep -q "chars"
 	echo "$context_text" | grep -q "limit"
@@ -344,7 +344,7 @@ teardown() {
 	[[ "$status" -eq 0 ]]
 
 	local json_path
-	json_path=$(cat "$TABLE_BLOCK_OUTPUT_FILE" | jq -r '.[1].file.path')
+	json_path=$(jq -r '.[1].file.path' <"$TABLE_BLOCK_OUTPUT_FILE")
 
 	[[ -f "$json_path" ]]
 	jq -e '.rows | length == 2' "$json_path" >/dev/null

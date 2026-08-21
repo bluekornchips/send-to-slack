@@ -69,4 +69,3 @@ The actions block currently only supports `button` elements. Slack supports addi
 - Ref: [Actions block elements](https://docs.slack.dev/reference/block-kit/blocks/actions-block)
 
 ---
-
