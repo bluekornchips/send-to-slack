@@ -154,4 +154,4 @@ For interactive components, you'll need:
 - Interactive Components URL configured in Slack app settings
 - ngrok tunnel URL (for local development) or public HTTPS endpoint (for production)
 
-See the main [README.md](../README.md) for Slack bot token OAuth scopes required for interactive components.
+See [docs/getting-started.md](../docs/getting-started.md) for Slack bot token OAuth scopes required for interactive components. Example pipeline: [examples/actions.yaml](../examples/actions.yaml).

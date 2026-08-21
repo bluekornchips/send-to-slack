@@ -1,37 +1,39 @@
 # Examples
 
-This directory contains complete configuration examples for all supported Slack Block Kit block types and features.
+Concourse pipeline examples for supported Slack Block Kit block types and features. Payload parameters and limits: [docs/payload-reference.md](../docs/payload-reference.md). Official Block Kit field docs: [Slack Block Kit](https://docs.slack.dev/reference/block-kit).
 
-## Available Examples
+## Available examples
 
-- [acceptance.yaml](acceptance.yaml) - Acceptance test examples
-- [blocks-from-file.yaml](blocks-from-file.yaml) - Load individual blocks from JSON files
-- [bot-identity.yaml](bot-identity.yaml) - Per-message `username`, `icon_emoji`, and `icon_url`; requires `chat:write.customize` scope
-- [actions.yaml](actions.yaml) - Interactive action blocks
-- [context.yaml](context.yaml) - Context block examples
-- [crosspost.yaml](crosspost.yaml) - Crossposting to multiple channels with full Block Kit support
-- [divider.yaml](divider.yaml) - Divider block examples
-- [ephemeral.yaml](ephemeral.yaml) - `chat.postEphemeral` via `params.ephemeral_user`
-- [file-blocks.yaml](file-blocks.yaml) - File block variations
-- [file-upload.yaml](file-upload.yaml) - File upload examples
-- [header.yaml](header.yaml) - Header block examples
-- [image.yaml](image.yaml) - Image block examples
-- [markdown.yaml](markdown.yaml) - Markdown block examples
-- [rich-text.yaml](rich-text.yaml) - Rich text block examples
-- [section.yaml](section.yaml) - Section block examples
-- [slack-native.yaml](slack-native.yaml) - Using Slack's native `type` format end to end
-- [table.yaml](table.yaml) - Table block examples
-- [thread-replies.yaml](thread-replies.yaml) - Multiple replies in a thread via `thread_replies` array
-- [update-message.yaml](update-message.yaml) - Post a message, then update it with `params.message_ts` and `chat.update`
-- [video.yaml](video.yaml) - Video block examples
-- [webhook-slack.yaml](webhook-slack.yaml) - Incoming Webhook delivery, no bot token
-- [webhook-no-channel.yaml](webhook-no-channel.yaml) - Incoming Webhook with no `params.channel`; hook URL is tied to a default channel in Slack
+| Example                                            | Description                                                                           | Related guide                                                                                 |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| [acceptance.yaml](acceptance.yaml)                 | Acceptance test examples                                                              | [Payload Reference](../docs/payload-reference.md), [Threading](../docs/features/threading.md) |
+| [blocks-from-file.yaml](blocks-from-file.yaml)     | Load individual blocks from JSON files                                                | [Payload Reference](../docs/payload-reference.md)                                             |
+| [bot-identity.yaml](bot-identity.yaml)             | Per-message `username`, `icon_emoji`, and `icon_url`; requires `chat:write.customize` | [Payload Reference](../docs/payload-reference.md)                                             |
+| [actions.yaml](actions.yaml)                       | Interactive action blocks                                                             | [Interactive Components](../python/README.md)                                                 |
+| [context.yaml](context.yaml)                       | Context block examples                                                                | [Payload Reference](../docs/payload-reference.md)                                             |
+| [crosspost.yaml](crosspost.yaml)                   | Crossposting to multiple channels                                                     | [Message Management](../docs/features/message-management.md)                                  |
+| [divider.yaml](divider.yaml)                       | Divider block examples                                                                | [Payload Reference](../docs/payload-reference.md)                                             |
+| [ephemeral.yaml](ephemeral.yaml)                   | `chat.postEphemeral` via `params.ephemeral_user`                                      | [Payload Reference](../docs/payload-reference.md)                                             |
+| [file-blocks.yaml](file-blocks.yaml)               | File block variations                                                                 | [Message Management](../docs/features/message-management.md)                                  |
+| [file-upload.yaml](file-upload.yaml)               | File upload examples                                                                  | [Message Management](../docs/features/message-management.md)                                  |
+| [header.yaml](header.yaml)                         | Header block examples                                                                 | [Payload Reference](../docs/payload-reference.md)                                             |
+| [image.yaml](image.yaml)                           | Image block examples                                                                  | [Payload Reference](../docs/payload-reference.md)                                             |
+| [markdown.yaml](markdown.yaml)                     | Markdown block examples                                                               | [Payload Reference](../docs/payload-reference.md)                                             |
+| [rich-text.yaml](rich-text.yaml)                   | Rich text block examples                                                              | [Payload Reference](../docs/payload-reference.md)                                             |
+| [section.yaml](section.yaml)                       | Section block examples                                                                | [Payload Reference](../docs/payload-reference.md)                                             |
+| [slack-native.yaml](slack-native.yaml)             | Slack native `type` format end to end                                                 | [Payload Reference](../docs/payload-reference.md)                                             |
+| [table.yaml](table.yaml)                           | Table block examples                                                                  | [Payload Reference](../docs/payload-reference.md)                                             |
+| [thread-replies.yaml](thread-replies.yaml)         | Multiple replies via `params.thread.replies`                                          | [Threading](../docs/features/threading.md)                                                    |
+| [update-message.yaml](update-message.yaml)         | Post then update with `params.message_ts` / `params.message_ts_file`                  | [Message Management](../docs/features/message-management.md)                                  |
+| [video.yaml](video.yaml)                           | Video block examples                                                                  | [Payload Reference](../docs/payload-reference.md)                                             |
+| [webhook-slack.yaml](webhook-slack.yaml)           | Incoming Webhook delivery, no bot token                                               | [Getting Started](../docs/getting-started.md)                                                 |
+| [webhook-no-channel.yaml](webhook-no-channel.yaml) | Incoming Webhook with no `params.channel`                                             | [Getting Started](../docs/getting-started.md)                                                 |
 
 ## Formats
 
-The tool accepts both the keyed format (`{ "section": { ... } }`) and Slack's native `type` format (`{ "type": "section", ... }`). Most examples use the keyed format for readability; `slack-native.yaml` shows the native format across all block types.
+The tool accepts both the keyed format (`{ "section": { ... } }`) and Slack's native `type` format (`{ "type": "section", ... }`). Most examples use the keyed format for readability; `slack-native.yaml` shows the native format across all block types. Details: [Payload Reference](../docs/payload-reference.md).
 
-## Running the Examples
+## Running the examples
 
 These files are Concourse pipelines that use the `sunflowersoftware/send-to-slack` resource type. Pass the variables each file expects, for example:
 
@@ -49,205 +51,4 @@ fly -t <target> set-pipeline \
 
 `webhook-slack.yaml` and `webhook-no-channel.yaml` only need `SLACK_WEBHOOK_URL` and `TAG`. See each file for the exact `((VAR))` names. Pipelines that use the Web API need `SLACK_BOT_USER_OAUTH_TOKEN` and `channel`. `ephemeral.yaml` also needs `ephemeral_user`, a member user ID such as `U012AB3CD`.
 
-## Supported Block Types
-
-### Section Block
-
-Text blocks with plain text or markdown formatting. Supports single text sections or fields arrays for side-by-side text display (up to 10 fields, each up to 2000 characters).
-
-- Reference: [Slack Section Block Documentation](https://docs.slack.dev/reference/block-kit/blocks/section-block/)
-- Example: [section.yaml](section.yaml)
-
-### Header Block
-
-Large title blocks for message headers.
-
-- Reference: [Slack Header Block Documentation](https://docs.slack.dev/reference/block-kit/blocks/header-block)
-- Example: [header.yaml](header.yaml)
-
-### Image Block
-
-Display images from URLs or Slack files. Supports optional title and block_id fields.
-
-- Reference: [Slack Image Block Documentation](https://docs.slack.dev/reference/block-kit/blocks/image-block/)
-- Example: [image.yaml](image.yaml)
-
-Required Fields (one of the following):
-
-- `image_url` - Publicly accessible image URL, OR
-- `slack_file` - Slack file object with either:
-  - `url` - Slack file URL (e.g., `https://files.slack.com/files-pri/...`)
-  - `id` - Slack file ID (e.g., `F012345678`)
-- `alt_text` - Plain text description for accessibility (max 2000 characters)
-
-Optional Fields:
-
-- `title` - Plain text title object (max 2000 characters)
-- `block_id` - Unique identifier (max 255 characters)
-
-Note: You cannot use both `image_url` and `slack_file` in the same image block.
-
-### Divider Block
-
-Visual separators between message sections.
-
-- Reference: [Slack Divider Block Documentation](https://docs.slack.dev/reference/block-kit/blocks/divider-block)
-- Example: [divider.yaml](divider.yaml)
-
-### Context Block
-
-Small text blocks for metadata and contextual information.
-
-- Reference: [Slack Context Block Documentation](https://docs.slack.dev/reference/block-kit/blocks/context-block)
-- Example: [context.yaml](context.yaml)
-
-### Markdown Block
-
-Markdown-formatted text blocks supporting up to 12,000 characters.
-
-- Reference: [Slack Markdown Block Documentation](https://docs.slack.dev/reference/block-kit/blocks/markdown-block)
-- Example: [markdown.yaml](markdown.yaml)
-
-### Rich Text Block
-
-Structured WYSIWYG content supporting up to 4,000 characters.
-
-- Reference: [Slack Rich Text Block Documentation](https://docs.slack.dev/reference/block-kit/blocks/rich-text-block)
-- Example: [rich-text.yaml](rich-text.yaml)
-
-### Actions Block
-
-Interactive buttons and elements for user interactions. Requires a web server to handle button click events.
-
-- Reference: [Slack Actions Block Documentation](https://docs.slack.dev/reference/block-kit/blocks/actions-block)
-- Example: [actions.yaml](actions.yaml)
-- See [python/README.md](../python/README.md) for interactive components setup
-
-### Table Block
-
-Tabular data displayed using legacy attachments with color support.
-
-- Reference: [Slack Table Block Documentation](https://docs.slack.dev/reference/block-kit/blocks/table-block/)
-- Example: [table.yaml](table.yaml)
-
-### Video Block
-
-Embed videos directly into Slack messages. Supports provider information, author details, and optional description.
-
-- Reference: [Slack Video Block Documentation](https://docs.slack.dev/reference/block-kit/blocks/video-block/)
-- Example: [video.yaml](video.yaml)
-
-Required Fields:
-
-- `video_url` - Embeddable video URL
-- `thumbnail_url` - Thumbnail image URL
-- `alt_text` - Tooltip text for accessibility (max 2000 characters)
-- `title` - Plain text title object (max 2000 characters)
-
-Optional Fields:
-
-- `title_url` - Hyperlink for title text
-- `description` - Plain text description object (max 2000 characters)
-- `author_name` - Author name (max 2000 characters)
-- `provider_name` - Provider name e.g., "YouTube" (max 2000 characters)
-- `provider_icon_url` - Provider icon URL
-- `block_id` - Unique identifier (max 255 characters)
-
-Video blocks require two configuration steps:
-
-1. Bot Token Scopes: Add one of these scopes to your Slack app:
-
-   - `links:read`
-   - `links:write`
-   - `links.embed:write`
-
-   Go to: OAuth & Permissions > Bot Token Scopes
-
-2. App Unfurl Domains: Add the video domain to your app's unfurl domains list:
-
-   - Go to: App Settings > App Unfurl Domains
-   - Add the domain (e.g., `youtube.com` for YouTube videos, `vimeo.com` for Vimeo)
-
-   This step is critical - video blocks will not work without the domain in the unfurl list.
-
-After making these changes, reinstall your app to your workspace to apply the updates.
-
-Video URL Requirements:
-
-- Must be publicly accessible
-- Must return a 2xx HTTP status code
-- Must be compatible with an embeddable iframe
-- Cannot point to any Slack-related domain
-
-### File Block
-
-Upload files to Slack. Images create image blocks automatically; other file types create rich-text blocks.
-
-- Reference: [Slack File Upload Documentation](https://docs.slack.dev/messaging/working-with-files/#upload)
-- Example: [file-upload.yaml](file-upload.yaml)
-
-#### File Upload Configuration
-
-File blocks support the following parameters:
-
-- `path` - Local path to the file to upload (required)
-- `title` - Display title for the file in Slack (optional, defaults to filename)
-- `interpolate_file_contents_to_var` - Environment variable name to export file contents to (optional)
-
-## Message Limits
-
-The program enforces Slack's message composition limits:
-
-- Maximum 50 blocks per message
-- Maximum 20 attachments per message
-- Maximum 40,000 characters for text fields
-
-## Threading
-
-Reply to existing threads with `thread_ts`. Create new threads with `create_thread: true` with the first block as the parent message, remaining blocks as the thread reply. Use the `thread_replies` array to send multiple separate messages as replies in the same thread; each element is a message config, often with a `blocks` field. See [acceptance.yaml](acceptance.yaml) and [thread-replies.yaml](thread-replies.yaml) for examples. If you only have one block, it will be sent as a regular message.
-
-Incoming Webhook delivery does not support `thread_ts`, `create_thread`, or `thread_replies`; use a bot token and the Web API for those features.
-
-## Alternative Input Methods
-
-### Raw JSON String
-
-Provide a complete JSON payload as a string using `params.raw`:
-
-```json
-{
-  "params": {
-    "raw": "{\"source\": { }, \"params\": { }}"
-  }
-}
-```
-
-### Payload from File
-
-Load payload configuration from an external file using `params.from_file`:
-
-```json
-{
-  "params": {
-    "from_file": "./my-payload.json"
-  }
-}
-```
-
-### Blocks from File
-
-Load individual blocks from JSON files using block-level `from_file`. Each file must contain a single block object or array in keyed or native format. Path resolution uses the same rules as `params.from_file`:
-
-```yaml
-blocks:
-  - header:
-      text: { type: "plain_text", text: "Title" }
-  - from_file: blocks.json
-  - from_file: more-blocks.json
-```
-
-See [blocks-from-file.yaml](blocks-from-file.yaml) for a complete example. Fixture JSON for that pipeline lives under [fixtures/](fixtures/) in this repository, for example `blocks-from-file-3.json`. The Concourse job checks out the `send-to-slack` git resource so paths like `send-to-slack/examples/fixtures/blocks-from-file-3.json` resolve on the worker. Local CLI runs need the same files on disk or paths adjusted to your `SEND_TO_SLACK_PAYLOAD_BASE_DIR` and current working directory. A file may contain a single block or an array of blocks.
-
-## Updating a message
-
-Set `params.message_ts` to the message `ts` returned from a previous send, with `params.channel` and new `blocks` or `text`, to update that message via the Web API. The resource version file exposes `message_ts` for a later `get` and `load_var` pattern. See [update-message.yaml](update-message.yaml).
+Local Concourse load and run-all workflow: [docs/concourse.md](../docs/concourse.md). End-to-end runner skip lists and script flags: [ci/README.md](../ci/README.md).
