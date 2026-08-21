@@ -15,6 +15,9 @@ setup_file() {
 		fail "setup_file:: install script missing: $INSTALL_SCRIPT"
 	fi
 
+	TEST_HOME="$(mktemp -d "${BATS_FILE_TMPDIR}/install-home.XXXXXX")"
+	export HOME="$TEST_HOME"
+
 	source "$INSTALL_SCRIPT"
 
 	INSTALL_SIGNATURE_VALUE="$INSTALL_SIGNATURE"
@@ -27,6 +30,15 @@ setup_file() {
 	export INSTALL_SCRIPT
 	export INSTALL_SIGNATURE_VALUE
 	export INSTALL_BASENAME_VALUE
+	export TEST_HOME
+
+	return 0
+}
+
+teardown_file() {
+	if [[ -n "${TEST_HOME:-}" && -d "$TEST_HOME" ]]; then
+		rm -rf "$TEST_HOME"
+	fi
 
 	return 0
 }

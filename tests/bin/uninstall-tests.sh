@@ -20,6 +20,9 @@ setup_file() {
 		fail "setup_file:: uninstall script missing: $UNINSTALL_SCRIPT"
 	fi
 
+	TEST_HOME="$(mktemp -d "${BATS_FILE_TMPDIR}/uninstall-home.XXXXXX")"
+	export HOME="$TEST_HOME"
+
 	source "$INSTALL_SCRIPT"
 	source "$UNINSTALL_SCRIPT"
 
@@ -34,6 +37,15 @@ setup_file() {
 	export UNINSTALL_SCRIPT
 	export INSTALL_SIGNATURE_VALUE
 	export INSTALL_BASENAME_VALUE
+	export TEST_HOME
+
+	return 0
+}
+
+teardown_file() {
+	if [[ -n "${TEST_HOME:-}" && -d "$TEST_HOME" ]]; then
+		rm -rf "$TEST_HOME"
+	fi
 
 	return 0
 }
