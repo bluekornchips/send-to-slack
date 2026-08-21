@@ -54,6 +54,9 @@ collect_mention_user_ids() {
 	local mention_ids=()
 	local token_pattern='(<@[A-Za-z0-9._-]+>|@[A-Za-z0-9._-]+)'
 
+	local payload_strings
+	payload_strings=$(jq -r '.. | strings' <<<"$payload_json") || return 1
+
 	while IFS= read -r text; do
 		[[ -z "$text" ]] && continue
 		while [[ "$text" =~ $token_pattern ]]; do
@@ -76,7 +79,7 @@ collect_mention_user_ids() {
 				mention_ids+=("$user_id")
 			fi
 		done
-	done < <(jq -r '.. | strings' <<<"$payload_json")
+	done <<<"$payload_strings"
 
 	printf '%s\n' "${mention_ids[@]}"
 

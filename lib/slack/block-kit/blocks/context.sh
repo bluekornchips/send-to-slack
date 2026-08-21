@@ -73,7 +73,11 @@ create_context() {
 
 	# Validate each element's text length (only for text-based elements)
 	local element_index=0
+	local element_entries
+	element_entries=$(jq -r -c '.elements[]' <<<"$input") || return 1
+
 	while read -r element_entry; do
+		[[ -z "$element_entry" ]] && continue
 		local element_type
 		element_type=$(jq -r '.type // ""' <<<"$element_entry" 2>/dev/null)
 		if [[ -n "$element_type" ]] && [[ "$element_type" != "null" ]] && [[ "$element_type" != "image" ]]; then
@@ -93,7 +97,7 @@ create_context() {
 			fi
 		fi
 		element_index=$((element_index + 1))
-	done < <(jq -r -c '.elements[]' <<<"$input")
+	done <<<"$element_entries"
 
 	# Create the context block
 	local block

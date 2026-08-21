@@ -159,7 +159,11 @@ create_actions() {
 	local element_type
 	local element_value
 
+	local element_entries
+	element_entries=$(jq -r -c '.[]' <<<"$elements_json") || return 1
+
 	while read -r element_entry; do
+		[[ -z "$element_entry" ]] && continue
 		if ! element_type=$(jq -r '.type // empty' <<<"$element_entry"); then
 			echo "create_actions:: invalid element JSON format" >&2
 			return 1
@@ -179,7 +183,7 @@ create_actions() {
 
 		elements=$(jq --argjson element "$element" '. += [$element]' <<<"$elements")
 
-	done < <(jq -r -c '.[]' <<<"$elements_json")
+	done <<<"$element_entries"
 
 	local block_id
 	block_id=$(jq -r '.block_id // empty' <<<"$input")

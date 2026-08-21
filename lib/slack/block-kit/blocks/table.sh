@@ -42,7 +42,12 @@ create_table() {
 		return 1
 	fi
 
-	local input_json
+	local input_json=""
+	local block_file=""
+	local tmp_file=""
+	local rows_file=""
+	local column_settings_file=""
+	trap 'rm -f "$input_json" "$block_file" "$tmp_file" "$rows_file" "$column_settings_file"' RETURN ERR
 	input_json=$(mktemp "$_SLACK_WORKSPACE/table.input-json.XXXXXX")
 	echo "$input" >"$input_json"
 
@@ -168,15 +173,18 @@ create_table() {
 		return 0
 	fi
 
-	# Build block via temp files so large JSON is never on the command line (avoids ARG_MAX).
-	local block_file
-	local tmp_file
+	# Build block via temp files so large JSON is never on the command line, avoids ARG_MAX.
+	# jq --slurpfile needs a real file, process substitution would require /dev/fd.
 	block_file=$(mktemp "$_SLACK_WORKSPACE/table.block.XXXXXX")
 	tmp_file=$(mktemp "$_SLACK_WORKSPACE/table.block.XXXXXX")
+	rows_file=$(mktemp "$_SLACK_WORKSPACE/table.rows.XXXXXX") || return 1
+	if ! jq '.rows' "$input_json" >"$rows_file"; then
+		return 1
+	fi
 
 	jq -n \
 		--arg block_type "$BLOCK_TYPE" \
-		--slurpfile input_rows <(jq '.rows' "$input_json") \
+		--slurpfile input_rows "$rows_file" \
 		'{ type: $block_type, rows: $input_rows[0] }' \
 		>"$block_file"
 
@@ -189,7 +197,11 @@ create_table() {
 
 	# Add optional column_settings if present
 	if jq -e '.column_settings' "$input_json" >/dev/null 2>&1; then
-		jq --slurpfile column_settings <(jq '.column_settings' "$input_json") '. + {column_settings: $column_settings[0]}' "$block_file" >"$tmp_file" && mv "$tmp_file" "$block_file"
+		column_settings_file=$(mktemp "$_SLACK_WORKSPACE/table.column_settings.XXXXXX") || return 1
+		if ! jq '.column_settings' "$input_json" >"$column_settings_file"; then
+			return 1
+		fi
+		jq --slurpfile column_settings "$column_settings_file" '. + {column_settings: $column_settings[0]}' "$block_file" >"$tmp_file" && mv "$tmp_file" "$block_file"
 	fi
 
 	cp "$block_file" "$TABLE_BLOCK_OUTPUT_FILE"

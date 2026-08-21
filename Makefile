@@ -1,7 +1,7 @@
-VERSION      := $(shell cat VERSION 2>/dev/null || echo "Unavailable")
+VERSION        := $(shell cat VERSION 2>/dev/null || echo "Unavailable")
 TARGET_VERSION ?= $(VERSION)
-SYSTEM_PREFIX := /usr/local
-TAG           ?= $(TARGET_VERSION)
+SYSTEM_PREFIX  := /usr/local
+TAG            ?= $(TARGET_VERSION)
 
 TEST_FILES    := $(shell find tests concourse -name '*-tests.sh' -type f)
 SHELL_FILES   := $(shell find . -name "*.sh" -type f)
@@ -12,32 +12,41 @@ BATS_COMMAND  := bats --timing --verbose-run --formatter pretty --jobs $(BATS_JO
         concourse-start concourse-stop concourse-stop-clean concourse-load-examples \
         concourse-clean-restart concourse-run-all-examples
 
+.DEFAULT_GOAL := ci
+
 #################################################
 # Lint
 #################################################
 
 lint:
-	shellcheck --version >/dev/null 2>&1 || (echo "shellcheck is not installed" && exit 1)
-	shellcheck $(SHELL_FILES)
+	@command -v shellcheck >/dev/null 2>&1 || { echo "shellcheck is not installed" >&2; exit 1; }
+	@echo "lint: shellcheck $$(echo $(SHELL_FILES) | wc -w) files"
+	@shellcheck $(SHELL_FILES)
+	@echo "lint: shellcheck ok"
 
 #################################################
 # Testing
 #################################################
 
 test:
-	clear && $(BATS_COMMAND) $(TEST_FILES)
+	@clear
+	@$(BATS_COMMAND) $(TEST_FILES)
 
 test-smoke:
-	clear && RUN_SMOKE_TEST=true $(BATS_COMMAND) $(TEST_FILES) -f "smoke_test::"
+	@clear
+	@RUN_SMOKE_TEST=true $(BATS_COMMAND) $(TEST_FILES) -f "smoke_test::"
 
 test-acceptance:
-	clear && RUN_ACCEPTANCE_TEST=true $(BATS_COMMAND) $(TEST_FILES) -f "acceptance::"
+	@clear
+	@RUN_ACCEPTANCE_TEST=true $(BATS_COMMAND) $(TEST_FILES) -f "acceptance::"
 
 test-all:
-	clear && RUN_SMOKE_TEST=true RUN_ACCEPTANCE_TEST=true $(BATS_COMMAND) $(TEST_FILES)
+	@clear
+	@RUN_SMOKE_TEST=true RUN_ACCEPTANCE_TEST=true $(BATS_COMMAND) $(TEST_FILES)
 
 test-in-docker:
-	clear && ./tests/run-tests-in-docker.sh --make "make test"
+	@clear
+	@./tests/run-tests-in-docker.sh --make "make test"
 
 #################################################
 # Concourse
@@ -71,3 +80,5 @@ concourse-clean-restart:
 
 concourse-run-all-examples: concourse-clean-restart
 		./ci/run-all-examples.sh
+
+ci: lint test

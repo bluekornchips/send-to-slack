@@ -175,22 +175,29 @@ file_has_signature() {
 # - One relative path per line, e.g. lib/parse/payload.sh
 #
 # Returns:
-# - 0 always
+# - 0 on success
+# - 1 if lib discovery fails
 _install_lib_rel_paths() {
 	local root_dir="$1"
 	local lib_root="${root_dir}/lib"
 	local abs
+	local abs_paths
 
-	while IFS= read -r abs; do
-		[[ -z "$abs" ]] && continue
-		printf '%s\n' "${abs#"${root_dir}/"}"
-	done < <(find "$lib_root" \
+	# Capture paths, then iterate without process substitution, some hosts lack /dev/fd.
+	if ! abs_paths=$(find "$lib_root" \
 		-mindepth 1 \
 		-maxdepth 4 \
 		-type f \
 		-name '*.sh' \
 		! -path "${lib_root}/slack/block-kit/blocks/*" |
-		LC_ALL=C sort)
+		LC_ALL=C sort); then
+		return 1
+	fi
+
+	while IFS= read -r abs; do
+		[[ -z "$abs" ]] && continue
+		printf '%s\n' "${abs#"${root_dir}/"}"
+	done <<<"$abs_paths"
 
 	return 0
 }
@@ -228,12 +235,16 @@ install_from_source() {
 	fi
 
 	local rel
+	local rel_paths
+	rel_paths=$(_install_lib_rel_paths "$source_dir") || return 1
+
 	while IFS= read -r rel; do
+		[[ -z "$rel" ]] && continue
 		if [[ ! -f "${source_dir}/${rel}" ]]; then
 			echo "install_from_source:: missing ${rel}" >&2
 			return 1
 		fi
-	done < <(_install_lib_rel_paths "$source_dir")
+	done <<<"$rel_paths"
 
 	if [[ ! -d "${source_dir}/lib/slack/block-kit/blocks" ]]; then
 		echo "install_from_source:: missing lib/slack/block-kit/blocks directory" >&2
@@ -279,8 +290,9 @@ install_from_source() {
 
 	local copy_manifest=()
 	while IFS= read -r rel; do
+		[[ -z "$rel" ]] && continue
 		copy_manifest+=("$rel")
-	done < <(_install_lib_rel_paths "$source_dir")
+	done <<<"$rel_paths"
 
 	for rel in "${copy_manifest[@]}"; do
 		local dest_parent
