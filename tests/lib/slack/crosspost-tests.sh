@@ -32,6 +32,7 @@ setup() {
 	source "$SCRIPT"
 	source "$GIT_ROOT/lib/parse/payload.sh"
 	source "$GIT_ROOT/lib/parse/blocks.sh"
+	source "$GIT_ROOT/lib/slack/derived-payload.sh"
 	source "$GIT_ROOT/lib/slack/crosspost.sh"
 
 	SLACK_BOT_USER_OAUTH_TOKEN="test-token"

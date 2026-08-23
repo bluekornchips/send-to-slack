@@ -394,23 +394,23 @@ main() {
 
 	while [[ $# -gt 0 ]]; do
 		case $1 in
-			-h | --help) usage && return 0 ;;
-			--start-from)
-				if [[ $# -lt 2 ]]; then
-					echo "--start-from requires a pipeline/job argument" >&2
-					echo "Use '$(basename "$0") --help' for usage information" >&2
-
-					return 1
-				fi
-				start_from="${2}"
-				shift 2
-				;;
-			*)
-				echo "Unknown option '${1}'" >&2
+		-h | --help) usage && return 0 ;;
+		--start-from)
+			if [[ $# -lt 2 ]]; then
+				echo "--start-from requires a pipeline/job argument" >&2
 				echo "Use '$(basename "$0") --help' for usage information" >&2
 
 				return 1
-				;;
+			fi
+			start_from="${2}"
+			shift 2
+			;;
+		*)
+			echo "Unknown option '${1}'" >&2
+			echo "Use '$(basename "$0") --help' for usage information" >&2
+
+			return 1
+			;;
 		esac
 	done
 

@@ -27,6 +27,7 @@ setup_file() {
 }
 
 setup() {
+	source "$GIT_ROOT/lib/curl-http.sh"
 	source "$SCRIPT"
 
 	_SLACK_WORKSPACE=$(mktemp -d "${BATS_TEST_TMPDIR}/file-upload-tests.workspace.XXXXXX")

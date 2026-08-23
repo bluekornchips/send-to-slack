@@ -252,7 +252,7 @@ _build_slack_payload() {
 	if [[ -n "$text_field" && "$text_field" != "null" && "$text_field" != "empty" ]]; then
 		local text_length=${#text_field}
 		if ((text_length > MAX_TEXT_LENGTH)); then
-			echo "parse_payload:: text field length ($text_length) exceeds Slack's maximum of $MAX_TEXT_LENGTH characters" >&2
+			echo "_build_slack_payload:: text field length ($text_length) exceeds Slack's maximum of $MAX_TEXT_LENGTH characters" >&2
 			return 1
 		fi
 		payload=$(jq --arg text "$text_field" '. + {text: $text}' <<<"$payload")
@@ -308,53 +308,51 @@ process_blocks() {
 	export BLOCKS_FILE ATTACHMENTS_FILE
 
 	if [[ "$blocks_json" == "[]" ]]; then
-		echo "process_blocks:: no blocks to process, skipping" >&2
+		echo "process_blocks:: no blocks to process, assembling text-only payload" >&2
+	else
+		local block_index=0
+		local block_items
+		block_items=$(jq -r -c '.[]' <<<"$blocks_json") || return 1
 
-		return 0
-	fi
+		# Process each block in the blocks array
+		while read -r block_item; do
+			[[ -z "$block_item" ]] && continue
+			# Expand block-level from_file before type/value extraction
+			if jq -e '.from_file or (.type == "from_file")' <<<"$block_item" >/dev/null 2>&1; then
+				local block_from_file_path
+				block_from_file_path=$(jq -r '.path // .from_file // empty' <<<"$block_item")
+				if [[ -z "$block_from_file_path" ]]; then
+					echo "parse_payload:: block from_file path is empty" >&2
+					return 1
+				fi
+				local loaded_content
+				loaded_content=$(_load_block_item_from_file "$block_from_file_path") || return 1
+				echo "process_blocks:: expanded block from file: ${block_from_file_path}" >&2
+				if echo "$loaded_content" | jq -e 'type == "array"' >/dev/null 2>&1; then
+					local nested_items
+					nested_items=$(jq -c '.[]' <<<"$loaded_content") || return 1
 
-	local block_index=0
-	local block_items
-	block_items=$(jq -r -c '.[]' <<<"$blocks_json") || return 1
-
-	# Process each block in the blocks array
-	while read -r block_item; do
-		[[ -z "$block_item" ]] && continue
-		# Expand block-level from_file before type/value extraction
-		if jq -e '.from_file or (.type == "from_file")' <<<"$block_item" >/dev/null 2>&1; then
-			local block_from_file_path
-			block_from_file_path=$(jq -r '.path // .from_file // empty' <<<"$block_item")
-			if [[ -z "$block_from_file_path" ]]; then
-				echo "parse_payload:: block from_file path is empty" >&2
-				return 1
+					while read -r block_item; do
+						[[ -z "$block_item" ]] && continue
+						_process_blocks_append_block "$block_item" || return 1
+					done <<<"$nested_items"
+					continue
+				fi
+				block_item="$loaded_content"
 			fi
-			local loaded_content
-			loaded_content=$(_load_block_item_from_file "$block_from_file_path") || return 1
-			echo "process_blocks:: expanded block from file: ${block_from_file_path}" >&2
-			if echo "$loaded_content" | jq -e 'type == "array"' >/dev/null 2>&1; then
-				local nested_items
-				nested_items=$(jq -c '.[]' <<<"$loaded_content") || return 1
 
-				while read -r block_item; do
-					[[ -z "$block_item" ]] && continue
-					_process_blocks_append_block "$block_item" || return 1
-				done <<<"$nested_items"
-				continue
-			fi
-			block_item="$loaded_content"
+			_process_blocks_append_block "$block_item" || return 1
+		done <<<"$block_items"
+
+		local block_count_debug
+		local attachment_count_debug
+		block_count_debug=$(jq '. | length' "$BLOCKS_FILE")
+		attachment_count_debug=$(jq '. | length' "$ATTACHMENTS_FILE")
+		echo "process_blocks:: completed: ${block_count_debug} blocks, ${attachment_count_debug} attachments" >&2
+
+		if ! _validate_block_counts "$BLOCKS_FILE" "$ATTACHMENTS_FILE"; then
+			return 1
 		fi
-
-		_process_blocks_append_block "$block_item" || return 1
-	done <<<"$block_items"
-
-	local block_count_debug
-	local attachment_count_debug
-	block_count_debug=$(jq '. | length' "$BLOCKS_FILE")
-	attachment_count_debug=$(jq '. | length' "$ATTACHMENTS_FILE")
-	echo "process_blocks:: completed: ${block_count_debug} blocks, ${attachment_count_debug} attachments" >&2
-
-	if ! _validate_block_counts "$BLOCKS_FILE" "$ATTACHMENTS_FILE"; then
-		return 1
 	fi
 
 	local thread_ts

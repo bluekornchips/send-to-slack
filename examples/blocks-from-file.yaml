@@ -13,7 +13,7 @@ resources:
   - name: send-to-slack
     type: git
     source:
-      uri: https://github.com/sunflowersoftware/send-to-slack.git
+      uri: https://github.com/bluekornchips/send-to-slack.git
       branch: main
 
   - name: slack-notification

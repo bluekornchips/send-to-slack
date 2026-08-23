@@ -1407,7 +1407,7 @@ teardown() {
 
 	run env SEND_TO_SLACK_OUTPUT="$version_file" "$SCRIPT" <"$update_payload_file"
 	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "main:: updating existing Slack message via chat.update"
+	echo "$output" | grep -q "run_chat_update_from_input:: updating existing Slack message via chat.update"
 	echo "$output" | grep -q "version"
 	echo "$output" | grep -q "main:: creating Concourse metadata"
 	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
@@ -1554,5 +1554,5 @@ teardown() {
 
 	run env -u SLACK_BOT_USER_OAUTH_TOKEN "$SCRIPT" <"$payload_file"
 	[[ "$status" -ne 0 ]]
-	echo "$output" | grep -q "main:: params.message_ts requires API delivery, not webhook"
+	echo "$output" | grep -q "run_chat_update_from_input:: params.message_ts requires API delivery, not webhook"
 }

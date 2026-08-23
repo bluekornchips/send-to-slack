@@ -21,6 +21,7 @@ setup_file() {
 }
 
 setup() {
+	source "$GIT_ROOT/lib/curl-http.sh"
 	source "$SCRIPT"
 
 	SLACK_BOT_USER_OAUTH_TOKEN="test-token"
@@ -836,6 +837,6 @@ mock_curl_permalink_failure() {
 
 	run run_chat_update_from_input "$pf" '{"text":"hello"}'
 	[[ "$status" -eq 0 ]]
-	echo "$output" | grep -q "main:: updating existing Slack message via chat.update"
+	echo "$output" | grep -q "run_chat_update_from_input:: updating existing Slack message via chat.update"
 	rm -f "$pf"
 }
