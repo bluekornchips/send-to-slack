@@ -141,7 +141,21 @@ setup() {
 	}
 
 	local payload_json
-	payload_json='{"blocks":[{"type":"section","text":{"type":"mrkdwn","text":"hello @alice and <@UKNOWN0001> and @alice"}}]}'
+	payload_json=$(
+		cat <<-'EOF'
+			{
+			  "blocks": [
+			    {
+			      "type": "section",
+			      "text": {
+			        "type": "mrkdwn",
+			        "text": "hello @alice and <@UKNOWN0001> and @alice"
+			      }
+			    }
+			  ]
+			}
+		EOF
+	)
 
 	run collect_mention_user_ids "$payload_json"
 	[[ "$status" -eq 0 ]]

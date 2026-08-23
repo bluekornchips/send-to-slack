@@ -54,28 +54,57 @@ teardown() {
 }
 
 @test "create_context:: missing elements field" {
-	local input='{"block_id": "test"}'
+	local input=$(
+		cat <<-'EOF'
+			{
+			  "block_id": "test"
+			}
+		EOF
+	)
 	run create_context <<<"$input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "elements field is required"
 }
 
 @test "create_context:: elements not array" {
-	local input='{"elements": "not an array"}'
+	local input=$(
+		cat <<-'EOF'
+			{
+			  "elements": "not an array"
+			}
+		EOF
+	)
 	run create_context <<<"$input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "elements must be an array"
 }
 
 @test "create_context:: empty elements array" {
-	local input='{"elements": []}'
+	local input=$(
+		cat <<-'EOF'
+			{
+			  "elements": []
+			}
+		EOF
+	)
 	run create_context <<<"$input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "elements array must not be empty"
 }
 
 @test "create_context:: basic context with text element" {
-	local input='{"elements": [{"type": "plain_text", "text": "Context info"}]}'
+	local input=$(
+		cat <<-'EOF'
+			{
+			  "elements": [
+			    {
+			      "type": "plain_text",
+			      "text": "Context info"
+			    }
+			  ]
+			}
+		EOF
+	)
 	run create_context <<<"$input"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.type == "context"' >/dev/null
@@ -84,7 +113,22 @@ teardown() {
 }
 
 @test "create_context:: context with multiple elements" {
-	local input='{"elements": [{"type": "plain_text", "text": "Item 1"}, {"type": "mrkdwn", "text": "*Item 2*"}]}'
+	local input=$(
+		cat <<-'EOF'
+			{
+			  "elements": [
+			    {
+			      "type": "plain_text",
+			      "text": "Item 1"
+			    },
+			    {
+			      "type": "mrkdwn",
+			      "text": "*Item 2*"
+			    }
+			  ]
+			}
+		EOF
+	)
 	run create_context <<<"$input"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.type == "context"' >/dev/null
@@ -92,14 +136,38 @@ teardown() {
 }
 
 @test "create_context:: context with block_id" {
-	local input='{"elements": [{"type": "plain_text", "text": "Test"}], "block_id": "context_123"}'
+	local input=$(
+		cat <<-'EOF'
+			{
+			  "elements": [
+			    {
+			      "type": "plain_text",
+			      "text": "Test"
+			    }
+			  ],
+			  "block_id": "context_123"
+			}
+		EOF
+	)
 	run create_context <<<"$input"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.block_id == "context_123"' >/dev/null
 }
 
 @test "create_context:: validates JSON structure" {
-	local input='{"elements": [{"type": "plain_text", "text": "Test"}], "block_id": "test_id"}'
+	local input=$(
+		cat <<-'EOF'
+			{
+			  "elements": [
+			    {
+			      "type": "plain_text",
+			      "text": "Test"
+			    }
+			  ],
+			  "block_id": "test_id"
+			}
+		EOF
+	)
 	run create_context <<<"$input"
 	[[ "$status" -eq 0 ]]
 
@@ -113,7 +181,19 @@ teardown() {
 }
 
 @test "create_context:: empty block_id is ignored" {
-	local input='{"elements": [{"type": "plain_text", "text": "Test"}], "block_id": ""}'
+	local input=$(
+		cat <<-'EOF'
+			{
+			  "elements": [
+			    {
+			      "type": "plain_text",
+			      "text": "Test"
+			    }
+			  ],
+			  "block_id": ""
+			}
+		EOF
+	)
 	run create_context <<<"$input"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.type == "context"' >/dev/null
@@ -124,7 +204,19 @@ teardown() {
 }
 
 @test "create_context:: null block_id is ignored" {
-	local input='{"elements": [{"type": "plain_text", "text": "Test"}], "block_id": null}'
+	local input=$(
+		cat <<-'EOF'
+			{
+			  "elements": [
+			    {
+			      "type": "plain_text",
+			      "text": "Test"
+			    }
+			  ],
+			  "block_id": null
+			}
+		EOF
+	)
 	run create_context <<<"$input"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.type == "context"' >/dev/null

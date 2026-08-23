@@ -82,7 +82,27 @@ teardown() {
 ########################################################
 
 create_test_payload() {
-	local blocks_config='[{"rich-text": {"elements": [{"type": "rich_text_section", "elements": [{"type": "text", "text": "test message"}]}]}}]'
+	local blocks_config=$(
+		cat <<-'EOF'
+			[
+			  {
+			    "rich-text": {
+			      "elements": [
+			        {
+			          "type": "rich_text_section",
+			          "elements": [
+			            {
+			              "type": "text",
+			              "text": "test message"
+			            }
+			          ]
+			        }
+			      ]
+			    }
+			  }
+			]
+		EOF
+	)
 
 	jq -n \
 		--arg token "$SLACK_BOT_USER_OAUTH_TOKEN" \

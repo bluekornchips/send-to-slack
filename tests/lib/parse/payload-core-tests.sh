@@ -565,7 +565,24 @@ teardown() {
 
 @test "parse_payload:: params.raw" {
 	local raw_params
-	raw_params='{"channel": "raw-channel", "blocks": [{"section": {"type": "text", "text": {"type": "plain_text", "text": "Raw message"}}}]}'
+	raw_params=$(
+		cat <<-'EOF'
+			{
+			  "channel": "raw-channel",
+			  "blocks": [
+			    {
+			      "section": {
+			        "type": "text",
+			        "text": {
+			          "type": "plain_text",
+			          "text": "Raw message"
+			        }
+			      }
+			    }
+			  ]
+			}
+		EOF
+	)
 
 	local test_payload
 	test_payload=$(jq -n \

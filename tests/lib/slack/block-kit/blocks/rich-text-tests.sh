@@ -61,21 +61,50 @@ teardown() {
 }
 
 @test "create_rich_text:: missing elements" {
-	run create_rich_text <<<'{"block_id": "test_id"}'
+	run create_rich_text <<<"$(
+		cat <<-'EOF'
+			{
+			  "block_id": "test_id"
+			}
+		EOF
+	)"
 
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "elements field is required"
 }
 
 @test "create_rich_text:: with block_id" {
-	run create_rich_text <<<'{"block_id": "test_id", "elements": [{"type": "text", "text": "Hello, world!"}]}'
+	run create_rich_text <<<"$(
+		cat <<-'EOF'
+			{
+			  "block_id": "test_id",
+			  "elements": [
+			    {
+			      "type": "text",
+			      "text": "Hello, world!"
+			    }
+			  ]
+			}
+		EOF
+	)"
 
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq '.block_id == "test_id"' >/dev/null
 }
 
 @test "create_rich_text:: with elements" {
-	run create_rich_text <<<'{"elements": [{"type": "text", "text": "Hello, world!"}]}'
+	run create_rich_text <<<"$(
+		cat <<-'EOF'
+			{
+			  "elements": [
+			    {
+			      "type": "text",
+			      "text": "Hello, world!"
+			    }
+			  ]
+			}
+		EOF
+	)"
 
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq '.elements[0].text == "Hello, world!"' >/dev/null

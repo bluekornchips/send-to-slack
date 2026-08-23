@@ -19,11 +19,25 @@ MAX_BLOCK_ID_LENGTH=255
 ########################################################
 # Example Strings
 ########################################################
-EXAMPLE_VIDEO_BLOCK='{"video_url": "https://www.youtube.com/embed/pWTSK5waNs8", "thumbnail_url": "https://i.ytimg.com/vi/pWTSK5waNs8/hqdefault.jpg", "alt_text": "Example video", "title": {"type": "plain_text", "text": "Example Video"}}'
+EXAMPLE_VIDEO_BLOCK=$(
+	cat <<-'EOF'
+		{
+		  "video_url": "https://www.youtube.com/embed/pWTSK5waNs8",
+		  "thumbnail_url": "https://i.ytimg.com/vi/pWTSK5waNs8/hqdefault.jpg",
+		  "alt_text": "Example video",
+		  "title": {
+		    "type": "plain_text",
+		    "text": "Example Video"
+		  }
+		}
+	EOF
+)
 
-# Read optional string field from input JSON. Outputs value to stdout, empty if absent or null.
+# Read optional string field from input JSON. Outputs value to stdout, empty if
+# absent or null.
 # Returns 1 on validation error (e.g. over max length).
-# Arguments: $1 input JSON, $2 jq path, $3 field name for errors, $4 optional max length.
+# Arguments: $1 input JSON, $2 jq path, $3 field name for errors, $4 optional
+# max length.
 _video_optional_string() {
 	local input="$1"
 	local jq_path="$2"
@@ -62,7 +76,8 @@ _video_optional_string() {
 	return 0
 }
 
-# Read optional description object from input JSON. Outputs jq .description to stdout if valid.
+# Read optional description object from input JSON. Outputs jq .description to
+# stdout if valid.
 # Outputs nothing if absent. Returns 1 on validation error.
 _video_optional_description() {
 	local input="$1"
@@ -80,12 +95,10 @@ _video_optional_description() {
 	local description_text
 	description_text=$(jq -r '.description.text // empty' <<<"$input")
 	if [[ -z "$description_text" ]] || [[ "$description_text" == "null" ]]; then
-		echo "create_video:: description.text field is required when description is present" >&2
 		return 1
 	fi
 
 	if [[ "${#description_text}" -gt "$MAX_DESCRIPTION_TEXT_LENGTH" ]]; then
-		echo "create_video:: description text must be $MAX_DESCRIPTION_TEXT_LENGTH characters or less" >&2
 		return 1
 	fi
 
@@ -174,7 +187,6 @@ create_video() {
 	fi
 
 	if [[ "${#alt_text}" -gt "$MAX_ALT_TEXT_LENGTH" ]]; then
-		echo "create_video:: alt_text must be $MAX_ALT_TEXT_LENGTH characters or less" >&2
 		return 1
 	fi
 
@@ -208,7 +220,6 @@ create_video() {
 	fi
 
 	if [[ "${#title_text}" -gt "$MAX_TITLE_TEXT_LENGTH" ]]; then
-		echo "create_video:: title text must be $MAX_TITLE_TEXT_LENGTH characters or less" >&2
 		return 1
 	fi
 
@@ -216,22 +227,27 @@ create_video() {
 	title_json=$(jq '.title' <<<"$input")
 
 	local title_url
-	title_url=$(_video_optional_string "$input" '.title_url' 'title_url') || return 1
+	title_url=$(_video_optional_string "$input" '.title_url' 'title_url') \
+		|| return 1
 
 	local description_json
 	description_json=$(_video_optional_description "$input") || return 1
 
 	local author_name
-	author_name=$(_video_optional_string "$input" '.author_name' 'author_name' "$MAX_AUTHOR_NAME_LENGTH") || return 1
+	author_name=$(_video_optional_string "$input" '.author_name' 'author_name' \
+		"$MAX_AUTHOR_NAME_LENGTH") || return 1
 
 	local provider_name
-	provider_name=$(_video_optional_string "$input" '.provider_name' 'provider_name' "$MAX_PROVIDER_NAME_LENGTH") || return 1
+	provider_name=$(_video_optional_string "$input" '.provider_name' \
+		'provider_name' "$MAX_PROVIDER_NAME_LENGTH") || return 1
 
 	local provider_icon_url
-	provider_icon_url=$(_video_optional_string "$input" '.provider_icon_url' 'provider_icon_url') || return 1
+	provider_icon_url=$(_video_optional_string "$input" '.provider_icon_url' \
+		'provider_icon_url') || return 1
 
 	local block_id
-	block_id=$(_video_optional_string "$input" '.block_id' 'block_id' "$MAX_BLOCK_ID_LENGTH") || return 1
+	block_id=$(_video_optional_string "$input" '.block_id' 'block_id' \
+		"$MAX_BLOCK_ID_LENGTH") || return 1
 
 	local block
 	block=$(jq -n \
@@ -240,26 +256,34 @@ create_video() {
 		--arg thumbnail_url "$thumbnail_url" \
 		--arg alt_text "$alt_text" \
 		--argjson title "$title_json" \
-		'{ type: $block_type, video_url: $video_url, thumbnail_url: $thumbnail_url, alt_text: $alt_text, title: $title }')
+		'{ type: $block_type, video_url: $video_url,' \
+		' thumbnail_url: $thumbnail_url, alt_text: $alt_text,' \
+		' title: $title }')
 
 	if [[ -n "$title_url" ]] && [[ "$title_url" != "null" ]]; then
-		block=$(jq --arg title_url "$title_url" '. + {title_url: $title_url}' <<<"$block")
+		block=$(jq --arg title_url "$title_url" '. + {title_url: $title_url}' \
+			<<<"$block")
 	fi
 
 	if [[ -n "$description_json" ]] && [[ "$description_json" != "null" ]]; then
-		block=$(jq --argjson description "$description_json" '. + {description: $description}' <<<"$block")
+		block=$(jq --argjson description "$description_json" \
+			'. + {description: $description}' <<<"$block")
 	fi
 
 	if [[ -n "$author_name" ]] && [[ "$author_name" != "null" ]]; then
-		block=$(jq --arg author_name "$author_name" '. + {author_name: $author_name}' <<<"$block")
+		block=$(jq --arg author_name "$author_name" \
+			'. + {author_name: $author_name}' \
+			<<<"$block")
 	fi
 
 	if [[ -n "$provider_name" ]] && [[ "$provider_name" != "null" ]]; then
-		block=$(jq --arg provider_name "$provider_name" '. + {provider_name: $provider_name}' <<<"$block")
+		block=$(jq --arg provider_name "$provider_name" \
+			'. + {provider_name: $provider_name}' <<<"$block")
 	fi
 
 	if [[ -n "$provider_icon_url" ]] && [[ "$provider_icon_url" != "null" ]]; then
-		block=$(jq --arg provider_icon_url "$provider_icon_url" '. + {provider_icon_url: $provider_icon_url}' <<<"$block")
+		block=$(jq --arg provider_icon_url "$provider_icon_url" \
+			'. + {provider_icon_url: $provider_icon_url}' <<<"$block")
 	fi
 
 	if [[ -n "$block_id" ]] && [[ "$block_id" != "null" ]]; then

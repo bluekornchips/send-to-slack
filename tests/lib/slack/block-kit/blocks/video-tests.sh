@@ -55,7 +55,18 @@ teardown() {
 
 @test "create_video:: missing video_url field" {
 	local test_input
-	test_input='{"thumbnail_url": "https://example.com/thumb.jpg", "alt_text": "Test video", "title": {"type": "plain_text", "text": "Video"}}'
+	test_input=$(
+		cat <<-'EOF'
+			{
+			  "thumbnail_url": "https://example.com/thumb.jpg",
+			  "alt_text": "Test video",
+			  "title": {
+			    "type": "plain_text",
+			    "text": "Video"
+			  }
+			}
+		EOF
+	)
 	run create_video <<<"$test_input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "video_url field is required"
@@ -63,7 +74,18 @@ teardown() {
 
 @test "create_video:: missing thumbnail_url field" {
 	local test_input
-	test_input='{"video_url": "https://example.com/video.mp4", "alt_text": "Test video", "title": {"type": "plain_text", "text": "Video"}}'
+	test_input=$(
+		cat <<-'EOF'
+			{
+			  "video_url": "https://example.com/video.mp4",
+			  "alt_text": "Test video",
+			  "title": {
+			    "type": "plain_text",
+			    "text": "Video"
+			  }
+			}
+		EOF
+	)
 	run create_video <<<"$test_input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "thumbnail_url field is required"
@@ -71,7 +93,18 @@ teardown() {
 
 @test "create_video:: missing alt_text field" {
 	local test_input
-	test_input='{"video_url": "https://example.com/video.mp4", "thumbnail_url": "https://example.com/thumb.jpg", "title": {"type": "plain_text", "text": "Video"}}'
+	test_input=$(
+		cat <<-'EOF'
+			{
+			  "video_url": "https://example.com/video.mp4",
+			  "thumbnail_url": "https://example.com/thumb.jpg",
+			  "title": {
+			    "type": "plain_text",
+			    "text": "Video"
+			  }
+			}
+		EOF
+	)
 	run create_video <<<"$test_input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "alt_text field is required"
@@ -79,7 +112,15 @@ teardown() {
 
 @test "create_video:: missing title field" {
 	local test_input
-	test_input='{"video_url": "https://example.com/video.mp4", "thumbnail_url": "https://example.com/thumb.jpg", "alt_text": "Test video"}'
+	test_input=$(
+		cat <<-'EOF'
+			{
+			  "video_url": "https://example.com/video.mp4",
+			  "thumbnail_url": "https://example.com/thumb.jpg",
+			  "alt_text": "Test video"
+			}
+		EOF
+	)
 	run create_video <<<"$test_input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "title field is required"
@@ -87,7 +128,19 @@ teardown() {
 
 @test "create_video:: empty video_url" {
 	local test_input
-	test_input='{"video_url": "", "thumbnail_url": "https://example.com/thumb.jpg", "alt_text": "Test video", "title": {"type": "plain_text", "text": "Video"}}'
+	test_input=$(
+		cat <<-'EOF'
+			{
+			  "video_url": "",
+			  "thumbnail_url": "https://example.com/thumb.jpg",
+			  "alt_text": "Test video",
+			  "title": {
+			    "type": "plain_text",
+			    "text": "Video"
+			  }
+			}
+		EOF
+	)
 	run create_video <<<"$test_input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "video_url field is required"
@@ -95,7 +148,19 @@ teardown() {
 
 @test "create_video:: empty thumbnail_url" {
 	local test_input
-	test_input='{"video_url": "https://example.com/video.mp4", "thumbnail_url": "", "alt_text": "Test video", "title": {"type": "plain_text", "text": "Video"}}'
+	test_input=$(
+		cat <<-'EOF'
+			{
+			  "video_url": "https://example.com/video.mp4",
+			  "thumbnail_url": "",
+			  "alt_text": "Test video",
+			  "title": {
+			    "type": "plain_text",
+			    "text": "Video"
+			  }
+			}
+		EOF
+	)
 	run create_video <<<"$test_input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "thumbnail_url field is required"
@@ -103,7 +168,19 @@ teardown() {
 
 @test "create_video:: empty alt_text" {
 	local test_input
-	test_input='{"video_url": "https://example.com/video.mp4", "thumbnail_url": "https://example.com/thumb.jpg", "alt_text": "", "title": {"type": "plain_text", "text": "Video"}}'
+	test_input=$(
+		cat <<-'EOF'
+			{
+			  "video_url": "https://example.com/video.mp4",
+			  "thumbnail_url": "https://example.com/thumb.jpg",
+			  "alt_text": "",
+			  "title": {
+			    "type": "plain_text",
+			    "text": "Video"
+			  }
+			}
+		EOF
+	)
 	run create_video <<<"$test_input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "alt_text field is required"
@@ -205,7 +282,19 @@ teardown() {
 
 @test "create_video:: invalid title type" {
 	local test_input
-	test_input='{"video_url": "https://example.com/video.mp4", "thumbnail_url": "https://example.com/thumb.jpg", "alt_text": "Test video", "title": {"type": "mrkdwn", "text": "Video"}}'
+	test_input=$(
+		cat <<-'EOF'
+			{
+			  "video_url": "https://example.com/video.mp4",
+			  "thumbnail_url": "https://example.com/thumb.jpg",
+			  "alt_text": "Test video",
+			  "title": {
+			    "type": "mrkdwn",
+			    "text": "Video"
+			  }
+			}
+		EOF
+	)
 	run create_video <<<"$test_input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "title type must be plain_text"
@@ -213,7 +302,23 @@ teardown() {
 
 @test "create_video:: invalid description type" {
 	local test_input
-	test_input='{"video_url": "https://example.com/video.mp4", "thumbnail_url": "https://example.com/thumb.jpg", "alt_text": "Test video", "title": {"type": "plain_text", "text": "Video"}, "description": {"type": "mrkdwn", "text": "Description"}}'
+	test_input=$(
+		cat <<-'EOF'
+			{
+			  "video_url": "https://example.com/video.mp4",
+			  "thumbnail_url": "https://example.com/thumb.jpg",
+			  "alt_text": "Test video",
+			  "title": {
+			    "type": "plain_text",
+			    "text": "Video"
+			  },
+			  "description": {
+			    "type": "mrkdwn",
+			    "text": "Description"
+			  }
+			}
+		EOF
+	)
 	run create_video <<<"$test_input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "description type must be plain_text"
@@ -221,7 +326,23 @@ teardown() {
 
 @test "create_video:: description present but empty text" {
 	local test_input
-	test_input='{"video_url": "https://example.com/video.mp4", "thumbnail_url": "https://example.com/thumb.jpg", "alt_text": "Test video", "title": {"type": "plain_text", "text": "Video"}, "description": {"type": "plain_text", "text": ""}}'
+	test_input=$(
+		cat <<-'EOF'
+			{
+			  "video_url": "https://example.com/video.mp4",
+			  "thumbnail_url": "https://example.com/thumb.jpg",
+			  "alt_text": "Test video",
+			  "title": {
+			    "type": "plain_text",
+			    "text": "Video"
+			  },
+			  "description": {
+			    "type": "plain_text",
+			    "text": ""
+			  }
+			}
+		EOF
+	)
 	run create_video <<<"$test_input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "description.text field is required when description is present"
@@ -229,7 +350,19 @@ teardown() {
 
 @test "create_video:: basic video block" {
 	local test_input
-	test_input='{"video_url": "https://example.com/video.mp4", "thumbnail_url": "https://example.com/thumb.jpg", "alt_text": "Test video", "title": {"type": "plain_text", "text": "Video Title"}}'
+	test_input=$(
+		cat <<-'EOF'
+			{
+			  "video_url": "https://example.com/video.mp4",
+			  "thumbnail_url": "https://example.com/thumb.jpg",
+			  "alt_text": "Test video",
+			  "title": {
+			    "type": "plain_text",
+			    "text": "Video Title"
+			  }
+			}
+		EOF
+	)
 	run create_video <<<"$test_input"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.type == "video"' >/dev/null
@@ -241,7 +374,23 @@ teardown() {
 
 @test "create_video:: with description" {
 	local test_input
-	test_input='{"video_url": "https://example.com/video.mp4", "thumbnail_url": "https://example.com/thumb.jpg", "alt_text": "Test video", "title": {"type": "plain_text", "text": "Video Title"}, "description": {"type": "plain_text", "text": "Video description"}}'
+	test_input=$(
+		cat <<-'EOF'
+			{
+			  "video_url": "https://example.com/video.mp4",
+			  "thumbnail_url": "https://example.com/thumb.jpg",
+			  "alt_text": "Test video",
+			  "title": {
+			    "type": "plain_text",
+			    "text": "Video Title"
+			  },
+			  "description": {
+			    "type": "plain_text",
+			    "text": "Video description"
+			  }
+			}
+		EOF
+	)
 	run create_video <<<"$test_input"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.description.type == "plain_text"' >/dev/null
@@ -250,7 +399,21 @@ teardown() {
 
 @test "create_video:: with provider info" {
 	local test_input
-	test_input='{"video_url": "https://example.com/video.mp4", "thumbnail_url": "https://example.com/thumb.jpg", "alt_text": "Test video", "title": {"type": "plain_text", "text": "Video Title"}, "provider_name": "YouTube", "provider_icon_url": "https://example.com/icon.png"}'
+	test_input=$(
+		cat <<-'EOF'
+			{
+			  "video_url": "https://example.com/video.mp4",
+			  "thumbnail_url": "https://example.com/thumb.jpg",
+			  "alt_text": "Test video",
+			  "title": {
+			    "type": "plain_text",
+			    "text": "Video Title"
+			  },
+			  "provider_name": "YouTube",
+			  "provider_icon_url": "https://example.com/icon.png"
+			}
+		EOF
+	)
 	run create_video <<<"$test_input"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.provider_name == "YouTube"' >/dev/null
@@ -259,7 +422,20 @@ teardown() {
 
 @test "create_video:: with author info" {
 	local test_input
-	test_input='{"video_url": "https://example.com/video.mp4", "thumbnail_url": "https://example.com/thumb.jpg", "alt_text": "Test video", "title": {"type": "plain_text", "text": "Video Title"}, "author_name": "John Doe"}'
+	test_input=$(
+		cat <<-'EOF'
+			{
+			  "video_url": "https://example.com/video.mp4",
+			  "thumbnail_url": "https://example.com/thumb.jpg",
+			  "alt_text": "Test video",
+			  "title": {
+			    "type": "plain_text",
+			    "text": "Video Title"
+			  },
+			  "author_name": "John Doe"
+			}
+		EOF
+	)
 	run create_video <<<"$test_input"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.author_name == "John Doe"' >/dev/null
@@ -267,7 +443,20 @@ teardown() {
 
 @test "create_video:: with title_url" {
 	local test_input
-	test_input='{"video_url": "https://example.com/video.mp4", "thumbnail_url": "https://example.com/thumb.jpg", "alt_text": "Test video", "title": {"type": "plain_text", "text": "Video Title"}, "title_url": "https://example.com/video"}'
+	test_input=$(
+		cat <<-'EOF'
+			{
+			  "video_url": "https://example.com/video.mp4",
+			  "thumbnail_url": "https://example.com/thumb.jpg",
+			  "alt_text": "Test video",
+			  "title": {
+			    "type": "plain_text",
+			    "text": "Video Title"
+			  },
+			  "title_url": "https://example.com/video"
+			}
+		EOF
+	)
 	run create_video <<<"$test_input"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.title_url == "https://example.com/video"' >/dev/null
@@ -275,7 +464,20 @@ teardown() {
 
 @test "create_video:: with block_id" {
 	local test_input
-	test_input='{"video_url": "https://example.com/video.mp4", "thumbnail_url": "https://example.com/thumb.jpg", "alt_text": "Test video", "title": {"type": "plain_text", "text": "Video Title"}, "block_id": "video_123"}'
+	test_input=$(
+		cat <<-'EOF'
+			{
+			  "video_url": "https://example.com/video.mp4",
+			  "thumbnail_url": "https://example.com/thumb.jpg",
+			  "alt_text": "Test video",
+			  "title": {
+			    "type": "plain_text",
+			    "text": "Video Title"
+			  },
+			  "block_id": "video_123"
+			}
+		EOF
+	)
 	run create_video <<<"$test_input"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.block_id == "video_123"' >/dev/null
@@ -283,7 +485,28 @@ teardown() {
 
 @test "create_video:: with all fields" {
 	local test_input
-	test_input='{"video_url": "https://example.com/video.mp4", "thumbnail_url": "https://example.com/thumb.jpg", "alt_text": "Test video", "title": {"type": "plain_text", "text": "Video Title"}, "title_url": "https://example.com/video", "description": {"type": "plain_text", "text": "Description"}, "author_name": "John Doe", "provider_name": "YouTube", "provider_icon_url": "https://example.com/icon.png", "block_id": "video_123"}'
+	test_input=$(
+		cat <<-'EOF'
+			{
+			  "video_url": "https://example.com/video.mp4",
+			  "thumbnail_url": "https://example.com/thumb.jpg",
+			  "alt_text": "Test video",
+			  "title": {
+			    "type": "plain_text",
+			    "text": "Video Title"
+			  },
+			  "title_url": "https://example.com/video",
+			  "description": {
+			    "type": "plain_text",
+			    "text": "Description"
+			  },
+			  "author_name": "John Doe",
+			  "provider_name": "YouTube",
+			  "provider_icon_url": "https://example.com/icon.png",
+			  "block_id": "video_123"
+			}
+		EOF
+	)
 	run create_video <<<"$test_input"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.type == "video"' >/dev/null
@@ -305,7 +528,13 @@ teardown() {
 
 @test "_video_optional_string:: field absent outputs empty and returns 0" {
 	local input
-	input='{"foo": "bar"}'
+	input=$(
+		cat <<-'EOF'
+			{
+			  "foo": "bar"
+			}
+		EOF
+	)
 	run _video_optional_string "$input" '.title_url' 'title_url'
 	[[ "$status" -eq 0 ]]
 	[[ "$output" == "" ]]
@@ -313,7 +542,13 @@ teardown() {
 
 @test "_video_optional_string:: field null outputs empty and returns 0" {
 	local input
-	input='{"title_url": null}'
+	input=$(
+		cat <<-'EOF'
+			{
+			  "title_url": null
+			}
+		EOF
+	)
 	run _video_optional_string "$input" '.title_url' 'title_url'
 	[[ "$status" -eq 0 ]]
 	[[ "$output" == "" ]]
@@ -321,7 +556,13 @@ teardown() {
 
 @test "_video_optional_string:: field present outputs value and returns 0" {
 	local input
-	input='{"title_url": "https://example.com/video"}'
+	input=$(
+		cat <<-'EOF'
+			{
+			  "title_url": "https://example.com/video"
+			}
+		EOF
+	)
 	run _video_optional_string "$input" '.title_url' 'title_url'
 	[[ "$status" -eq 0 ]]
 	[[ "$output" == "https://example.com/video" ]]
@@ -349,7 +590,17 @@ teardown() {
 
 @test "_video_optional_description:: description absent returns 0 and outputs nothing" {
 	local input
-	input='{"video_url": "x", "title": {"type": "plain_text", "text": "T"}}'
+	input=$(
+		cat <<-'EOF'
+			{
+			  "video_url": "x",
+			  "title": {
+			    "type": "plain_text",
+			    "text": "T"
+			  }
+			}
+		EOF
+	)
 	run _video_optional_description "$input"
 	[[ "$status" -eq 0 ]]
 	[[ "$output" == "" ]]
@@ -357,7 +608,16 @@ teardown() {
 
 @test "_video_optional_description:: description valid outputs JSON and returns 0" {
 	local input
-	input='{"description": {"type": "plain_text", "text": "A description"}}'
+	input=$(
+		cat <<-'EOF'
+			{
+			  "description": {
+			    "type": "plain_text",
+			    "text": "A description"
+			  }
+			}
+		EOF
+	)
 	run _video_optional_description "$input"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.type == "plain_text"' >/dev/null
@@ -366,7 +626,16 @@ teardown() {
 
 @test "_video_optional_description:: description wrong type returns 1" {
 	local input
-	input='{"description": {"type": "mrkdwn", "text": "Desc"}}'
+	input=$(
+		cat <<-'EOF'
+			{
+			  "description": {
+			    "type": "mrkdwn",
+			    "text": "Desc"
+			  }
+			}
+		EOF
+	)
 	run _video_optional_description "$input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "description type must be plain_text"
@@ -386,7 +655,16 @@ teardown() {
 
 @test "_video_optional_description:: description present but empty text returns 1" {
 	local input
-	input='{"description": {"type": "plain_text", "text": ""}}'
+	input=$(
+		cat <<-'EOF'
+			{
+			  "description": {
+			    "type": "plain_text",
+			    "text": ""
+			  }
+			}
+		EOF
+	)
 	run _video_optional_description "$input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "description.text field is required when description is present"

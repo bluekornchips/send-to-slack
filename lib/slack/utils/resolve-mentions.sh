@@ -3,7 +3,8 @@
 # Resolve Slack mentions and references to IDs
 #
 # Converts @user, #channel, or plain names/IDs to their Slack IDs.
-# Supports: public channels, private channels, groups, direct messages, user IDs.
+# Supports: public channels, private channels, groups, direct messages, user
+# IDs.
 #
 # API References:
 #   https://docs.slack.dev/methods/users/users.list
@@ -70,7 +71,6 @@ collect_mention_user_ids() {
 				user_id="$normalized"
 			else
 				if ! user_id=$(resolve_user_id "$normalized"); then
-					echo "collect_mention_user_ids:: could not resolve mention token: ${token}" >&2
 					continue
 				fi
 			fi
@@ -119,7 +119,6 @@ resolve_user_id() {
 	fi
 
 	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
-		echo "resolve_user_id:: SLACK_BOT_USER_OAUTH_TOKEN environment variable is required" >&2
 		return 1
 	fi
 
@@ -131,11 +130,9 @@ resolve_user_id() {
 	local pages=0
 	while true; do
 		if ((pages >= RESOLVE_MAX_PAGES)); then
-			echo "resolve_user_id:: exceeded max pages (${RESOLVE_MAX_PAGES}), aborting" >&2
 			return 1
 		fi
 		pages=$((pages + 1))
-		echo "resolve_user_id:: fetching users.list page (cursor=${cursor:-initial})" >&2
 
 		if ! api_response=$(curl -s -X GET \
 			-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
@@ -191,7 +188,8 @@ resolve_user_id() {
 
 # Resolve a channel or group mention/name to a conversation ID.
 #
-# Accepts channel mentions (#general), names (general), group mentions (#private-group),
+# Accepts channel mentions (#general), names (general), group mentions
+# (#private-group),
 # or conversation IDs (C123456, G123456, Z123456).
 # Returns the conversation ID or fails if not found.
 #
@@ -225,7 +223,6 @@ resolve_channel_id() {
 	fi
 
 	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
-		echo "resolve_channel_id:: SLACK_BOT_USER_OAUTH_TOKEN environment variable is required" >&2
 		return 1
 	fi
 
@@ -237,11 +234,9 @@ resolve_channel_id() {
 	local pages=0
 	while true; do
 		if ((pages >= RESOLVE_MAX_PAGES)); then
-			echo "resolve_channel_id:: exceeded max pages (${RESOLVE_MAX_PAGES}), aborting" >&2
 			return 1
 		fi
 		pages=$((pages + 1))
-		echo "resolve_channel_id:: fetching conversations.list page (cursor=${cursor:-initial})" >&2
 
 		if ! api_response=$(curl -s -X GET \
 			-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
@@ -279,7 +274,8 @@ resolve_channel_id() {
 		local found_id
 		found_id=$(jq -r \
 			--arg name "$channel_name" \
-			'.channels[] | select(.name == $name) | .id' <<<"$api_response" | sed -n '1p')
+			'.channels[] | select(.name == $name) | .id' <<<"$api_response" | sed -n \
+			'1p')
 
 		if [[ -n "$found_id" ]]; then
 			echo "resolve_channel_id:: found ${found_id} for #${channel_name}" >&2
@@ -326,7 +322,6 @@ resolve_dm_id() {
 	fi
 
 	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
-		echo "resolve_dm_id:: SLACK_BOT_USER_OAUTH_TOKEN environment variable is required" >&2
 		return 1
 	fi
 

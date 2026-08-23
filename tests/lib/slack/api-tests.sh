@@ -105,7 +105,13 @@ mock_curl_failure() {
 	DRY_RUN="true"
 	export DRY_RUN
 	DELIVERY_METHOD="api"
-	local payload='{"channel": "#test"}'
+	local payload=$(
+		cat <<-'EOF'
+			{
+			  "channel": "#test"
+			}
+		EOF
+	)
 
 	run send_notification "$payload"
 	[[ "$status" -eq 0 ]]
@@ -118,7 +124,13 @@ mock_curl_failure() {
 	DELIVERY_METHOD="api"
 	SLACK_BOT_USER_OAUTH_TOKEN=""
 	export SLACK_BOT_USER_OAUTH_TOKEN
-	local payload='{"channel": "#test"}'
+	local payload=$(
+		cat <<-'EOF'
+			{
+			  "channel": "#test"
+			}
+		EOF
+	)
 
 	run send_notification "$payload"
 	[[ "$status" -eq 1 ]]
@@ -146,7 +158,13 @@ mock_curl_failure() {
 	export RETRY_INITIAL_DELAY
 	SLACK_BOT_USER_OAUTH_TOKEN="test-token"
 	export SLACK_BOT_USER_OAUTH_TOKEN
-	local payload='{"channel": "#test"}'
+	local payload=$(
+		cat <<-'EOF'
+			{
+			  "channel": "#test"
+			}
+		EOF
+	)
 
 	run send_notification "$payload"
 	[[ "$status" -eq 1 ]]
@@ -162,7 +180,13 @@ mock_curl_failure() {
 	export RETRY_INITIAL_DELAY
 	SLACK_BOT_USER_OAUTH_TOKEN="test-token"
 	export SLACK_BOT_USER_OAUTH_TOKEN
-	local payload='{"channel": "#test"}'
+	local payload=$(
+		cat <<-'EOF'
+			{
+			  "channel": "#test"
+			}
+		EOF
+	)
 
 	run send_notification "$payload"
 	[[ "$status" -eq 1 ]]
@@ -185,9 +209,9 @@ mock_curl_failure() {
 		local arg
 		for arg in "$@"; do
 			case "$arg" in
-			http*)
-				printf '%s\n' "$arg" >>"$url_capture"
-				;;
+				http*)
+					printf '%s\n' "$arg" >>"$url_capture"
+					;;
 			esac
 		done
 		printf '%s\n' '{"ok": true}'
@@ -221,9 +245,9 @@ mock_curl_failure() {
 		local arg
 		for arg in "$@"; do
 			case "$arg" in
-			http*)
-				printf '%s\n' "$arg" >>"$url_capture"
-				;;
+				http*)
+					printf '%s\n' "$arg" >>"$url_capture"
+					;;
 			esac
 		done
 		printf '%s\n' '{"ok": true}'
@@ -600,7 +624,14 @@ mock_curl_permalink_failure() {
 ########################################################
 
 @test "handle_slack_api_error:: handles rate_limited error" {
-	local response='{"ok": false, "error": "rate_limited"}'
+	local response=$(
+		cat <<-'EOF'
+			{
+			  "ok": false,
+			  "error": "rate_limited"
+			}
+		EOF
+	)
 	run handle_slack_api_error "$response" "test_context"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "Rate limited"
@@ -609,7 +640,14 @@ mock_curl_permalink_failure() {
 }
 
 @test "handle_slack_api_error:: handles invalid_auth error" {
-	local response='{"ok": false, "error": "invalid_auth"}'
+	local response=$(
+		cat <<-'EOF'
+			{
+			  "ok": false,
+			  "error": "invalid_auth"
+			}
+		EOF
+	)
 	run handle_slack_api_error "$response" "test_context"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "Authentication failed"
@@ -618,7 +656,14 @@ mock_curl_permalink_failure() {
 }
 
 @test "handle_slack_api_error:: handles channel_not_found error" {
-	local response='{"ok": false, "error": "channel_not_found"}'
+	local response=$(
+		cat <<-'EOF'
+			{
+			  "ok": false,
+			  "error": "channel_not_found"
+			}
+		EOF
+	)
 	run handle_slack_api_error "$response" "test_context"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "Channel not found"
@@ -626,7 +671,14 @@ mock_curl_permalink_failure() {
 }
 
 @test "handle_slack_api_error:: handles not_in_channel error" {
-	local response='{"ok": false, "error": "not_in_channel"}'
+	local response=$(
+		cat <<-'EOF'
+			{
+			  "ok": false,
+			  "error": "not_in_channel"
+			}
+		EOF
+	)
 	run handle_slack_api_error "$response" "test_context"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "Bot is not in the specified channel"
@@ -634,7 +686,15 @@ mock_curl_permalink_failure() {
 }
 
 @test "handle_slack_api_error:: handles missing_scope error with needed scope" {
-	local response='{"ok": false, "error": "missing_scope", "needed": "channels:read"}'
+	local response=$(
+		cat <<-'EOF'
+			{
+			  "ok": false,
+			  "error": "missing_scope",
+			  "needed": "channels:read"
+			}
+		EOF
+	)
 	run handle_slack_api_error "$response" "test_context"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "Missing required OAuth scope"
@@ -642,7 +702,14 @@ mock_curl_permalink_failure() {
 }
 
 @test "handle_slack_api_error:: handles unknown error" {
-	local response='{"ok": false, "error": "unknown_error"}'
+	local response=$(
+		cat <<-'EOF'
+			{
+			  "ok": false,
+			  "error": "unknown_error"
+			}
+		EOF
+	)
 	run handle_slack_api_error "$response" "test_context"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "Slack API error: unknown_error"
@@ -650,7 +717,14 @@ mock_curl_permalink_failure() {
 }
 
 @test "handle_slack_api_error:: works without context" {
-	local response='{"ok": false, "error": "rate_limited"}'
+	local response=$(
+		cat <<-'EOF'
+			{
+			  "ok": false,
+			  "error": "rate_limited"
+			}
+		EOF
+	)
 	run handle_slack_api_error "$response"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "Rate limited"
@@ -692,9 +766,9 @@ mock_curl_permalink_failure() {
 		local arg
 		for arg in "$@"; do
 			case "$arg" in
-			http*)
-				printf '%s\n' "$arg" >>"$url_capture"
-				;;
+				http*)
+					printf '%s\n' "$arg" >>"$url_capture"
+					;;
 			esac
 		done
 		printf '%s\n' '{"ok": true, "channel": "C1", "ts": "2"}'
@@ -764,9 +838,9 @@ mock_curl_permalink_failure() {
 		local arg
 		for arg in "$@"; do
 			case "$arg" in
-			http*)
-				printf '%s\n' "$arg" >>"$url_capture"
-				;;
+				http*)
+					printf '%s\n' "$arg" >>"$url_capture"
+					;;
 			esac
 		done
 		if [[ "$*" == *"chat.getPermalink"* ]]; then

@@ -28,7 +28,7 @@ Options:
   -h, --help       Show this help message
 
 Behavior:
-  - Removes the installed send-to-slack shim when it carries the install signature
+- Removes the installed send-to-slack shim when it carries the install signature
   - Refuses system prefixes like /usr or /etc; choose a writable user path
   - No-op if the target file does not exist
 EOF
@@ -115,11 +115,11 @@ validate_prefix() {
 	fi
 
 	case "$prefix" in
-	/usr/local/*) ;;
-	/usr/* | /etc/*)
-		echo "validate_prefix:: refusing system prefix: $prefix" >&2
-		return 1
-		;;
+		/usr/local/*) ;;
+		/usr/* | /etc/*)
+			echo "validate_prefix:: refusing system prefix: $prefix" >&2
+			return 1
+			;;
 	esac
 
 	return 0
@@ -165,9 +165,11 @@ uninstall_binary() {
 		fi
 
 		# Determine install_root based on actual file location
-		if [[ "$actual_file" == /usr/local/send-to-slack/* ]] || [[ "$actual_file" == /usr/local/send-to-slack ]]; then
+		if [[ "$actual_file" == /usr/local/send-to-slack/* ]] \
+			|| [[ "$actual_file" == /usr/local/send-to-slack ]]; then
 			install_root="/usr/local/send-to-slack"
-		elif [[ "$actual_file" == "${HOME}/.local/share/send-to-slack"/* ]] || [[ "$actual_file" == "${HOME}/.local/share/send-to-slack" ]]; then
+		elif [[ "$actual_file" == "${HOME}/.local/share/send-to-slack"/* ]] || [[ 
+			"$actual_file" == "${HOME}/.local/share/send-to-slack" ]]; then
 			install_root="${HOME}/.local/share/send-to-slack"
 		fi
 
@@ -175,7 +177,6 @@ uninstall_binary() {
 		# Only check if we successfully resolved the actual file path and it exists
 		if ((force != 1)) && [[ -n "$actual_file" ]] && [[ -f "$actual_file" ]]; then
 			if ! file_has_signature "$actual_file"; then
-				echo "uninstall_binary:: missing signature, refusing removal (use --force to override): $target" >&2
 				return 1
 			fi
 		fi
@@ -186,11 +187,15 @@ uninstall_binary() {
 			return 1
 		fi
 
-		# Remove install_root only if it is a known install path and the resolved target is under it
+		# Remove install_root only if it is a known install path and the resolved
+		# target is under it
 		if [[ -n "$install_root" ]] && [[ -d "$install_root" ]]; then
 			local allowed_root
-			for allowed_root in "/usr/local/send-to-slack" "${HOME}/.local/share/send-to-slack"; do
-				if [[ "$install_root" == "$allowed_root" ]] && { [[ "$actual_file" == "$install_root"/* ]] || [[ "$actual_file" == "$install_root" ]]; }; then
+			for allowed_root in "/usr/local/send-to-slack" \
+				"${HOME}/.local/share/send-to-slack"; do
+				if [[ "$install_root" == "$allowed_root" ]] \
+					&& { [[ "$actual_file" == "$install_root"/* ]] \
+						|| [[ "$actual_file" == "$install_root" ]]; }; then
 					rm -rf "$install_root"
 					break
 				fi
@@ -203,7 +208,6 @@ uninstall_binary() {
 
 	# Regular file (not symlink)
 	if ((force != 1)) && ! file_has_signature "$target"; then
-		echo "uninstall_binary:: missing signature, refusing removal (use --force to override): $target" >&2
 		return 1
 	fi
 
@@ -226,33 +230,34 @@ main() {
 
 	while [[ $# -gt 0 ]]; do
 		case "$1" in
-		--prefix)
-			shift
-			if [[ -z "${1:-}" ]]; then
-				echo "main:: --prefix requires a value" >&2
+			--prefix)
+				shift
+				if [[ -z "${1:-}" ]]; then
+					echo "main:: --prefix requires a value" >&2
+					return 1
+				fi
+				prefix="$1"
+				;;
+			--prefix=*)
+				prefix="${1#*=}"
+				;;
+			--force)
+				force=1
+				;;
+			-h | --help)
+				usage
+				return 0
+				;;
+			*)
+				echo "main:: unknown option: $1" >&2
 				return 1
-			fi
-			prefix="$1"
-			;;
-		--prefix=*)
-			prefix="${1#*=}"
-			;;
-		--force)
-			force=1
-			;;
-		-h | --help)
-			usage
-			return 0
-			;;
-		*)
-			echo "main:: unknown option: $1" >&2
-			return 1
-			;;
+				;;
 		esac
 		shift
 	done
 
-	# Auto-detect installation location if using default prefix and binary not found there
+	# Auto-detect installation location if using default prefix and binary not
+	# found there
 	if [[ "$prefix" == "$DEFAULT_PREFIX" ]]; then
 		detected_path=$(command -v "$INSTALL_BASENAME" 2>/dev/null)
 		if [[ -n "$detected_path" ]] && [[ "$detected_path" != "${DEFAULT_PREFIX}/${INSTALL_BASENAME}" ]]; then

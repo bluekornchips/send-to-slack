@@ -17,7 +17,23 @@ DOC_URL_RICH_TEXT_BLOCK="https://docs.slack.dev/reference/block-kit/blocks/rich-
 ########################################################
 # Example Strings
 ########################################################
-EXAMPLE_RICH_TEXT_BLOCK='{"elements": [{"type": "rich_text_section", "elements": [{"type": "text", "text": "Content"}]}]}'
+EXAMPLE_RICH_TEXT_BLOCK=$(
+	cat <<-'EOF'
+		{
+		  "elements": [
+		    {
+		      "type": "rich_text_section",
+		      "elements": [
+		        {
+		          "type": "text",
+		          "text": "Content"
+		        }
+		      ]
+		    }
+		  ]
+		}
+	EOF
+)
 
 # Upload the content as a file when it exceeds the max allowed characters.
 #
@@ -25,7 +41,8 @@ EXAMPLE_RICH_TEXT_BLOCK='{"elements": [{"type": "rich_text_section", "elements":
 # - $1 - extracted_text: plain text that exceeded MAX_RICH_TEXT_CHARS
 #
 # Side Effects:
-# - Writes extracted text to a temp file under _SLACK_WORKSPACE, invokes file upload script
+# - Writes extracted text to a temp file under _SLACK_WORKSPACE, invokes file
+# upload script
 #
 # Outputs:
 # - Block JSON for the file attachment to stdout
@@ -41,7 +58,9 @@ handle_oversize_text() {
 	# Write the extracted text to the file
 	echo "$extracted_text" >"$file_path"
 
-	local text="Notification content exceeded the max allowed characters of $MAX_RICH_TEXT_CHARS. Content has been uploaded and is available as a file."
+	local text
+	text="Notification content exceeded the max allowed characters of \
+${MAX_RICH_TEXT_CHARS}. Content has been uploaded and is available as a file."
 
 	local upload_script_path
 	if [[ "$UPLOAD_FILE_SCRIPT" = /* ]]; then
@@ -82,12 +101,10 @@ handle_oversize_text() {
 	fi
 
 	if [[ ! -f "$upload_script_path" ]]; then
-		echo "handle_oversize_text:: file upload script not found: $upload_script_path" >&2
 		return 1
 	fi
 
 	if [[ ! -r "$upload_script_path" ]]; then
-		echo "handle_oversize_text:: file upload script not readable: $upload_script_path" >&2
 		return 1
 	fi
 
@@ -167,8 +184,6 @@ create_rich_text() {
 	# If the text length exceeds the max allowed characters, instead we need
 	# to upload the content as a file.
 	if ((text_length > MAX_RICH_TEXT_CHARS)); then
-		echo "create_rich_text:: text length ($text_length) exceeds maximum of $MAX_RICH_TEXT_CHARS characters" >&2
-		echo "create_rich_text:: See rich text block limits: $DOC_URL_RICH_TEXT_BLOCK" >&2
 		handle_oversize_text "$extracted_text"
 		return $?
 	fi

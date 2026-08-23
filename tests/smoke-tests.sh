@@ -300,8 +300,8 @@ smoke_parse_payload_capture() {
 	TABLE_BLOCK_OUTPUT_FILE="$table_output_file"
 	export TABLE_BLOCK_OUTPUT_FILE
 
-	jq -n '[range(100) as $r | [range(20) as $c | {type: "raw_text", text: "r\($r)c\($c)"}]] | {rows: .}' |
-		run create_table
+	jq -n '[range(100) as $r | [range(20) as $c | {type: "raw_text", text: "r\($r)c\($c)"}]] | {rows: .}' \
+		| run create_table
 	[[ "$status" -eq 0 ]]
 
 	local table_output

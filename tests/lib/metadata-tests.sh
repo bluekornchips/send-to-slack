@@ -60,7 +60,14 @@ setup() {
 
 @test "create_metadata:: creates metadata when show_metadata is true" {
 	SHOW_PAYLOAD="false"
-	local payload='{"channel": "#test", "text": "test"}'
+	local payload=$(
+		cat <<-'EOF'
+			{
+			  "channel": "#test",
+			  "text": "test"
+			}
+		EOF
+	)
 
 	create_metadata "$payload"
 	[[ -n "$METADATA" ]]
@@ -69,7 +76,14 @@ setup() {
 
 @test "create_metadata:: includes payload when show_payload is true" {
 	SHOW_PAYLOAD="true"
-	local payload='{"channel": "#test", "text": "test"}'
+	local payload=$(
+		cat <<-'EOF'
+			{
+			  "channel": "#test",
+			  "text": "test"
+			}
+		EOF
+	)
 
 	create_metadata "$payload"
 	[[ -n "$METADATA" ]]
@@ -78,7 +92,14 @@ setup() {
 
 @test "create_metadata:: operational fields only when show_metadata is false" {
 	SHOW_METADATA="false"
-	local payload='{"channel": "#test", "text": "test"}'
+	local payload=$(
+		cat <<-'EOF'
+			{
+			  "channel": "#test",
+			  "text": "test"
+			}
+		EOF
+	)
 
 	create_metadata "$payload"
 	[[ "$METADATA" == "[]" ]]
@@ -86,7 +107,14 @@ setup() {
 
 @test "create_metadata:: emits message_ts and channel when show_metadata is false" {
 	SHOW_METADATA="false"
-	local payload='{"channel": "#test", "text": "test"}'
+	local payload=$(
+		cat <<-'EOF'
+			{
+			  "channel": "#test",
+			  "text": "test"
+			}
+		EOF
+	)
 
 	create_metadata "$payload" "1712131234.567890" "C01234567"
 	echo "$METADATA" | jq -e '.[] | select(.name == "message_ts") | .value == "1712131234.567890"' >/dev/null
@@ -97,7 +125,14 @@ setup() {
 @test "create_metadata:: includes operational fields before debug fields when show_metadata is true" {
 	SHOW_METADATA="true"
 	SHOW_PAYLOAD="false"
-	local payload='{"channel": "#test", "text": "test"}'
+	local payload=$(
+		cat <<-'EOF'
+			{
+			  "channel": "#test",
+			  "text": "test"
+			}
+		EOF
+	)
 
 	create_metadata "$payload" "99.000001" "C999"
 	echo "$METADATA" | jq -e '.[0].name == "message_ts"' >/dev/null
@@ -142,7 +177,22 @@ setup() {
 	SHOW_PAYLOAD="true"
 
 	local payload
-	payload='{"channel":"#test","blocks":[{"type":"section","text":{"type":"mrkdwn","text":"hello"}}]}'
+	payload=$(
+		cat <<-'EOF'
+			{
+			  "channel": "#test",
+			  "blocks": [
+			    {
+			      "type": "section",
+			      "text": {
+			        "type": "mrkdwn",
+			        "text": "hello"
+			      }
+			    }
+			  ]
+			}
+		EOF
+	)
 
 	create_metadata "$payload"
 	echo "$METADATA" | jq -e '.[] | select(.name == "payload") | .value | fromjson | .blocks | length > 0' >/dev/null
@@ -154,7 +204,11 @@ setup() {
 ########################################################
 
 @test "emit_concourse_output:: stdout JSON has version timestamp only when message ts empty" {
-	METADATA='[]'
+	METADATA=$(
+		cat <<-'EOF'
+			[]
+		EOF
+	)
 
 	run emit_concourse_output "2026-04-05T12:00:00Z" ""
 	[[ "$status" -eq 0 ]]
@@ -164,7 +218,16 @@ setup() {
 }
 
 @test "emit_concourse_output:: stdout JSON includes message_ts when provided" {
-	METADATA='[{"name":"x","value":"y"}]'
+	METADATA=$(
+		cat <<-'EOF'
+			[
+			  {
+			    "name": "x",
+			    "value": "y"
+			  }
+			]
+		EOF
+	)
 
 	run emit_concourse_output "2026-04-05T12:00:00Z" "123.456"
 	[[ "$status" -eq 0 ]]
@@ -174,7 +237,11 @@ setup() {
 }
 
 @test "emit_concourse_output:: writes to SEND_TO_SLACK_OUTPUT when set" {
-	METADATA='[]'
+	METADATA=$(
+		cat <<-'EOF'
+			[]
+		EOF
+	)
 	local out_file
 	out_file=$(mktemp -t send-to-slack-metadata-out.XXXXXX)
 	export SEND_TO_SLACK_OUTPUT="$out_file"

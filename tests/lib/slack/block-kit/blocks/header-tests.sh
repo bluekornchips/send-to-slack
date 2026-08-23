@@ -108,7 +108,13 @@ send_request_to_slack() {
 
 @test "create_header:: missing text field" {
 	local test_input
-	test_input='{"block_id": "test"}'
+	test_input=$(
+		cat <<-'EOF'
+			{
+			  "block_id": "test"
+			}
+		EOF
+	)
 	run create_header <<<"$test_input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "text field is required"
@@ -116,7 +122,16 @@ send_request_to_slack() {
 
 @test "create_header:: invalid text type" {
 	local test_input
-	test_input='{"text": {"type": "mrkdwn", "text": "Test Header"}}'
+	test_input=$(
+		cat <<-'EOF'
+			{
+			  "text": {
+			    "type": "mrkdwn",
+			    "text": "Test Header"
+			  }
+			}
+		EOF
+	)
 	run create_header <<<"$test_input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "text type must be plain_text"
@@ -124,7 +139,15 @@ send_request_to_slack() {
 
 @test "create_header:: missing text content" {
 	local test_input
-	test_input='{"text": {"type": "plain_text"}}'
+	test_input=$(
+		cat <<-'EOF'
+			{
+			  "text": {
+			    "type": "plain_text"
+			  }
+			}
+		EOF
+	)
 	run create_header <<<"$test_input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "text.text field is required"
@@ -132,7 +155,16 @@ send_request_to_slack() {
 
 @test "create_header:: empty text content" {
 	local test_input
-	test_input='{"text": {"type": "plain_text", "text": ""}}'
+	test_input=$(
+		cat <<-'EOF'
+			{
+			  "text": {
+			    "type": "plain_text",
+			    "text": ""
+			  }
+			}
+		EOF
+	)
 	run create_header <<<"$test_input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "text.text field is required"
@@ -151,7 +183,16 @@ send_request_to_slack() {
 
 @test "create_header:: basic header" {
 	local test_input
-	test_input='{"text": {"type": "plain_text", "text": "Test Header"}}'
+	test_input=$(
+		cat <<-'EOF'
+			{
+			  "text": {
+			    "type": "plain_text",
+			    "text": "Test Header"
+			  }
+			}
+		EOF
+	)
 	run create_header <<<"$test_input"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.type == "header"' >/dev/null
@@ -161,7 +202,17 @@ send_request_to_slack() {
 
 @test "create_header:: with block_id" {
 	local test_input
-	test_input='{"text": {"type": "plain_text", "text": "Test Header"}, "block_id": "header_123"}'
+	test_input=$(
+		cat <<-'EOF'
+			{
+			  "text": {
+			    "type": "plain_text",
+			    "text": "Test Header"
+			  },
+			  "block_id": "header_123"
+			}
+		EOF
+	)
 	run create_header <<<"$test_input"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.block_id == "header_123"' >/dev/null

@@ -54,8 +54,25 @@ teardown() {
 
 @test "_build_derived_input_payload:: writes Concourse-shaped source and params" {
 	local source_json params_json payload_path
-	source_json='{"slack_bot_user_oauth_token":"xoxb-test"}'
-	params_json='{"channel":"#notifications","blocks":[{"type":"divider"}]}'
+	source_json=$(
+		cat <<-'EOF'
+			{
+			  "slack_bot_user_oauth_token": "xoxb-test"
+			}
+		EOF
+	)
+	params_json=$(
+		cat <<-'EOF'
+			{
+			  "channel": "#notifications",
+			  "blocks": [
+			    {
+			      "type": "divider"
+			    }
+			  ]
+			}
+		EOF
+	)
 
 	run _build_derived_input_payload "$source_json" "$params_json" "crosspost"
 	[[ "$status" -eq 0 ]]

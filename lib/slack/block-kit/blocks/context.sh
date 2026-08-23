@@ -18,7 +18,18 @@ DOC_URL_CONTEXT_BLOCK="https://docs.slack.dev/reference/block-kit/blocks/context
 ########################################################
 # Example Strings
 ########################################################
-EXAMPLE_CONTEXT_BLOCK='{"elements": [{"type": "plain_text", "text": "Context info"}]}'
+EXAMPLE_CONTEXT_BLOCK=$(
+	cat <<-'EOF'
+		{
+		  "elements": [
+		    {
+		      "type": "plain_text",
+		      "text": "Context info"
+		    }
+		  ]
+		}
+	EOF
+)
 
 # Process context block and create Slack Block Kit context block format
 #
@@ -80,7 +91,8 @@ create_context() {
 		[[ -z "$element_entry" ]] && continue
 		local element_type
 		element_type=$(jq -r '.type // ""' <<<"$element_entry" 2>/dev/null)
-		if [[ -n "$element_type" ]] && [[ "$element_type" != "null" ]] && [[ "$element_type" != "image" ]]; then
+		if [[ -n "$element_type" ]] && [[ "$element_type" != "null" ]] && [[ 
+			"$element_type" != "image" ]]; then
 			local element_text
 			element_text=""
 			if jq -e '.text' <<<"$element_entry" >/dev/null 2>&1; then
@@ -90,8 +102,6 @@ create_context() {
 				local element_text_length
 				element_text_length=${#element_text}
 				if ((element_text_length > MAX_ELEMENT_TEXT_LENGTH)); then
-					echo "create_context:: element at index $element_index text length ($element_text_length) exceeds maximum of $MAX_ELEMENT_TEXT_LENGTH characters" >&2
-					echo "create_context:: See context block limits: $DOC_URL_CONTEXT_BLOCK" >&2
 					return 1
 				fi
 			fi
@@ -114,7 +124,8 @@ create_context() {
 			return 1
 		fi
 		if [[ -n "$block_id" && "$block_id" != "null" ]]; then
-			block=$(jq --arg block_id "$block_id" '. + {block_id: $block_id}' <<<"$block")
+			block=$(jq --arg block_id "$block_id" '. + {block_id: $block_id}' \
+				<<<"$block")
 		fi
 	fi
 
