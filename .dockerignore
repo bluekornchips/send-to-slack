@@ -7,7 +7,6 @@
 # Documentation
 *.md
 docs/
-CHANGELOG.md
 LICENSE
 
 # IDE and editor files
