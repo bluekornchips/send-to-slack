@@ -15,8 +15,24 @@ MAX_BLOCK_ID_LENGTH=255
 ########################################################
 # Example Strings
 ########################################################
-EXAMPLE_IMAGE_URL='{"image_url": "https://example.com/image.png", "alt_text": "Image description"}'
-EXAMPLE_IMAGE_SLACK_FILE='{"slack_file": {"id": "F012345678"}, "alt_text": "Image description"}'
+EXAMPLE_IMAGE_URL=$(
+	cat <<-'EOF'
+		{
+		  "image_url": "https://example.com/image.png",
+		  "alt_text": "Image description"
+		}
+	EOF
+)
+EXAMPLE_IMAGE_SLACK_FILE=$(
+	cat <<-'EOF'
+		{
+		  "slack_file": {
+		    "id": "F012345678"
+		  },
+		  "alt_text": "Image description"
+		}
+	EOF
+)
 
 # Process image block and create Slack Block Kit image block format
 #

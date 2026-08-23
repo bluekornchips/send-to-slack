@@ -19,7 +19,16 @@ DOC_URL_HEADER_BLOCK="https://docs.slack.dev/reference/block-kit/blocks/header-b
 ########################################################
 # Example Strings
 ########################################################
-EXAMPLE_HEADER_BLOCK='{"text": {"type": "plain_text", "text": "Header Title"}}'
+EXAMPLE_HEADER_BLOCK=$(
+	cat <<-'EOF'
+		{
+		  "text": {
+		    "type": "plain_text",
+		    "text": "Header Title"
+		  }
+		}
+	EOF
+)
 
 # Process header block and create Slack Block Kit header block format
 #

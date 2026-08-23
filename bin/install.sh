@@ -4,7 +4,9 @@
 #
 
 # Detect if script is being piped (BASH_SOURCE[0] will be /dev/stdin or similar)
-if [[ "${BASH_SOURCE[0]}" == "/dev/stdin" ]] || [[ "${BASH_SOURCE[0]}" == "-" ]] || [[ ! -f "${BASH_SOURCE[0]}" ]]; then
+if [[ "${BASH_SOURCE[0]}" == "/dev/stdin" ]] \
+	|| [[ "${BASH_SOURCE[0]}" == "-" ]] \
+	|| [[ ! -f "${BASH_SOURCE[0]}" ]]; then
 	SCRIPT_DIR=""
 	IS_PIPED=1
 else
@@ -21,7 +23,8 @@ INSTALL_BASENAME="send-to-slack"
 INSTALL_SIGNATURE="# send-to-slack install signature: v1"
 GITHUB_REPO="${GITHUB_REPO:-${UPSTREAM_REPO}}"
 REPO_URL="${REPO_URL:-https://github.com/${GITHUB_REPO}.git}"
-# Set only during remote install so EXIT trap can remove the directory after main returns
+# Set only during remote install so EXIT trap can remove the directory after
+# main returns
 _INSTALL_TMPDIR=""
 
 # Remove long-lived temp directory created for clone or archive install
@@ -48,16 +51,19 @@ cleanup_install_tmpdir() {
 # - 0 always
 usage() {
 	cat <<EOF
-Usage: $(basename "$0") [--prefix <dir>] [--force] [--version <tag>|local] [--help]
+Usage: $(basename "$0") [--prefix <dir>] [--force] [--version <tag>|local]
+[--help]
 
 Options:
-  --prefix <dir>   Target directory for installation (default: ${DEFAULT_PREFIX})
+--prefix <dir> Target directory for installation (default: ${DEFAULT_PREFIX})
   --force          Overwrite existing file even if unsigned
-  --version <tag>  Install from specific branch/tag (default: main). Use "local" to install from the current repo.
+--version <tag> Install from specific branch/tag (default: main). Use "local" to
+install from the current repo.
   -h, --help       Show this help message
 
 Behavior:
-  - Installs lib/, bin helpers, and send-to-slack under a fixed install root, then symlinks the prefix to that tree
+- Installs lib/, bin helpers, and send-to-slack under a fixed install root, then
+symlinks the prefix to that tree
   - With --version local, installs from the repository containing this script
   - Appends a signature comment for safe uninstall validation
   - Refuses system prefixes like /usr or /etc; choose a writable user path
@@ -80,7 +86,8 @@ check_dependencies() {
 		return 0
 	fi
 
-	echo "check_dependencies:: missing required commands: need 'git', or 'curl' and 'tar'" >&2
+	echo "check_dependencies:: missing required commands: need 'git'," \
+		"or 'curl' and 'tar'" >&2
 	return 1
 }
 
@@ -124,11 +131,11 @@ ensure_prefix() {
 	fi
 
 	case "$prefix" in
-	/usr/local/*) ;;
-	/usr/* | /etc/*)
-		echo "ensure_prefix:: refusing system prefix: $prefix" >&2
-		return 1
-		;;
+		/usr/local/*) ;;
+		/usr/* | /etc/*)
+			echo "ensure_prefix:: refusing system prefix: $prefix" >&2
+			return 1
+			;;
 	esac
 
 	if [[ ! -d "$prefix" ]]; then
@@ -166,41 +173,155 @@ file_has_signature() {
 	return 1
 }
 
-# List lib/*.sh paths to copy, relative to repository root.
-# Rules match bin/send-to-slack.sh _send_to_slack_lib_rel_paths.
+# Resolve the fixed install root for a prefix
 #
 # Inputs:
-# - $1 - root_dir: extracted send-to-slack source root
-#
+# - $1 - normalized prefix
 # Outputs:
-# - One relative path per line, e.g. lib/parse/payload.sh
-#
-# Returns:
-# - 0 on success
-# - 1 if lib discovery fails
-_install_lib_rel_paths() {
-	local root_dir="$1"
-	local lib_root="${root_dir}/lib"
-	local abs
-	local abs_paths
+# - Writes install root path to stdout
+_resolve_install_root() {
+	local normalized_prefix="$1"
 
-	# Capture paths, then iterate without process substitution, some hosts lack /dev/fd.
-	if ! abs_paths=$(find "$lib_root" \
-		-mindepth 1 \
-		-maxdepth 4 \
-		-type f \
-		-name '*.sh' \
-		! -path "${lib_root}/slack/block-kit/blocks/*" |
-		LC_ALL=C sort); then
+	if [[ "$(id -u)" -eq 0 ]] || [[ "$normalized_prefix" == /usr/local/* ]] \
+		|| [[ "$normalized_prefix" == /usr/* ]]; then
+		echo "/usr/local/send-to-slack"
+	else
+		echo "${HOME}/.local/share/send-to-slack"
+	fi
+
+	return 0
+}
+
+# Validate a staged install tree against the explicit library manifest
+#
+# Inputs:
+# - $1 - install root containing send-to-slack and lib/
+# Returns:
+# - 0 when the tree is complete
+# - 1 when required files are missing
+_validate_install_tree() {
+	local install_tree="$1"
+	local loader_file
+	local rel
+	local abs
+
+	if [[ -z "$install_tree" || ! -d "$install_tree" ]]; then
+		echo "_validate_install_tree:: install tree not found: ${install_tree}" >&2
 		return 1
 	fi
 
-	while IFS= read -r abs; do
-		[[ -z "$abs" ]] && continue
-		printf '%s\n' "${abs#"${root_dir}/"}"
-	done <<<"$abs_paths"
+	if [[ ! -f "${install_tree}/send-to-slack" ]]; then
+		echo "_validate_install_tree:: missing send-to-slack binary" >&2
+		return 1
+	fi
+
+	loader_file="${install_tree}/lib/loader.sh"
+	if [[ ! -f "$loader_file" ]]; then
+		echo "_validate_install_tree:: missing lib/loader.sh" >&2
+		return 1
+	fi
+
+	# shellcheck source=lib/loader.sh disable=SC1090,SC1091
+	source "$loader_file"
+
+	for rel in "${SEND_TO_SLACK_LIB_MANIFEST[@]}"; do
+		abs="${install_tree}/lib/${rel}"
+		if [[ ! -f "$abs" ]]; then
+			echo "_validate_install_tree:: missing manifest module: lib/${rel}" >&2
+			return 1
+		fi
+	done
+
+	if [[ ! -d "${install_tree}/lib/slack/block-kit/blocks" ]]; then
+		echo "_validate_install_tree:: missing lib/slack/block-kit/blocks" \
+			"directory" >&2
+		return 1
+	fi
 
 	return 0
+}
+
+# Copy source into a fresh staging directory and validate it
+#
+# Inputs:
+# - $1 - source directory path
+# - $2 - staging directory path
+# Returns:
+# - 0 on success
+# - 1 on failure
+_assemble_install_staging() {
+	local source_dir="$1"
+	local staging_dir="$2"
+
+	if [[ -z "$source_dir" || ! -d "$source_dir" ]]; then
+		echo "_assemble_install_staging:: source directory not found:" \
+			"${source_dir}" >&2
+		return 1
+	fi
+
+	if [[ -z "$staging_dir" ]]; then
+		echo "_assemble_install_staging:: staging directory is empty" >&2
+		return 1
+	fi
+
+	if ! mkdir -p "${staging_dir}/lib"; then
+		echo "_assemble_install_staging:: failed to create staging lib directory" >&2
+		return 1
+	fi
+
+	if ! cp "${source_dir}/bin/send-to-slack.sh" \
+		"${staging_dir}/send-to-slack"; then
+		echo "_assemble_install_staging:: failed to copy send-to-slack.sh" >&2
+		return 1
+	fi
+
+	if ! chmod 0755 "${staging_dir}/send-to-slack"; then
+		echo "_assemble_install_staging:: failed to chmod staged binary" >&2
+		return 1
+	fi
+
+	if ! cp -a "${source_dir}/lib/." "${staging_dir}/lib/"; then
+		echo "_assemble_install_staging:: failed to copy lib tree" >&2
+		return 1
+	fi
+
+	if [[ -f "${source_dir}/VERSION" ]]; then
+		if ! cp "${source_dir}/VERSION" "${staging_dir}/VERSION"; then
+			echo "_assemble_install_staging:: failed to copy VERSION" >&2
+			return 1
+		fi
+	fi
+
+	if ! _validate_install_tree "$staging_dir"; then
+		return 1
+	fi
+
+	if ! printf '\n%s\n' "$INSTALL_SIGNATURE" \
+		>>"${staging_dir}/send-to-slack"; then
+		echo "_assemble_install_staging:: failed to append signature" >&2
+		return 1
+	fi
+
+	if ! file_has_signature "${staging_dir}/send-to-slack"; then
+		echo "_assemble_install_staging:: signature verification failed" >&2
+		return 1
+	fi
+
+	return 0
+}
+
+# List lib/*.sh to install, relative to root_dir.
+_install_lib_rel_paths() {
+	local root_dir="$1"
+	local abs
+
+	find "${root_dir}/lib" \
+		-mindepth 1 \
+		-type f \
+		-name '*.sh' \
+		| LC_ALL=C sort | while IFS= read -r abs; do
+		printf '%s\n' "${abs#"${root_dir}/"}"
+	done
 }
 
 # Install from extracted source directory
@@ -215,6 +336,8 @@ install_from_source() {
 	local normalized_prefix
 	local install_root
 	local target_binary
+	local staging_dir
+	local previous_backup=""
 
 	if [[ -z "$source_dir" ]] || [[ ! -d "$source_dir" ]]; then
 		echo "install_from_source:: source directory not found: $source_dir" >&2
@@ -235,100 +358,65 @@ install_from_source() {
 		return 1
 	fi
 
-	local rel
-	local rel_paths
-	rel_paths=$(_install_lib_rel_paths "$source_dir") || return 1
-
-	while IFS= read -r rel; do
-		[[ -z "$rel" ]] && continue
-		if [[ ! -f "${source_dir}/${rel}" ]]; then
-			echo "install_from_source:: missing ${rel}" >&2
-			return 1
-		fi
-	done <<<"$rel_paths"
-
-	if [[ ! -d "${source_dir}/lib/slack/block-kit/blocks" ]]; then
-		echo "install_from_source:: missing lib/slack/block-kit/blocks directory" >&2
-		return 1
-	fi
-
-	# Determine install root based on prefix location
-	# Use system location only if prefix is system-wide or running as root
-	if [[ "$(id -u)" -eq 0 ]] || [[ "$normalized_prefix" == /usr/local/* ]] || [[ "$normalized_prefix" == /usr/* ]]; then
-		install_root="/usr/local/send-to-slack"
-	else
-		# For user installs, use ~/.local/share
-		install_root="${HOME}/.local/share/send-to-slack"
-	fi
+	install_root="$(_resolve_install_root "$normalized_prefix")"
 	target_binary="${normalized_prefix}/${INSTALL_BASENAME}"
 
 	if [[ -f "$target_binary" ]] && ((force != 1)); then
 		if ! file_has_signature "$target_binary"; then
-			echo "install_from_source:: existing file lacks signature, use --force to overwrite: $target_binary" >&2
+			echo "install_from_source:: existing file lacks signature, use --force to" \
+				"overwrite: $target_binary" >&2
 			return 1
 		fi
 	fi
 
-	if ! install -d -m 755 \
-		"${install_root}/lib/slack" \
-		"${install_root}/lib/slack/utils" \
-		"${install_root}/lib/slack/block-kit/blocks" \
-		"${install_root}/lib/parse" \
-		"$(dirname "$target_binary")"; then
-		echo "install_from_source:: failed to create installation directories" >&2
+	staging_dir=$(mktemp -d \
+		"${TMPDIR:-/tmp}/send-to-slack-install-staging.XXXXXX") || {
+		echo "install_from_source:: mktemp failed for staging directory" >&2
+		return 1
+	}
+
+	if ! _assemble_install_staging "$source_dir" "$staging_dir"; then
+		rm -rf "$staging_dir"
 		return 1
 	fi
 
-	if ! cp "${source_dir}/bin/send-to-slack.sh" "${install_root}/send-to-slack"; then
-		echo "install_from_source:: failed to copy script" >&2
+	if ! install -d -m 755 "$(dirname "$target_binary")"; then
+		echo "install_from_source:: failed to create prefix directory" >&2
+		rm -rf "$staging_dir"
 		return 1
 	fi
 
-	if ! chmod 0755 "${install_root}/send-to-slack"; then
-		echo "install_from_source:: failed to chmod script" >&2
+	if ! install -d -m 755 "$(dirname "$install_root")"; then
+		echo "install_from_source:: failed to create install root parent" \
+			"directory" >&2
+		rm -rf "$staging_dir"
 		return 1
 	fi
 
-	local copy_manifest=()
-	while IFS= read -r rel; do
-		[[ -z "$rel" ]] && continue
-		copy_manifest+=("$rel")
-	done <<<"$rel_paths"
-
-	for rel in "${copy_manifest[@]}"; do
-		local dest_parent
-		dest_parent="${install_root}/$(dirname "$rel")"
-		if ! install -d -m 755 "$dest_parent"; then
-			echo "install_from_source:: failed to create directory: ${dest_parent}" >&2
+	if [[ -d "$install_root" ]]; then
+		previous_backup=$(mktemp -d \
+			"${TMPDIR:-/tmp}/send-to-slack-install-backup.XXXXXX") || {
+			echo "install_from_source:: mktemp failed for backup directory" >&2
+			rm -rf "$staging_dir"
 			return 1
-		fi
-		if ! cp "${source_dir}/${rel}" "${install_root}/${rel}"; then
-			echo "install_from_source:: failed to copy ${rel}" >&2
-			return 1
-		fi
-	done
-
-	if ! cp "${source_dir}/lib/parse"/*.sh "${install_root}/lib/parse/"; then
-		echo "install_from_source:: failed to copy lib/parse files" >&2
-		return 1
-	fi
-
-	if ! cp "${source_dir}/lib/slack/utils"/*.sh "${install_root}/lib/slack/utils/"; then
-		echo "install_from_source:: failed to copy lib/slack/utils files" >&2
-		return 1
-	fi
-
-	if ! cp "${source_dir}/lib/slack/block-kit/blocks"/*.sh "${install_root}/lib/slack/block-kit/blocks/"; then
-		echo "install_from_source:: failed to copy lib/slack/block-kit/blocks files" >&2
-		return 1
-	fi
-
-	if [[ -f "${source_dir}/VERSION" ]]; then
-		if ! cp "${source_dir}/VERSION" "${install_root}/VERSION"; then
-			echo "install_from_source:: failed to copy VERSION" >&2
+		}
+		if ! mv "$install_root" "${previous_backup}/previous"; then
+			echo "install_from_source:: failed to move existing install tree aside" >&2
+			rm -rf "$staging_dir" "$previous_backup"
 			return 1
 		fi
 	fi
+
+	if ! mv "$staging_dir" "$install_root"; then
+		echo "install_from_source:: failed to activate staged install tree" >&2
+		if [[ -n "$previous_backup" && -d "${previous_backup}/previous" ]]; then
+			mv "${previous_backup}/previous" "$install_root" 2>/dev/null || true
+		fi
+		rm -rf "$staging_dir" "$previous_backup"
+		return 1
+	fi
+
+	rm -rf "$previous_backup"
 
 	if [[ -L "$target_binary" ]] || [[ -f "$target_binary" ]]; then
 		rm -f "$target_binary"
@@ -336,16 +424,6 @@ install_from_source() {
 
 	if ! ln -sf "${install_root}/send-to-slack" "$target_binary"; then
 		echo "install_from_source:: failed to create symlink" >&2
-		return 1
-	fi
-
-	if ! printf '\n%s\n' "$INSTALL_SIGNATURE" >>"${install_root}/send-to-slack"; then
-		echo "install_from_source:: failed to append signature" >&2
-		return 1
-	fi
-
-	if ! file_has_signature "${install_root}/send-to-slack"; then
-		echo "install_from_source:: signature verification failed" >&2
 		return 1
 	fi
 
@@ -370,8 +448,10 @@ verify_installation() {
 
 	target_path="${normalized_prefix}/${INSTALL_BASENAME}"
 
-	# Check if the installed binary exists and is executable, or if command is available in a subshell
-	if [[ -x "$target_path" ]] || (command -v "$INSTALL_BASENAME" >/dev/null 2>&1); then
+	# Check if the installed binary exists and is executable, or if command is
+	# available in a subshell
+	if [[ -x "$target_path" ]] \
+		|| (command -v "$INSTALL_BASENAME" >/dev/null 2>&1); then
 		return 0
 	fi
 
@@ -392,10 +472,12 @@ print_next_steps() {
 	fi
 
 	if [[ ":${PATH}:" != *":${normalized_prefix}:"* ]]; then
-		echo "print_next_steps:: add to PATH: export PATH=\"${normalized_prefix}:\$PATH\""
+		echo "print_next_steps:: add to PATH: export" \
+			"PATH=\"${normalized_prefix}:\$PATH\""
 	fi
 
-	echo "print_next_steps:: installed binary: ${normalized_prefix}/${INSTALL_BASENAME}"
+	echo "print_next_steps:: installed binary:" \
+		"${normalized_prefix}/${INSTALL_BASENAME}"
 	return 0
 }
 
@@ -418,7 +500,8 @@ print_install_info() {
 
 	if command -v "git" >/dev/null 2>&1 && [[ -d "${source_dir}/.git" ]]; then
 		commit=$(git -C "$source_dir" rev-parse HEAD 2>/dev/null || echo "unknown")
-		describe=$(git -C "$source_dir" describe --tags --always 2>/dev/null || echo "$git_ref")
+		describe=$(git -C "$source_dir" describe --tags --always \
+			echo "$git_ref" 2>/dev/null)
 	else
 		commit="unknown"
 		describe="$git_ref"
@@ -475,7 +558,8 @@ clone_repository() {
 	}
 
 	# Try cloning with the ref as branch/tag
-	if ! clone_output=$(git clone --depth 1 --branch "$ref" "$REPO_URL" "$temp_clone_dir" 2>&1); then
+	if ! clone_output=$(git clone --depth 1 --branch "$ref" "$REPO_URL" \
+		"$temp_clone_dir" 2>&1); then
 		# Destination may already exist after a failed clone; recreate before retry.
 		rm -rf "$temp_clone_dir"
 		temp_clone_dir=$(mktemp -d "${output_dir}/send-to-slack.XXXXXX") || {
@@ -483,7 +567,8 @@ clone_repository() {
 			return 1
 		}
 
-		if ! clone_output=$(git clone --depth 1 "$REPO_URL" "$temp_clone_dir" 2>&1); then
+		if ! clone_output=$(git clone --depth 1 "$REPO_URL" \
+			"$temp_clone_dir" 2>&1); then
 			echo "clone_repository:: failed to clone repository: $clone_output" >&2
 			rm -rf "$temp_clone_dir"
 			return 1
@@ -524,7 +609,8 @@ build_source_archive_url() {
 	fi
 
 	# Build URL for tar.gz format
-	base_url="https://github.com/${GITHUB_REPO}/archive/refs/${ref_type}/${ref}.tar.gz"
+	base_url="https://github.com/${GITHUB_REPO}/archive/refs/${ref_type}/""\
+${ref}.tar.gz"
 	ARTIFACT_EXT=".tar.gz"
 
 	ARTIFACT_URL="$base_url"
@@ -536,7 +622,8 @@ download_file() {
 	local url="$1"
 	local output="$2"
 
-	if ! curl --proto "=https" --tlsv1.2 --fail --show-error --location --output "$output" "$url"; then
+	if ! curl --proto "=https" --tlsv1.2 --fail --show-error --location --output \
+		"$output" "$url"; then
 		echo "download_file:: failed to download $url" >&2
 		return 1
 	fi
@@ -603,43 +690,44 @@ main() {
 
 	while [[ $# -gt 0 ]]; do
 		case "$1" in
-		--prefix)
-			shift
-			if [[ -z "${1:-}" ]]; then
-				echo "main:: --prefix requires a value" >&2
+			--prefix)
+				shift
+				if [[ -z "${1:-}" ]]; then
+					echo "main:: --prefix requires a value" >&2
+					return 1
+				fi
+				prefix="$1"
+				;;
+			--prefix=*)
+				prefix="${1#*=}"
+				;;
+			--force)
+				force=1
+				;;
+			--version)
+				shift
+				if [[ -z "${1:-}" ]]; then
+					echo "main:: --version requires a value" >&2
+					return 1
+				fi
+				version="$1"
+				;;
+			-h | --help)
+				usage
+				return 0
+				;;
+			*)
+				echo "main:: unknown option: $1" >&2
 				return 1
-			fi
-			prefix="$1"
-			;;
-		--prefix=*)
-			prefix="${1#*=}"
-			;;
-		--force)
-			force=1
-			;;
-		--version)
-			shift
-			if [[ -z "${1:-}" ]]; then
-				echo "main:: --version requires a value" >&2
-				return 1
-			fi
-			version="$1"
-			;;
-		-h | --help)
-			usage
-			return 0
-			;;
-		*)
-			echo "main:: unknown option: $1" >&2
-			return 1
-			;;
+				;;
 		esac
 		shift
 	done
 
 	if [[ "$version" == "local" ]]; then
 		if [[ "$IS_PIPED" -eq 1 ]]; then
-			echo "main:: --version local not supported when script is piped, downloading from GitHub instead" >&2
+			echo "main:: --version local not supported when script is piped," \
+				"downloading from GitHub instead" >&2
 			version=""
 		else
 			if ! check_dependencies; then
@@ -676,7 +764,8 @@ main() {
 	# Try git clone first if git is available, otherwise use archive downloads
 	if command -v "git" >/dev/null 2>&1; then
 		if ! clone_repository "$git_ref" "$_INSTALL_TMPDIR"; then
-			echo "main:: failed to clone repository, falling back to archive download" >&2
+			echo "main:: failed to clone repository, falling back to archive" \
+				"download" >&2
 			# Fall through to archive download
 		else
 			source_dir="$CLONE_DIR"

@@ -5,7 +5,7 @@ import json
 import os
 import time
 import unittest
-from typing import Any
+import urllib.parse
 
 import server as server_module
 
@@ -24,19 +24,24 @@ class SlackSignatureTests(unittest.TestCase):
         self.server = importlib.reload(server_module)
         self.client = self.server.app.test_client()
 
-    def _post(self, body_dict: Any, secret: str | None = None, good_sig: bool = True, headers: dict[str, str] | None = None):
-        body = json.dumps(body_dict)
+    def _post(
+        self,
+        body,
+        *,
+        content_type="application/json",
+        secret=None,
+        good_sig=True,
+        headers=None,
+    ):
+        if not isinstance(body, str):
+            body = json.dumps(body)
         timestamp = int(time.time())
-        header_sig = ""
         use_secret = secret if secret is not None else os.environ["SLACK_SIGNING_SECRET"]
-        if good_sig:
-            header_sig = sign_body(use_secret, timestamp, body)
-        else:
-            header_sig = "v0=bad"
+        header_sig = sign_body(use_secret, timestamp, body) if good_sig else "v0=bad"
         request_headers = {
             "X-Slack-Request-Timestamp": str(timestamp),
             "X-Slack-Signature": header_sig,
-            "Content-Type": "application/json",
+            "Content-Type": content_type,
         }
         if headers:
             request_headers.update(headers)
@@ -49,7 +54,11 @@ class SlackSignatureTests(unittest.TestCase):
 
     def test_rejects_missing_signature_headers(self):
         payload = {"actions": [{"action_id": "test_action"}], "channel": {"id": "C1"}, "user": {"id": "U1"}}
-        response = self.client.post("/slack/actions", data=json.dumps(payload), headers={"Content-Type": "application/json"})
+        response = self.client.post(
+            "/slack/actions",
+            data=json.dumps(payload),
+            headers={"Content-Type": "application/json"},
+        )
         self.assertEqual(response.status_code, 401)
 
     def test_accepts_valid_signature(self):
@@ -58,6 +67,28 @@ class SlackSignatureTests(unittest.TestCase):
         response = self._post(payload, good_sig=True)
         self.assertEqual(response.status_code, 200)
 
+    def test_accepts_form_encoded_payload(self):
+        payload = {"actions": [{"action_id": "test_action"}], "channel": {"id": "C1"}, "user": {"id": "U1"}}
+        body = urllib.parse.urlencode({"payload": json.dumps(payload)})
+        seen = {}
 
+        def capture(channel_id, text):
+            seen["channel_id"] = channel_id
 
+        self.server.send_slack_message = capture
+        response = self._post(body, content_type="application/x-www-form-urlencoded")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(seen["channel_id"], "C1")
+
+    def test_routes_send_user_message_to_user_id(self):
+        payload = {"actions": [{"action_id": "send_user_message"}], "channel": {"id": "C1"}, "user": {"id": "U1"}}
+        seen = {}
+
+        def capture(channel_id, text):
+            seen["channel_id"] = channel_id
+
+        self.server.send_slack_message = capture
+        response = self._post(payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(seen["channel_id"], "U1")
 

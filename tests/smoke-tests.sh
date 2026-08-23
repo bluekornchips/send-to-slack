@@ -37,6 +37,9 @@ setup_file() {
 }
 
 setup() {
+	# shellcheck source=lib/loader.sh
+	source "$GIT_ROOT/lib/loader.sh"
+	# shellcheck source=lib/slack/api.sh
 	source "$GIT_ROOT/lib/slack/api.sh"
 	source "$GIT_ROOT/lib/metadata.sh"
 	source "$GIT_ROOT/lib/parse/payload.sh"
@@ -300,8 +303,8 @@ smoke_parse_payload_capture() {
 	TABLE_BLOCK_OUTPUT_FILE="$table_output_file"
 	export TABLE_BLOCK_OUTPUT_FILE
 
-	jq -n '[range(100) as $r | [range(20) as $c | {type: "raw_text", text: "r\($r)c\($c)"}]] | {rows: .}' |
-		run create_table
+	jq -n '[range(100) as $r | [range(20) as $c | {type: "raw_text", text: "r\($r)c\($c)"}]] | {rows: .}' \
+		| run create_table
 	[[ "$status" -eq 0 ]]
 
 	local table_output
@@ -1286,7 +1289,7 @@ smoke_parse_payload_capture() {
 		return 1
 	fi
 
-	echo "$update_output" | grep -q "main:: updating existing Slack message via chat.update"
+	echo "$update_output" | grep -q "run_chat_update_from_input:: updating existing Slack message via chat.update"
 	echo "$update_output" | grep -q "main:: finished running send-to-slack.sh successfully"
 }
 
@@ -1737,5 +1740,5 @@ smoke_parse_payload_capture() {
 
 	run env -u SLACK_BOT_USER_OAUTH_TOKEN "$SEND_TO_SLACK_SCRIPT" <"$payload_file"
 	[[ "$status" -ne 0 ]]
-	echo "$output" | grep -q "main:: params.message_ts requires API delivery, not webhook"
+	echo "$output" | grep -q "run_chat_update_from_input:: params.message_ts requires API delivery, not webhook"
 }

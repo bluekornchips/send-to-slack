@@ -22,7 +22,7 @@ CONCOURSE_TARGET="local"
 CONCOURSE_URL="http://localhost:8080"
 CONCOURSE_USER="local"
 CONCOURSE_PASS="slacker"
-CONCOURSE_READY_RETRIES=15
+CONCOURSE_READY_RETRIES=30
 CONCOURSE_READY_WAIT=2
 
 # Jobs that require manual setup outside the scope of this runner.
@@ -124,6 +124,8 @@ validate_env() {
 # - 1 if Concourse does not become ready within the retry limit
 start_concourse() {
 	local i
+	local concourse_container_id
+	local container_status
 
 	echo "start_concourse:: starting Concourse"
 	if ! docker-compose -f "${GIT_ROOT}/concourse/server.yaml" up -d; then
@@ -140,11 +142,26 @@ start_concourse() {
 
 			return 0
 		fi
+
+		concourse_container_id="$(docker-compose -f "${GIT_ROOT}/concourse/server.yaml" ps -q concourse 2>/dev/null || true)"
+		if [[ -n "${concourse_container_id}" ]]; then
+			container_status="$(docker inspect -f '{{.State.Status}}' "${concourse_container_id}" 2>/dev/null || true)"
+			if [[ "${container_status}" == "exited" ]]; then
+				echo "start_concourse:: concourse container exited before becoming ready" >&2
+				docker logs "${concourse_container_id}" --tail 40 >&2
+				return 1
+			fi
+		fi
+
 		sleep "${CONCOURSE_READY_WAIT}"
 		((i++)) || true
 	done
 
 	echo "start_concourse:: Concourse did not become ready after ${CONCOURSE_READY_RETRIES} retries" >&2
+	concourse_container_id="$(docker-compose -f "${GIT_ROOT}/concourse/server.yaml" ps -q concourse 2>/dev/null || true)"
+	if [[ -n "${concourse_container_id}" ]]; then
+		docker logs "${concourse_container_id}" --tail 40 >&2
+	fi
 
 	return 1
 }
@@ -394,23 +411,23 @@ main() {
 
 	while [[ $# -gt 0 ]]; do
 		case $1 in
-		-h | --help) usage && return 0 ;;
-		--start-from)
-			if [[ $# -lt 2 ]]; then
-				echo "--start-from requires a pipeline/job argument" >&2
+			-h | --help) usage && return 0 ;;
+			--start-from)
+				if [[ $# -lt 2 ]]; then
+					echo "--start-from requires a pipeline/job argument" >&2
+					echo "Use '$(basename "$0") --help' for usage information" >&2
+
+					return 1
+				fi
+				start_from="${2}"
+				shift 2
+				;;
+			*)
+				echo "Unknown option '${1}'" >&2
 				echo "Use '$(basename "$0") --help' for usage information" >&2
 
 				return 1
-			fi
-			start_from="${2}"
-			shift 2
-			;;
-		*)
-			echo "Unknown option '${1}'" >&2
-			echo "Use '$(basename "$0") --help' for usage information" >&2
-
-			return 1
-			;;
+				;;
 		esac
 	done
 

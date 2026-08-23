@@ -27,6 +27,9 @@ setup_file() {
 }
 
 setup() {
+	# shellcheck source=lib/loader.sh
+	source "$GIT_ROOT/lib/loader.sh"
+	# shellcheck source=lib/slack/api.sh
 	source "$GIT_ROOT/lib/slack/api.sh"
 	source "$GIT_ROOT/lib/metadata.sh"
 	source "$SCRIPT"
@@ -82,7 +85,27 @@ teardown() {
 ########################################################
 
 create_test_payload() {
-	local blocks_config='[{"rich-text": {"elements": [{"type": "rich_text_section", "elements": [{"type": "text", "text": "test message"}]}]}}]'
+	local blocks_config=$(
+		cat <<-'EOF'
+			[
+			  {
+			    "rich-text": {
+			      "elements": [
+			        {
+			          "type": "rich_text_section",
+			          "elements": [
+			            {
+			              "type": "text",
+			              "text": "test message"
+			            }
+			          ]
+			        }
+			      ]
+			    }
+			  }
+			]
+		EOF
+	)
 
 	jq -n \
 		--arg token "$SLACK_BOT_USER_OAUTH_TOKEN" \

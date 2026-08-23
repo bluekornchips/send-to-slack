@@ -18,7 +18,7 @@ jobs:
   - name: table-basic-with-raw-text-cells
     plan:
       - put: slack-notification
-        
+
         params:
           <<: *common_slack_params
           blocks:
@@ -46,7 +46,7 @@ jobs:
   - name: table-with-all-features-column-settings-block-id-and-rich-text
     plan:
       - put: slack-notification
-        
+
         params:
           <<: *common_slack_params
           blocks:

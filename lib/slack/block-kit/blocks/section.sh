@@ -23,7 +23,14 @@ DOC_URL_SECTION_BLOCK="https://docs.slack.dev/reference/block-kit/blocks/section
 ########################################################
 # Example Strings
 ########################################################
-EXAMPLE_TEXT_OBJECT='{"type": "plain_text", "text": "Your message here"}'
+EXAMPLE_TEXT_OBJECT=$(
+	cat <<-'EOF'
+		{
+		  "type": "plain_text",
+		  "text": "Your message here"
+		}
+	EOF
+)
 
 # Create text section block following Slack Block Kit format
 #
@@ -38,7 +45,8 @@ EXAMPLE_TEXT_OBJECT='{"type": "plain_text", "text": "Your message here"}'
 # - 1 if text_json is empty, type is unsupported, or text exceeds length limit
 #
 # Text can be "plain_text" or "mrkdwn"
-# Ref: https://docs.slack.dev/reference/block-kit/composition-objects/text-object/
+# Ref:
+# https://docs.slack.dev/reference/block-kit/composition-objects/text-object/
 create_text_section() {
 	local text_json="$1"
 
@@ -76,7 +84,6 @@ create_text_section() {
 	text_length=${#text}
 	if ((text_length > MAX_TEXT_LENGTH)); then
 		echo "create_text_section:: text length must be less than $MAX_TEXT_LENGTH" >&2
-		echo "create_text_section:: See section block limits: $DOC_URL_SECTION_BLOCK" >&2
 		return 1
 	fi
 
@@ -94,7 +101,8 @@ create_text_section() {
 #
 # Returns:
 # - 0 on successful fields section creation with valid array of text objects
-# - 1 if fields_json is empty, invalid, exceeds limits, or contains invalid text objects
+# - 1 if fields_json is empty, invalid, exceeds limits, or contains invalid text
+# objects
 #
 # Fields is an array of text objects, up to 10 items, each up to 2000 characters
 # See: https://docs.slack.dev/reference/block-kit/blocks/section#fields
@@ -140,7 +148,8 @@ create_fields_section() {
 	local field_index=0
 	local fields_work_file
 	local field_entries
-	fields_work_file=$(mktemp "${_SLACK_WORKSPACE:-/tmp}/section.validated-fields.XXXXXX")
+	fields_work_file=$(mktemp \
+		"${_SLACK_WORKSPACE:-/tmp}/section.validated-fields.XXXXXX")
 	trap 'rm -f "$fields_work_file"' RETURN ERR
 	field_entries=$(jq -r -c '.[]' <<<"$fields_json") || return 1
 
@@ -148,7 +157,6 @@ create_fields_section() {
 		[[ -z "$field_entry" ]] && continue
 		# Validate field is valid JSON
 		if ! jq . >/dev/null 2>&1 <<<"$field_entry"; then
-			echo "create_fields_section:: field at index $field_index must be valid JSON" >&2
 			return 1
 		fi
 
@@ -162,14 +170,12 @@ create_fields_section() {
 		# Validate field text length (fields have shorter limit than regular text)
 		local field_text
 		if ! field_text=$(jq -r '.text' <<<"$validated_field"); then
-			echo "create_fields_section:: invalid JSON format for field at index $field_index" >&2
 			return 1
 		fi
 		local field_text_length
 		field_text_length=${#field_text}
 		if ((field_text_length > MAX_FIELD_TEXT_LENGTH)); then
-			echo "create_fields_section:: text length must be less than $MAX_FIELD_TEXT_LENGTH" >&2
-			echo "create_fields_section:: See section block limits: $DOC_URL_SECTION_BLOCK" >&2
+			echo "create_fields_section:: field at index $field_index text length must be less than $MAX_FIELD_TEXT_LENGTH" >&2
 			return 1
 		fi
 
@@ -246,7 +252,8 @@ create_section() {
 		has_text=true
 	fi
 
-	if [[ -n "$fields" ]] && [[ "$fields" != "null" ]] && [[ "$fields" != "[]" ]]; then
+	if [[ -n "$fields" ]] && [[ "$fields" != "null" ]] \
+		&& [[ "$fields" != "[]" ]]; then
 		if ! block=$(create_fields_section "$fields"); then
 			return 1
 		fi
@@ -265,9 +272,11 @@ create_section() {
 
 	local section_block
 	if [[ "$has_text" == true ]]; then
-		section_block=$(jq -n --argjson block "$block" '{ type: "section", text: $block }')
+		section_block=$(jq -n --argjson block "$block" \
+			'{ type: "section", text: $block }')
 	else
-		section_block=$(jq -n --argjson block "$block" '{ type: "section", fields: $block }')
+		section_block=$(jq -n --argjson block "$block" \
+			'{ type: "section", fields: $block }')
 	fi
 
 	# Add optional block_id if present
@@ -278,7 +287,8 @@ create_section() {
 			return 1
 		fi
 		if [[ -n "$block_id" && "$block_id" != "null" ]]; then
-			section_block=$(jq --arg block_id "$block_id" '. + {block_id: $block_id}' <<<"$section_block")
+			section_block=$(jq --arg block_id "$block_id" '. + {block_id: $block_id}' \
+				<<<"$section_block")
 		fi
 	fi
 
@@ -290,7 +300,8 @@ create_section() {
 			return 1
 		fi
 		if [[ -n "$accessory" && "$accessory" != "null" ]]; then
-			section_block=$(jq --argjson accessory "$accessory" '. + {accessory: $accessory}' <<<"$section_block")
+			section_block=$(jq --argjson accessory "$accessory" \
+				'. + {accessory: $accessory}' <<<"$section_block")
 		fi
 	fi
 
@@ -302,7 +313,8 @@ create_section() {
 			return 1
 		fi
 		if jq -e 'type == "boolean"' <<<"$expand" >/dev/null 2>&1; then
-			section_block=$(jq --argjson expand "$expand" '. + {expand: $expand}' <<<"$section_block")
+			section_block=$(jq --argjson expand "$expand" '. + {expand: $expand}' \
+				<<<"$section_block")
 		fi
 	fi
 

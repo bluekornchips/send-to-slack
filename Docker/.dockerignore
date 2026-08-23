@@ -7,7 +7,6 @@
 # Documentation
 *.md
 docs/
-CHANGELOG.md
 LICENSE
 
 # IDE and editor files
@@ -27,6 +26,7 @@ test-payload.*
 resource-out.json
 payload-tests.test-payload.*
 payload-tests.output.*
+*.output.*
 acceptance-tests.test-upload*
 
 # Build and development tools
@@ -63,4 +63,3 @@ tmp/
 # OS files
 .DS_Store
 Thumbs.db
-

@@ -1,2 +1,7 @@
 *.sh text eol=lf
 *.sh linguist-detectable=true
+*.py text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
+*.json text eol=lf

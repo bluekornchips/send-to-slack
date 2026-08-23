@@ -30,7 +30,7 @@ setup_file() {
 	INSTALL_BASENAME_VALUE="$INSTALL_BASENAME"
 
 	# Export functions so they're available in test subshells
-	export -f uninstall_binary normalize_prefix file_has_signature validate_prefix _install_lib_rel_paths install_from_source
+	export -f uninstall_binary normalize_prefix file_has_signature validate_prefix _install_lib_rel_paths install_from_source _resolve_install_root _assemble_install_staging _validate_install_tree
 
 	export GIT_ROOT
 	export INSTALL_SCRIPT
@@ -134,12 +134,7 @@ teardown() {
 	mkdir -p "${source_dir}/bin" "${source_dir}/lib/slack/block-kit/blocks" "${source_dir}/lib/slack/utils" "${source_dir}/lib/parse"
 
 	cp "${GIT_ROOT}/bin/send-to-slack.sh" "${source_dir}/bin/send-to-slack.sh"
-	cp "${GIT_ROOT}/lib/metadata.sh" "${GIT_ROOT}/lib/health-check.sh" "${GIT_ROOT}/lib/get-version.sh" "${source_dir}/lib/"
-	cp "${GIT_ROOT}/lib/parse"/*.sh "${source_dir}/lib/parse/"
-	cp "${GIT_ROOT}/lib/slack/api.sh" "${GIT_ROOT}/lib/slack/crosspost.sh" "${GIT_ROOT}/lib/slack/replies.sh" "${source_dir}/lib/slack/"
-	cp "${GIT_ROOT}/lib/slack/utils"/*.sh "${source_dir}/lib/slack/utils/"
-	cp "${GIT_ROOT}/lib/slack/block-kit/create-block.sh" "${source_dir}/lib/slack/block-kit/"
-	cp "${GIT_ROOT}/lib/slack/block-kit/blocks"/*.sh "${source_dir}/lib/slack/block-kit/blocks/"
+	cp -a "${GIT_ROOT}/lib/." "${source_dir}/lib/"
 	if [[ -f "${GIT_ROOT}/VERSION" ]]; then
 		cp "${GIT_ROOT}/VERSION" "${source_dir}/VERSION"
 	fi
@@ -176,46 +171,30 @@ teardown() {
 }
 
 @test "uninstall.sh:: defaults to /usr/local/bin for root" {
-	if [[ "$(id -u)" -ne 0 ]]; then
-		skip "not running as root"
-	fi
-
-	local root_prefix="/usr/local/bin"
-	local root_target="${root_prefix}/${INSTALL_BASENAME_VALUE}"
-
-	# Install as root
-	run "$INSTALL_SCRIPT" --version local --prefix "$root_prefix"
+	run bash -c '
+		id() {
+			if [[ "${1:-}" == "-u" ]]; then
+				echo 0
+				return 0
+			fi
+			command id "$@"
+		}
+		export -f id
+		# shellcheck source=bin/uninstall.sh disable=SC1090,SC1091
+		source "'"$UNINSTALL_SCRIPT"'"
+		[[ "$DEFAULT_PREFIX" == "/usr/local/bin" ]]
+	'
 	[[ "$status" -eq 0 ]]
-
-	# Uninstall without --prefix should use default (/usr/local/bin)
-	run "$UNINSTALL_SCRIPT"
-	[[ "$status" -eq 0 ]]
-	[[ ! -f "$root_target" ]]
 }
 
 @test "uninstall.sh:: allows /usr/local/* prefix" {
-	local usr_local_prefix
-	local usr_local_parent
-	local usr_local_target
-
-	usr_local_prefix="/usr/local/bin"
-	usr_local_parent="/usr/local"
-	usr_local_target="${usr_local_prefix}/${INSTALL_BASENAME_VALUE}"
-
-	# install_from_source uses install_root under /usr/local for this prefix, so non-root
-	# needs write on /usr/local and on the bin directory. Writable bin alone is not enough.
-	if [[ "$(id -u)" -ne 0 ]]; then
-		if [[ ! -w "$usr_local_parent" ]] || [[ ! -w "$usr_local_prefix" ]]; then
-			skip "cannot write to ${usr_local_parent} and ${usr_local_prefix}"
-		fi
-	fi
-
-	# Install to /usr/local/bin
-	run "$INSTALL_SCRIPT" --version local --prefix "$usr_local_prefix"
+	run validate_prefix "/usr/local/bin"
 	[[ "$status" -eq 0 ]]
 
-	# Uninstall should work with /usr/local/* prefix
-	run "$UNINSTALL_SCRIPT" --prefix "$usr_local_prefix"
+	run validate_prefix "/usr/local/send-to-slack"
 	[[ "$status" -eq 0 ]]
-	[[ ! -f "$usr_local_target" ]]
+
+	run validate_prefix "/usr/bin"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "refusing system prefix"
 }

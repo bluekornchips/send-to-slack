@@ -35,6 +35,11 @@ setup() {
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "jq found"
 	echo "$output" | grep -q "curl found"
+	if command -v envsubst >/dev/null 2>&1; then
+		echo "$output" | grep -q "envsubst found"
+	else
+		echo "$output" | grep -q "envsubst not found"
+	fi
 	echo "$output" | grep -q "Health check passed"
 }
 

@@ -29,7 +29,8 @@ _get_safe_payload_size() {
 # Create Concourse metadata output structure
 #
 # Arguments:
-#   $1 - payload: JSON payload to include in metadata, optional, only if SHOW_PAYLOAD is true
+# $1 - payload: JSON payload to include in metadata, optional, only if
+# SHOW_PAYLOAD is true
 #   $2 - message_ts: Slack message ts for chat.update workflows, optional
 #   $3 - channel: Slack channel id from API response, optional
 #
@@ -78,24 +79,28 @@ create_metadata() {
 		if [[ ${#payload_for_metadata} -gt "$safe_size" ]]; then
 			local stripped
 			local metadata_before_strip
-			if stripped=$(echo "$payload_for_metadata" | jq 'del(.blocks, .attachments)' 2>/dev/null) &&
-				[[ ${#stripped} -le "$safe_size" ]]; then
+			if stripped=$(echo "$payload_for_metadata" \
+				| jq 'del(.blocks, .attachments)' 2>/dev/null) \
+				&& [[ ${#stripped} -le "$safe_size" ]]; then
 				metadata_before_strip="$METADATA"
 				if ! METADATA=$(echo "$METADATA" | jq \
 					--arg payload "$stripped" \
 					'. += [{"name": "payload", "value": $payload}, {"name": "payload_note", "value": "blocks and attachments excluded: payload exceeded safe metadata size"}]' \
 					2>/dev/null); then
-					echo "create_metadata:: failed to append stripped payload to metadata" >&2
+					echo "create_metadata:: failed to append stripped payload" \
+						"to metadata" >&2
 					METADATA="$metadata_before_strip"
-					if ! METADATA=$(echo "$METADATA" | jq '. += [{"name": "payload_skipped", "value": "payload too large for metadata"}]' 2>/dev/null); then
-						echo "create_metadata:: failed to record payload_skipped after stripped payload failure" >&2
+					if ! METADATA=$(echo "$METADATA" | jq \
+						'. += [{"name": "payload_skipped", "value": "payload too large for metadata"}]' \
+						2>/dev/null); then
 						METADATA="$metadata_before_strip"
 					fi
 				fi
 			else
-				echo "create_metadata:: payload too large even after stripping blocks, skipping payload in metadata" >&2
 				metadata_before_strip="$METADATA"
-				if ! METADATA=$(echo "$METADATA" | jq '. += [{"name": "payload_skipped", "value": "payload too large for metadata"}]' 2>/dev/null); then
+				if ! METADATA=$(echo "$METADATA" | jq \
+					'. += [{"name": "payload_skipped", "value": "payload too large for metadata"}]' \
+					2>/dev/null); then
 					echo "create_metadata:: failed to append payload_skipped to metadata" >&2
 					METADATA="$metadata_before_strip"
 				fi
@@ -103,11 +108,15 @@ create_metadata() {
 		else
 			local metadata_before_append
 			metadata_before_append="$METADATA"
-			if ! METADATA=$(echo "$METADATA" | jq --arg payload "${payload_for_metadata}" '. += [{"name": "payload", "value": $payload}]' 2>/dev/null); then
+			if ! METADATA=$(echo "$METADATA" | jq \
+				--arg payload "${payload_for_metadata}" \
+				'. += [{"name": "payload", "value": $payload}]' \
+				2>/dev/null); then
 				echo "create_metadata:: failed to append payload to metadata" >&2
 				METADATA="$metadata_before_append"
-				if ! METADATA=$(echo "$METADATA" | jq '. += [{"name": "payload_skipped", "value": "metadata append failed"}]' 2>/dev/null); then
-					echo "create_metadata:: failed to record payload_skipped after metadata append failure" >&2
+				if ! METADATA=$(echo "$METADATA" | jq \
+					'. += [{"name": "payload_skipped", "value": "metadata append failed"}]' \
+					2>/dev/null); then
 					METADATA="$metadata_before_append"
 				fi
 			fi
@@ -141,7 +150,7 @@ emit_concourse_output() {
 		--argjson metadata "${METADATA}" \
 		'{
       version: (
-        if $version_message_ts != "" then { timestamp: $timestamp, message_ts: $version_message_ts }
+        if $version_message_ts != "" then {timestamp: $timestamp, message_ts: $version_message_ts}
         else { timestamp: $timestamp }
         end
       ),
@@ -153,7 +162,6 @@ emit_concourse_output() {
 
 	if [[ -n "${SEND_TO_SLACK_OUTPUT:-}" ]]; then
 		if ! jq -r '.' <<<"${json_output}" >"${SEND_TO_SLACK_OUTPUT}"; then
-			echo "emit_concourse_output:: failed to write output JSON to ${SEND_TO_SLACK_OUTPUT}" >&2
 			return 1
 		fi
 		echo "emit_concourse_output:: output written to ${SEND_TO_SLACK_OUTPUT}"

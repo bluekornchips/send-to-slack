@@ -44,7 +44,8 @@ create_divider() {
 			return 1
 		fi
 		if [[ -n "$block_id" && "$block_id" != "null" ]]; then
-			block=$(jq --arg block_id "$block_id" '. + {block_id: $block_id}' <<<"$block")
+			block=$(jq --arg block_id "$block_id" '. + {block_id: $block_id}' \
+				<<<"$block")
 		fi
 	fi
 

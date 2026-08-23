@@ -16,7 +16,7 @@ MAX_FILE_SIZE=$((1024 * 1024 * 1024)) # 1 GB in bytes
 #
 # Outputs:
 #   Writes file permissions to stdout
-#   Writes "unknown" if stat command fails or is unavailable, should never happen
+# Writes "unknown" if stat command fails or is unavailable, should never happen
 #
 # Returns:
 #   0 on success
@@ -48,7 +48,6 @@ get_file_permissions() {
 # - Sets FILE_ID and UPLOAD_URL environment variables
 #
 _get_upload_url() {
-	echo "_get_upload_url:: requesting upload URL from Slack API (filename=${FILENAME} size=${FILE_SIZE})" >&2
 
 	local api_response
 	if ! api_response=$(curl -s -X POST \
@@ -121,7 +120,6 @@ EOF
 # Ref: https://docs.slack.dev/messaging/working-with-files/#upload-step-2
 #
 _post_file_contents() {
-	echo "_post_file_contents:: uploading file contents to Slack (path=${FILE_PATH} size=${FILE_SIZE})" >&2
 
 	local http_response
 	if ! http_response=$(curl -s -w "\n%{http_code}" \
@@ -135,8 +133,7 @@ _post_file_contents() {
 	fi
 
 	local http_code
-	http_code=$(tail -n1 <<<"$http_response")
-
+	http_code=$(sed -n '$p' <<<"$http_response")
 	local response_body
 	response_body=$(sed '$d' <<<"$http_response")
 
@@ -145,7 +142,8 @@ _post_file_contents() {
 
 	if [[ "$http_code" != "200" ]]; then
 		cat <<EOF >&2
-_post_file_contents:: HTTP error ${http_code} from upload URL for file: ${FILE_PATH}
+_post_file_contents:: HTTP error ${http_code} from upload URL for file:
+${FILE_PATH}
 EOF
 		if [[ -n "$response_body" ]]; then
 			echo "_post_file_contents:: response body: ${response_body}" >&2
@@ -154,20 +152,24 @@ EOF
 	fi
 
 	if ! grep -q "OK - " <<<"$response_body"; then
-		echo "_post_file_contents:: unexpected response format from upload URL for file: $FILE_PATH" >&2
+		echo "_post_file_contents:: unexpected response format from upload URL for file:
+$FILE_PATH" >&2
 		echo "_post_file_contents:: response body: $response_body" >&2
 		return 1
 	fi
 
 	# Verify file size matches
-	echo "_post_file_contents:: file size verification: sent=$FILE_SIZE bytes, response=$response_size bytes" >&2
+	echo "_post_file_contents:: file size verification: sent=$FILE_SIZE bytes,
+response=$response_size bytes" >&2
 	if [[ "$response_size" != "$FILE_SIZE" ]]; then
-		echo "_post_file_contents:: file size mismatch (sent: $FILE_SIZE, response: $response_size)" >&2
+		echo "_post_file_contents:: file size mismatch (sent: $FILE_SIZE, response:
+$response_size)" >&2
 		echo "_post_file_contents:: response body: $response_body" >&2
 		return 1
 	fi
 
-	echo "_post_file_contents:: file uploaded successfully, HTTP $http_code, size verified: $FILE_SIZE bytes" >&2
+	echo "_post_file_contents:: file uploaded successfully, HTTP $http_code, size
+verified: $FILE_SIZE bytes" >&2
 	return 0
 }
 
@@ -182,7 +184,6 @@ EOF
 # - Outputs file metadata JSON on success
 #
 _complete_upload() {
-	echo "_complete_upload:: finalizing upload via files.completeUploadExternal" >&2
 
 	local api_response
 	if ! api_response=$(curl -s -X POST \
@@ -221,7 +222,8 @@ EOF
 	fi
 
 	# LIMITATION: Currently only handles the first file from the API response
-	# The Slack API supports multiple files, but this implementation processes only one
+	# The Slack API supports multiple files, but this implementation processes only
+	# one
 	# To support multiple files, iterate over .files[] array and process each file
 	local files_count
 	files_count=$(jq '.files | length' <<<"$api_response")
@@ -240,7 +242,8 @@ EOF
 	fi
 
 	# Debug file metadata
-	local file_id file_size file_name file_type permalink mimetype media_display_type
+	local file_id file_size file_name file_type permalink mimetype
+	media_display_type
 	file_id=$(jq -r '.id // "unknown"' <<<"$first_file")
 	file_size=$(jq -r '.size // "unknown"' <<<"$first_file")
 	file_name=$(jq -r '.name // "unknown"' <<<"$first_file")
@@ -274,8 +277,10 @@ EOF
 	fi
 
 	# Verify file size matches what we uploaded
-	if [[ "$file_size" != "unknown" && "$file_size" != "null" ]] && [[ "$file_size" != "$FILE_SIZE" ]]; then
-		echo "_complete_upload:: WARNING: file size mismatch (uploaded: $FILE_SIZE, API reports: $file_size)" >&2
+	if [[ "$file_size" != "unknown" && "$file_size" != "null" ]] \
+		&& [[ "$file_size" != "$FILE_SIZE" ]]; then
+		echo "_complete_upload:: WARNING: file size mismatch (uploaded: $FILE_SIZE," \
+			"API reports: $file_size)" >&2
 	fi
 
 	echo "$first_file"
@@ -286,7 +291,8 @@ EOF
 # Create Block Kit blocks from uploaded file metadata
 #
 # Inputs:
-# - Reads file metadata JSON from stdin (file object from files.completeUploadExternal)
+# - Reads file metadata JSON from stdin (file object from
+# files.completeUploadExternal)
 #
 # Side Effects:
 # - Outputs Block Kit block JSON to stdout
@@ -295,8 +301,11 @@ EOF
 # - 0 on successful block creation
 # - 1 if input is invalid or missing required fields
 #
-# Ref: https://docs.slack.dev/reference/block-kit/composition-objects/slack-file-object/
-# Ref: https://docs.slack.dev/reference/objects/file-object/
+# Ref:
+# https://docs.slack.dev/reference/block-kit/composition-objects/
+# slack-file-object/
+# Ref:
+# https://docs.slack.dev/reference/objects/file-object/
 create_file_blocks() {
 	local file_metadata
 	file_metadata=$(cat)
@@ -326,7 +335,8 @@ create_file_blocks() {
 		return 1
 	fi
 
-	# Create appropriate block based on file type (per Slack's file object recommendations)
+	# Create appropriate block based on file type (per Slack's file object
+	# recommendations)
 	if [[ "$filetype" =~ ^(png|jpg|jpeg|gif)$ ]]; then
 		# For images: use image block with slack_file object
 		local image_block
@@ -431,7 +441,7 @@ validate_file_path() {
 		fi
 
 		if [[ ${#matched_files[@]} -gt 1 ]]; then
-			echo "file_upload:: glob matched ${#matched_files[@]} files, expected exactly 1: $FILE_PATH" >&2
+			echo "file_upload:: glob matched multiple files: $FILE_PATH" >&2
 			return 1
 		fi
 
@@ -449,7 +459,8 @@ validate_file_path() {
 	fi
 
 	FILENAME="${FILE_PATH##*/}"
-	FILE_SIZE=$(stat -c%s "$FILE_PATH" 2>/dev/null || stat -f%z "$FILE_PATH" 2>/dev/null)
+	FILE_SIZE=$(stat -c%s "$FILE_PATH" 2>/dev/null || stat -f%z "$FILE_PATH" \
+		2>/dev/null)
 
 	if [[ -z "$FILE_SIZE" || ! "$FILE_SIZE" =~ ^[0-9]+$ ]]; then
 		echo "file_upload:: unable to determine file size for: $FILE_PATH" >&2
@@ -461,7 +472,6 @@ validate_file_path() {
 	echo "file_upload:: file permissions: $file_perms" >&2
 
 	if ((FILE_SIZE > MAX_FILE_SIZE)); then
-		echo "file_upload:: file size ($FILE_SIZE bytes) exceeds Slack's maximum of $MAX_FILE_SIZE bytes: $FILE_PATH" >&2
 		return 1
 	fi
 
@@ -492,9 +502,9 @@ extract_file_metadata() {
 	fi
 
 	local output_var
-	output_var=$(jq -r '.interpolate_file_contents_to_var // empty' <<<"$file_config")
+	output_var=$(jq -r '.interpolate_file_contents_to_var // empty' \
+		<<<"$file_config")
 	if [[ -n "$output_var" ]]; then
-		echo "extract_file_metadata:: reading file contents for variable interpolation (path=${FILE_PATH})" >&2
 		local file_contents
 		file_contents=$(cat "$FILE_PATH")
 		export "$output_var"="$file_contents"
@@ -521,7 +531,8 @@ validate_upload_environment() {
 	if [[ ! "$CHANNEL" =~ ^[CGDZ][A-Z0-9]{8,}$ ]] && [[ ! "$CHANNEL" =~ ^[a-zA-Z0-9_-]+$ ]]; then
 		cat >&2 <<-EOF
 			file_upload:: invalid channel format: $CHANNEL
-			file_upload:: channel must be a valid Slack ID (C/G/D/Z prefix) or channel name
+			file_upload:: channel must be a valid Slack ID (C/G/D/Z prefix) or channel \
+				name
 		EOF
 		return 1
 	fi
@@ -569,8 +580,6 @@ file_upload() {
 		return 1
 	fi
 
-	echo "file_upload:: starting upload (path=${FILE_PATH} size=${FILE_SIZE} bytes)" >&2
-
 	if [[ "${LOG_VERBOSE:-}" == "true" ]]; then
 		echo "file_upload:: filename: ${FILENAME}" >&2
 	fi
@@ -611,7 +620,8 @@ file_upload() {
 	echo "file_upload:: complete upload payload:" >&2
 	jq . <"$upload_payload_file" >&2
 
-	API_URL="https://slack.com/api/files.completeUploadExternal?channel_id=${CHANNEL}"
+	API_URL="https://slack.com/api/files.completeUploadExternal?""\
+channel_id=${CHANNEL}"
 	export API_URL
 	export UPLOAD_PAYLOAD_FILE="$upload_payload_file"
 
@@ -628,12 +638,11 @@ file_upload() {
 	file_size_from_metadata=$(jq -r '.size // "unknown"' <<<"$file_metadata")
 	permalink=$(jq -r '.permalink // empty' <<<"$file_metadata")
 
-	echo "file_upload:: upload complete, file_id: $file_id_from_metadata permalink: $permalink" >&2
 	echo "file_upload:: file metadata:" >&2
 	echo "$file_metadata" | jq . >&2
 
-	if [[ -z "$permalink" || "$permalink" == "null" || "$permalink" == "empty" ]]; then
-		echo "file_upload:: failed to get permalink from uploaded file: $FILE_PATH (file_id: $file_id_from_metadata)" >&2
+	if [[ -z "$permalink" || "$permalink" == "null" ||
+		"$permalink" == "empty" ]]; then
 		return 1
 	fi
 

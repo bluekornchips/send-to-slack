@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # Block creation and resolution for Slack Block Kit
-# Dispatches block input JSON to the appropriate block script and post-processes the output
+# Dispatches block input JSON to the appropriate block script and post-processes
+# the output
 #
 
 ########################################################
@@ -36,7 +37,8 @@ DOC_URL_BLOCK_KIT_RICH_TEXT="https://docs.slack.dev/reference/block-kit/blocks/r
 DOC_URL_BLOCK_KIT_SECTION="https://docs.slack.dev/reference/block-kit/blocks/section-block"
 DOC_URL_BLOCK_KIT_VIDEO="https://docs.slack.dev/reference/block-kit/blocks/video-block"
 
-# Find the repository root from this script's path, lib/slack/block-kit/create-block.sh
+# Find the repository root from this script's path,
+# lib/slack/block-kit/create-block.sh
 # Resolves symlinks with cd and pwd
 #
 # Outputs:
@@ -64,7 +66,8 @@ _find_root_dir() {
 	# Get the absolute path of the directory containing this script
 	script_path="${BASH_SOURCE[0]}"
 	if [[ ! "$script_path" = /* ]]; then
-		script_path=$(cd "$(dirname "$script_path")" && pwd)/$(basename "$script_path")
+		script_path=$(cd "$(dirname "$script_path")" && pwd)/$(basename \
+			"$script_path")
 	fi
 
 	local kit_dir
@@ -79,7 +82,6 @@ _find_root_dir() {
 
 	slack_dir=$(dirname "$kit_dir")
 	if [[ -z "$slack_dir" ]] || [[ "$(basename "$slack_dir")" != "slack" ]]; then
-		echo "_find_root_dir:: expected lib/slack/block-kit/create-block.sh under repository lib" >&2
 		return 1
 	fi
 
@@ -91,7 +93,6 @@ _find_root_dir() {
 
 	root_dir=$(dirname "$lib_dir")
 	if [[ -z "$root_dir" ]]; then
-		echo "_find_root_dir:: cannot determine repository root from lib: ${lib_dir}" >&2
 		return 1
 	fi
 
@@ -144,14 +145,14 @@ _validate_block_script() {
 	if ! resolved_path=$(_resolve_block_script_path "$script_path"); then
 		local root_dir
 		root_dir=$(_find_root_dir 2>/dev/null || echo "unknown")
-		echo "_validate_block_script:: block script not found: ${root_dir}/${script_path}" >&2
 		return 1
 	fi
 
 	return 0
 }
 
-# Dispatch block input JSON to the appropriate block script, interpolate environment
+# Dispatch block input JSON to the appropriate block script, interpolate
+# environment
 # variables, filter empty values, and write the resulting block JSON to
 # CREATE_BLOCK_OUTPUT_FILE.
 #
@@ -189,22 +190,22 @@ create_block() {
 	local script_path=""
 
 	case "$block_type" in
-	"rich-text") script_path="$RICH_TEXT_BLOCK_FILE" ;;
-	"table") script_path="$TABLE_BLOCK_FILE" ;;
-	"section") script_path="$SECTION_BLOCK_FILE" ;;
-	"header") script_path="$HEADER_BLOCK_FILE" ;;
-	"context") script_path="$CONTEXT_BLOCK_FILE" ;;
-	"divider") script_path="$DIVIDER_BLOCK_FILE" ;;
-	"markdown") script_path="$MARKDOWN_BLOCK_FILE" ;;
-	"actions") script_path="$ACTIONS_BLOCK_FILE" ;;
-	"image") script_path="$IMAGE_BLOCK_FILE" ;;
-	"video") script_path="$VIDEO_BLOCK_FILE" ;;
-	"file") script_path="$FILE_UPLOAD_SCRIPT" ;;
-	*)
-		echo "create_block:: unsupported block type: $block_type. Skipping." >&2
-		echo "create_block:: See supported block types: $DOC_URL_BLOCK_KIT_BLOCKS" >&2
-		return 0
-		;;
+		"rich-text") script_path="$RICH_TEXT_BLOCK_FILE" ;;
+		"table") script_path="$TABLE_BLOCK_FILE" ;;
+		"section") script_path="$SECTION_BLOCK_FILE" ;;
+		"header") script_path="$HEADER_BLOCK_FILE" ;;
+		"context") script_path="$CONTEXT_BLOCK_FILE" ;;
+		"divider") script_path="$DIVIDER_BLOCK_FILE" ;;
+		"markdown") script_path="$MARKDOWN_BLOCK_FILE" ;;
+		"actions") script_path="$ACTIONS_BLOCK_FILE" ;;
+		"image") script_path="$IMAGE_BLOCK_FILE" ;;
+		"video") script_path="$VIDEO_BLOCK_FILE" ;;
+		"file") script_path="$FILE_UPLOAD_SCRIPT" ;;
+		*)
+			echo "create_block:: unsupported block type: $block_type. Skipping." >&2
+			echo "create_block:: See supported block types: $DOC_URL_BLOCK_KIT_BLOCKS" >&2
+			return 0
+			;;
 	esac
 
 	if ! _validate_block_script "$script_path"; then
@@ -214,43 +215,38 @@ create_block() {
 	local resolved_script_path
 	resolved_script_path=$(_resolve_block_script_path "$script_path")
 
-	echo "create_block:: invoking block script: ${block_type} (${resolved_script_path})" >&2
-
 	local script_exit_code=0
 	if [[ "$block_type" == "table" ]]; then
 		export TABLE_BLOCK_OUTPUT_FILE="$CREATE_BLOCK_OUTPUT_FILE"
 		"$resolved_script_path" <<<"$block_input" || script_exit_code=$?
 	else
-		"$resolved_script_path" <<<"$block_input" >"$CREATE_BLOCK_OUTPUT_FILE" || script_exit_code=$?
+		"$resolved_script_path" <<<"$block_input" >"$CREATE_BLOCK_OUTPUT_FILE" \
+			|| script_exit_code=$?
 	fi
 
 	if [[ "$script_exit_code" -ne 0 ]]; then
 		echo "create_block:: block script failed with exit code $script_exit_code" >&2
 		case "$block_type" in
-		"section")
-			echo "create_block:: See section block docs: $DOC_URL_BLOCK_KIT_SECTION" >&2
-			;;
-		"header")
-			echo "create_block:: See header block docs: $DOC_URL_BLOCK_KIT_HEADER" >&2
-			;;
-		"image")
-			echo "create_block:: See image block docs: $DOC_URL_BLOCK_KIT_IMAGE" >&2
-			;;
-		"context")
-			echo "create_block:: See context block docs: $DOC_URL_BLOCK_KIT_CONTEXT" >&2
-			;;
-		"markdown")
-			echo "create_block:: See markdown block docs: $DOC_URL_BLOCK_KIT_MARKDOWN" >&2
-			;;
-		"rich-text")
-			echo "create_block:: See rich text block docs: $DOC_URL_BLOCK_KIT_RICH_TEXT" >&2
-			;;
-		"actions")
-			echo "create_block:: See actions block docs: $DOC_URL_BLOCK_KIT_ACTIONS" >&2
-			;;
-		"video")
-			echo "create_block:: See video block docs: $DOC_URL_BLOCK_KIT_VIDEO" >&2
-			;;
+			"section")
+				echo "create_block:: See section block docs: $DOC_URL_BLOCK_KIT_SECTION" >&2
+				;;
+			"header")
+				echo "create_block:: See header block docs: $DOC_URL_BLOCK_KIT_HEADER" >&2
+				;;
+			"image")
+				echo "create_block:: See image block docs: $DOC_URL_BLOCK_KIT_IMAGE" >&2
+				;;
+			"context")
+				echo "create_block:: See context block docs: $DOC_URL_BLOCK_KIT_CONTEXT" >&2
+				;;
+			"markdown") ;;
+			"rich-text") ;;
+			"actions")
+				echo "create_block:: See actions block docs: $DOC_URL_BLOCK_KIT_ACTIONS" >&2
+				;;
+			"video")
+				echo "create_block:: See video block docs: $DOC_URL_BLOCK_KIT_VIDEO" >&2
+				;;
 		esac
 		return 1
 	fi
@@ -266,22 +262,30 @@ create_block() {
 		return 1
 	fi
 
-	# JSON-escape BUILD_PIPELINE_INSTANCE_VARS if it contains JSON to prevent breaking JSON structure
-	# Ref: https://concourse-ci.org/implementing-resource-types.html#resource-metadata
-	if [[ -n "${BUILD_PIPELINE_INSTANCE_VARS}" ]] && [[ "$BUILD_PIPELINE_INSTANCE_VARS" =~ ^\{.*\}$ ]]; then
+	# JSON-escape BUILD_PIPELINE_INSTANCE_VARS if it contains JSON to prevent
+	# breaking JSON structure
+	# Ref:
+	# https://concourse-ci.org/implementing-resource-types.html#resource-metadata
+	if [[ -n "${BUILD_PIPELINE_INSTANCE_VARS}" ]] && [[ 
+		"$BUILD_PIPELINE_INSTANCE_VARS" =~ ^\{.*\}$ ]]; then
 		local escaped_vars
-		escaped_vars=$(echo "$BUILD_PIPELINE_INSTANCE_VARS" | jq -Rs . | sed 's/^"//;s/"$//;s/\\n$//')
+		escaped_vars=$(echo "$BUILD_PIPELINE_INSTANCE_VARS" | jq -Rs . | sed \
+			's/^"//;s/"$//;s/\\n$//')
 		BUILD_PIPELINE_INSTANCE_VARS="$escaped_vars"
 		export BUILD_PIPELINE_INSTANCE_VARS
 	fi
 
-	# Interpolate environment variables using $VAR syntax; write result back to the output file
+	# Interpolate environment variables using $VAR syntax; write result back to the
+	# output file
 	local interp_tmp
 	interp_tmp=$(mktemp "$_SLACK_WORKSPACE/create_block.interp.XXXXXX")
-	envsubst <"$CREATE_BLOCK_OUTPUT_FILE" | jq . >"$interp_tmp" && mv "$interp_tmp" "$CREATE_BLOCK_OUTPUT_FILE"
+	envsubst <"$CREATE_BLOCK_OUTPUT_FILE" | jq . >"$interp_tmp" \
+		&& mv "$interp_tmp" "$CREATE_BLOCK_OUTPUT_FILE"
 
 	local output_type
-	output_type=$(jq -r 'if type == "array" then "array(\(length))" else .type // "unknown" end' "$CREATE_BLOCK_OUTPUT_FILE")
+	output_type=$(jq -r \
+		'if type == "array" then "array(\(length))" else .type // "unknown" end' \
+		"$CREATE_BLOCK_OUTPUT_FILE")
 	echo "create_block:: resolved ${block_type} -> ${output_type}" >&2
 
 	# Validate JSON after interpolation
@@ -299,9 +303,10 @@ create_block() {
 		'walk(if . == null or . == "" or . == [] or . == {} or
 			(type == "object" and .type == "text" and
 				(.text == "" or .text == null)
-			) then empty else . 
+			) then empty else .
 		end)
-		' "$CREATE_BLOCK_OUTPUT_FILE" >"$filter_tmp" && mv "$filter_tmp" "$CREATE_BLOCK_OUTPUT_FILE"
+		' "$CREATE_BLOCK_OUTPUT_FILE" >"$filter_tmp" \
+		&& mv "$filter_tmp" "$CREATE_BLOCK_OUTPUT_FILE"
 
 	return 0
 }

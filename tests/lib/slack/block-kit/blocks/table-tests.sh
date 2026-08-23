@@ -41,7 +41,20 @@ teardown() {
 
 @test "create_table:: TABLE_BLOCK_OUTPUT_FILE is required" {
 	unset TABLE_BLOCK_OUTPUT_FILE
-	run create_table <<<'{"rows": [[{"type": "raw_text", "text": "x"}]]}'
+	run create_table <<<"$(
+		cat <<-'EOF'
+			{
+			  "rows": [
+			    [
+			      {
+			        "type": "raw_text",
+			        "text": "x"
+			      }
+			    ]
+			  ]
+			}
+		EOF
+	)"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "TABLE_BLOCK_OUTPUT_FILE is required"
 }
@@ -59,64 +72,190 @@ teardown() {
 }
 
 @test "create_table:: missing elements" {
-	run create_table <<<'{"block_id": "test_id"}'
+	run create_table <<<"$(
+		cat <<-'EOF'
+			{
+			  "block_id": "test_id"
+			}
+		EOF
+	)"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "rows field is required"
 }
 
 @test "create_table:: with rows" {
-	run create_table <<<'{"rows": [[{"type": "raw_text", "text": "Hello, world!"}]]}'
+	run create_table <<<"$(
+		cat <<-'EOF'
+			{
+			  "rows": [
+			    [
+			      {
+			        "type": "raw_text",
+			        "text": "Hello, world!"
+			      }
+			    ]
+			  ]
+			}
+		EOF
+	)"
 	[[ "$status" -eq 0 ]]
 	output=$(cat "$TABLE_BLOCK_OUTPUT_FILE")
 	echo "$output" | jq '.rows[0][0].text == "Hello, world!"' >/dev/null
 }
 
 @test "create_table:: with block_id" {
-	run create_table <<<'{"block_id": "test_id", "rows": [[{"type": "raw_text", "text": "test"}]]}'
+	run create_table <<<"$(
+		cat <<-'EOF'
+			{
+			  "block_id": "test_id",
+			  "rows": [
+			    [
+			      {
+			        "type": "raw_text",
+			        "text": "test"
+			      }
+			    ]
+			  ]
+			}
+		EOF
+	)"
 	[[ "$status" -eq 0 ]]
 	output=$(cat "$TABLE_BLOCK_OUTPUT_FILE")
 	echo "$output" | jq '.block_id == "test_id"' >/dev/null
 }
 
 @test "create_table:: with column_settings" {
-	run create_table <<<'{"column_settings": [{"align": "left"}], "rows": [[{"type": "raw_text", "text": "test"}]]}'
+	run create_table <<<"$(
+		cat <<-'EOF'
+			{
+			  "column_settings": [
+			    {
+			      "align": "left"
+			    }
+			  ],
+			  "rows": [
+			    [
+			      {
+			        "type": "raw_text",
+			        "text": "test"
+			      }
+			    ]
+			  ]
+			}
+		EOF
+	)"
 	[[ "$status" -eq 0 ]]
 	output=$(cat "$TABLE_BLOCK_OUTPUT_FILE")
 	echo "$output" | jq '.column_settings[0].align == "left"' >/dev/null
 }
 
 @test "create_table:: rows not array" {
-	run create_table <<<'{"rows": "not an array"}'
+	run create_table <<<"$(
+		cat <<-'EOF'
+			{
+			  "rows": "not an array"
+			}
+		EOF
+	)"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "rows must be an array"
 }
 
 @test "create_table:: row not array" {
-	run create_table <<<'{"rows": ["not an array"]}'
+	run create_table <<<"$(
+		cat <<-'EOF'
+			{
+			  "rows": [
+			    "not an array"
+			  ]
+			}
+		EOF
+	)"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "row 0 must be an array"
 }
 
 @test "create_table:: cell missing type" {
-	run create_table <<<'{"rows": [[{"text": "test"}]]}'
+	run create_table <<<"$(
+		cat <<-'EOF'
+			{
+			  "rows": [
+			    [
+			      {
+			        "text": "test"
+			      }
+			    ]
+			  ]
+			}
+		EOF
+	)"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "cell \[0,0\] must have a type field"
 }
 
 @test "create_table:: invalid cell type" {
-	run create_table <<<'{"rows": [[{"type": "invalid", "text": "test"}]]}'
+	run create_table <<<"$(
+		cat <<-'EOF'
+			{
+			  "rows": [
+			    [
+			      {
+			        "type": "invalid",
+			        "text": "test"
+			      }
+			    ]
+			  ]
+			}
+		EOF
+	)"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "cell \[0,0\] type must be one of"
 }
 
 @test "create_table:: invalid column alignment" {
-	run create_table <<<'{"column_settings": [{"align": "invalid"}], "rows": [[{"type": "raw_text", "text": "test"}]]}'
+	run create_table <<<"$(
+		cat <<-'EOF'
+			{
+			  "column_settings": [
+			    {
+			      "align": "invalid"
+			    }
+			  ],
+			  "rows": [
+			    [
+			      {
+			        "type": "raw_text",
+			        "text": "test"
+			      }
+			    ]
+			  ]
+			}
+		EOF
+	)"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "align must be one of"
 }
 
 @test "create_table:: invalid column is_wrapped type" {
-	run create_table <<<'{"column_settings": [{"is_wrapped": "not boolean"}], "rows": [[{"type": "raw_text", "text": "test"}]]}'
+	run create_table <<<"$(
+		cat <<-'EOF'
+			{
+			  "column_settings": [
+			    {
+			      "is_wrapped": "not boolean"
+			    }
+			  ],
+			  "rows": [
+			    [
+			      {
+			        "type": "raw_text",
+			        "text": "test"
+			      }
+			    ]
+			  ]
+			}
+		EOF
+	)"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "is_wrapped must be a boolean"
 }

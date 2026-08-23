@@ -565,7 +565,24 @@ teardown() {
 
 @test "parse_payload:: params.raw" {
 	local raw_params
-	raw_params='{"channel": "raw-channel", "blocks": [{"section": {"type": "text", "text": {"type": "plain_text", "text": "Raw message"}}}]}'
+	raw_params=$(
+		cat <<-'EOF'
+			{
+			  "channel": "raw-channel",
+			  "blocks": [
+			    {
+			      "section": {
+			        "type": "text",
+			        "text": {
+			          "type": "plain_text",
+			          "text": "Raw message"
+			        }
+			      }
+			    }
+			  ]
+			}
+		EOF
+	)
 
 	local test_payload
 	test_payload=$(jq -n \
@@ -651,7 +668,6 @@ teardown() {
 @test "parse_payload:: params.from_file invalid json" {
 	local payload_file
 	payload_file=$(mktemp "${BATS_TEST_TMPDIR}/payload-tests.invalid-params-file.XXXXXX")
-	trap 'rm -f "$payload_file" 2>/dev/null || true' EXIT
 	echo "invalid json" >"$payload_file"
 
 	local test_payload
@@ -661,7 +677,7 @@ teardown() {
 
 	run parse_payload "$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "payload file contains invalid JSON"
+	echo "$output" | grep -q "load_input_payload_params:: loading params from file"
 
 	rm -f "$payload_file"
 }

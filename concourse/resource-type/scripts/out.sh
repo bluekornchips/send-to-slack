@@ -31,13 +31,13 @@ main() {
 	local input_file
 
 	# Create temporary files
-	SEND_TO_SLACK_OUTPUT=$(mktemp /tmp/resource-out.XXXXXX)
+	SEND_TO_SLACK_OUTPUT=$(mktemp "${TMPDIR:-/tmp}/resource-out.XXXXXX")
 	if ! chmod 0600 "$SEND_TO_SLACK_OUTPUT"; then
 		echo "out:: failed to secure output file ${SEND_TO_SLACK_OUTPUT}" >&2
 		rm -f "${SEND_TO_SLACK_OUTPUT}"
 		return 1
 	fi
-	input_file=$(mktemp /tmp/resource-in.XXXXXX)
+	input_file=$(mktemp "${TMPDIR:-/tmp}/resource-in.XXXXXX")
 	if ! chmod 0600 "$input_file"; then
 		echo "out:: failed to secure input file ${input_file}" >&2
 		rm -f "${input_file}" "${SEND_TO_SLACK_OUTPUT}"

@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 #
 # Block processing, Slack limits, and legacy attachment routing
-# Load after lib/parse/payload.sh, uses _resolve_from_file_path and convert_thread_ts from that file
-# Sources lib/slack/block-kit/create-block.sh for create_block and Block Kit documentation URLs when not already loaded
+# Load after lib/parse/payload.sh, uses _resolve_from_file_path and
+# convert_thread_ts from that file
+# Sources lib/slack/block-kit/create-block.sh for create_block and Block Kit
+# documentation URLs when not already loaded
 #
 
 DANGER_COLOR="#F44336"  # Red
@@ -137,7 +139,8 @@ _validate_block_counts() {
 
 	local attachment_block_count=0
 	if ((attachment_count > 0)); then
-		attachment_block_count=$(jq '[.[] | .blocks | length] | add' "$attachments_file")
+		attachment_block_count=$(jq '[.[] | .blocks | length] | add' \
+			"$attachments_file")
 	fi
 	local total_block_count=$((block_count + attachment_block_count))
 	if ((total_block_count > MAX_BLOCKS)); then
@@ -180,7 +183,8 @@ _validate_thread_replies() {
 			return 1
 		fi
 
-		if ! echo "$reply_blocks" | jq -e 'type == "array" and length > 0' >/dev/null 2>&1; then
+		if ! echo "$reply_blocks" | jq -e \
+			'type == "array" and length > 0' >/dev/null 2>&1; then
 			echo "parse_payload:: thread.replies[$ri].blocks is required and must be non-empty" >&2
 			return 1
 		fi
@@ -196,7 +200,8 @@ _validate_thread_replies() {
 #   $2 - text_field: params.text value or empty
 #   $3 - thread_replies_raw: JSON array string for thread replies or empty
 #
-# Uses global variables: CHANNEL, BLOCKS_FILE, ATTACHMENTS_FILE, DELIVERY_METHOD, INPUT_PAYLOAD, EPHEMERAL_USER
+# Uses global variables: CHANNEL, BLOCKS_FILE, ATTACHMENTS_FILE,
+# DELIVERY_METHOD, INPUT_PAYLOAD, EPHEMERAL_USER
 #
 # Outputs:
 #   Writes complete Slack API payload JSON to stdout
@@ -237,22 +242,26 @@ _build_slack_payload() {
 		payload=$(jq --arg user "$EPHEMERAL_USER" '. + {user: $user}' <<<"$payload")
 	fi
 
-	if [[ -n "$thread_ts" && "$thread_ts" != "null" && "$thread_ts" != "empty" ]]; then
-		payload=$(jq --arg thread_ts "$thread_ts" '. + {thread_ts: $thread_ts}' <<<"$payload")
+	if [[ -n "$thread_ts" && "$thread_ts" != "null" &&
+		"$thread_ts" != "empty" ]]; then
+		payload=$(jq --arg thread_ts "$thread_ts" '. + {thread_ts: $thread_ts}' \
+			<<<"$payload")
 	fi
 
 	if [[ -n "$thread_replies_raw" && "$thread_replies_raw" != "null" ]]; then
 		local thread_replies_len
 		thread_replies_len=$(echo "$thread_replies_raw" | jq 'length')
 		if ((thread_replies_len > 0)); then
-			payload=$(jq --argjson replies "$thread_replies_raw" '. + {thread_replies: $replies}' <<<"$payload")
+			payload=$(jq --argjson replies "$thread_replies_raw" \
+				'. + {thread_replies: $replies}' <<<"$payload")
 		fi
 	fi
 
-	if [[ -n "$text_field" && "$text_field" != "null" && "$text_field" != "empty" ]]; then
+	if [[ -n "$text_field" && "$text_field" != "null" &&
+		"$text_field" != "empty" ]]; then
 		local text_length=${#text_field}
 		if ((text_length > MAX_TEXT_LENGTH)); then
-			echo "parse_payload:: text field length ($text_length) exceeds Slack's maximum of $MAX_TEXT_LENGTH characters" >&2
+			echo "_build_slack_payload:: text field length ($text_length) exceeds Slack's maximum of $MAX_TEXT_LENGTH characters" >&2
 			return 1
 		fi
 		payload=$(jq --arg text "$text_field" '. + {text: $text}' <<<"$payload")
@@ -265,13 +274,16 @@ _build_slack_payload() {
 	bot_identity_icon_emoji=$(jq -r '.params.icon_emoji // empty' "$INPUT_PAYLOAD")
 	bot_identity_icon_url=$(jq -r '.params.icon_url // empty' "$INPUT_PAYLOAD")
 	if [[ -n "$bot_identity_username" ]]; then
-		payload=$(jq --arg username "$bot_identity_username" '. + {username: $username}' <<<"$payload")
+		payload=$(jq --arg username "$bot_identity_username" \
+			'. + {username: $username}' <<<"$payload")
 	fi
 	if [[ -n "$bot_identity_icon_emoji" ]]; then
-		payload=$(jq --arg icon_emoji "$bot_identity_icon_emoji" '. + {icon_emoji: $icon_emoji}' <<<"$payload")
+		payload=$(jq --arg icon_emoji "$bot_identity_icon_emoji" \
+			'. + {icon_emoji: $icon_emoji}' <<<"$payload")
 	fi
 	if [[ -n "$bot_identity_icon_url" ]]; then
-		payload=$(jq --arg icon_url "$bot_identity_icon_url" '. + {icon_url: $icon_url}' <<<"$payload")
+		payload=$(jq --arg icon_url "$bot_identity_icon_url" \
+			'. + {icon_url: $icon_url}' <<<"$payload")
 	fi
 
 	echo "$payload"
@@ -281,7 +293,8 @@ _build_slack_payload() {
 
 # Process blocks array and create Slack payload with blocks and attachments
 #
-# Uses global variables: INPUT_PAYLOAD, CHANNEL, DELIVERY_METHOD from load_configuration
+# Uses global variables: INPUT_PAYLOAD, CHANNEL, DELIVERY_METHOD from
+# load_configuration
 #
 # Outputs:
 #   Writes complete Slack API payload JSON to stdout
@@ -299,7 +312,8 @@ process_blocks() {
 	echo '[]' >"$blocks_file"
 
 	local attachments_file
-	attachments_file=$(mktemp "$_SLACK_WORKSPACE/process_blocks.attachments.XXXXXX")
+	attachments_file=$(mktemp \
+		"$_SLACK_WORKSPACE/process_blocks.attachments.XXXXXX")
 	echo '[]' >"$attachments_file"
 
 	BLOCKS_FILE="$blocks_file"
@@ -308,59 +322,61 @@ process_blocks() {
 	export BLOCKS_FILE ATTACHMENTS_FILE
 
 	if [[ "$blocks_json" == "[]" ]]; then
-		echo "process_blocks:: no blocks to process, skipping" >&2
+		echo "process_blocks:: no blocks to process, assembling text-only payload" >&2
+	else
+		local block_index=0
+		local block_items
+		block_items=$(jq -r -c '.[]' <<<"$blocks_json") || return 1
 
-		return 0
-	fi
+		# Process each block in the blocks array
+		while read -r block_item; do
+			[[ -z "$block_item" ]] && continue
+			# Expand block-level from_file before type/value extraction
+			if jq -e '.from_file or (.type == "from_file")' <<<"$block_item" >/dev/null \
+				2>&1; then
+				local block_from_file_path
+				block_from_file_path=$(jq -r '.path // .from_file // empty' \
+					<<<"$block_item")
+				if [[ -z "$block_from_file_path" ]]; then
+					echo "parse_payload:: block from_file path is empty" >&2
+					return 1
+				fi
+				local loaded_content
+				loaded_content=$(_load_block_item_from_file "$block_from_file_path") \
+					|| return 1
+				echo "process_blocks:: expanded block from file: ${block_from_file_path}" >&2
+				if echo "$loaded_content" | jq -e 'type == "array"' >/dev/null 2>&1; then
+					local nested_items
+					nested_items=$(jq -c '.[]' <<<"$loaded_content") || return 1
 
-	local block_index=0
-	local block_items
-	block_items=$(jq -r -c '.[]' <<<"$blocks_json") || return 1
-
-	# Process each block in the blocks array
-	while read -r block_item; do
-		[[ -z "$block_item" ]] && continue
-		# Expand block-level from_file before type/value extraction
-		if jq -e '.from_file or (.type == "from_file")' <<<"$block_item" >/dev/null 2>&1; then
-			local block_from_file_path
-			block_from_file_path=$(jq -r '.path // .from_file // empty' <<<"$block_item")
-			if [[ -z "$block_from_file_path" ]]; then
-				echo "parse_payload:: block from_file path is empty" >&2
-				return 1
+					while read -r block_item; do
+						[[ -z "$block_item" ]] && continue
+						_process_blocks_append_block "$block_item" || return 1
+					done <<<"$nested_items"
+					continue
+				fi
+				block_item="$loaded_content"
 			fi
-			local loaded_content
-			loaded_content=$(_load_block_item_from_file "$block_from_file_path") || return 1
-			echo "process_blocks:: expanded block from file: ${block_from_file_path}" >&2
-			if echo "$loaded_content" | jq -e 'type == "array"' >/dev/null 2>&1; then
-				local nested_items
-				nested_items=$(jq -c '.[]' <<<"$loaded_content") || return 1
 
-				while read -r block_item; do
-					[[ -z "$block_item" ]] && continue
-					_process_blocks_append_block "$block_item" || return 1
-				done <<<"$nested_items"
-				continue
-			fi
-			block_item="$loaded_content"
+			_process_blocks_append_block "$block_item" || return 1
+		done <<<"$block_items"
+
+		local block_count_debug
+		local attachment_count_debug
+		block_count_debug=$(jq '. | length' "$BLOCKS_FILE")
+		attachment_count_debug=$(jq '. | length' "$ATTACHMENTS_FILE")
+		echo "process_blocks:: completed: ${block_count_debug} blocks, ${attachment_count_debug} attachments" >&2
+
+		if ! _validate_block_counts "$BLOCKS_FILE" "$ATTACHMENTS_FILE"; then
+			return 1
 		fi
-
-		_process_blocks_append_block "$block_item" || return 1
-	done <<<"$block_items"
-
-	local block_count_debug
-	local attachment_count_debug
-	block_count_debug=$(jq '. | length' "$BLOCKS_FILE")
-	attachment_count_debug=$(jq '. | length' "$ATTACHMENTS_FILE")
-	echo "process_blocks:: completed: ${block_count_debug} blocks, ${attachment_count_debug} attachments" >&2
-
-	if ! _validate_block_counts "$BLOCKS_FILE" "$ATTACHMENTS_FILE"; then
-		return 1
 	fi
 
 	local thread_ts
 	thread_ts=$(jq -r '.params.thread_ts // ""' "$INPUT_PAYLOAD")
 
-	if [[ -n "$thread_ts" && "$thread_ts" != "null" && "$thread_ts" != "empty" ]]; then
+	if [[ -n "$thread_ts" && "$thread_ts" != "null" &&
+		"$thread_ts" != "empty" ]]; then
 		local converted_ts
 		converted_ts=$(convert_thread_ts "$thread_ts")
 		local convert_thread_ts_exit_code=$?
@@ -381,7 +397,8 @@ process_blocks() {
 	text_field=$(jq -r '.params.text // empty' "$INPUT_PAYLOAD")
 
 	local payload
-	if ! payload=$(_build_slack_payload "$thread_ts" "$text_field" "$thread_replies_raw"); then
+	if ! payload=$(_build_slack_payload "$thread_ts" "$text_field" \
+		"$thread_replies_raw"); then
 		return 1
 	fi
 
@@ -414,10 +431,10 @@ _resolve_block_color() {
 	fi
 
 	case "$block_color" in
-	"danger") echo "$DANGER_COLOR" ;;
-	"success") echo "$SUCCESS_COLOR" ;;
-	"warning") echo "$WARN_COLOR" ;;
-	*) echo "$DANGER_COLOR" ;;
+		"danger") echo "$DANGER_COLOR" ;;
+		"success") echo "$SUCCESS_COLOR" ;;
+		"warning") echo "$WARN_COLOR" ;;
+		*) echo "$DANGER_COLOR" ;;
 	esac
 
 	return 0
@@ -453,7 +470,8 @@ _extract_block_type_and_value() {
 				if jq -e '.text' <<<"$_EXTRACT_BLOCK_VALUE" >/dev/null 2>&1; then
 					_EXTRACT_BLOCK_VALUE=$(jq '. + {type: "text"}' <<<"$_EXTRACT_BLOCK_VALUE")
 				elif jq -e '.fields' <<<"$_EXTRACT_BLOCK_VALUE" >/dev/null 2>&1; then
-					_EXTRACT_BLOCK_VALUE=$(jq '. + {type: "fields"}' <<<"$_EXTRACT_BLOCK_VALUE")
+					_EXTRACT_BLOCK_VALUE=$(jq '. + {type: "fields"}' \
+						<<<"$_EXTRACT_BLOCK_VALUE")
 				fi
 			fi
 		fi
@@ -490,7 +508,8 @@ _cleanup_process_blocks_append_tmp_files() {
 	return 0
 }
 
-# Helper used by process_blocks to process a single block_item and append to blocks/attachments
+# Helper used by process_blocks to process a single block_item and append to
+# blocks/attachments
 #
 # Inputs:
 #   block_item - JSON object for one block in type-field or key-based format
@@ -527,17 +546,18 @@ _process_blocks_append_block() {
 	block_value="$_EXTRACT_BLOCK_VALUE"
 	block_color="$_EXTRACT_BLOCK_COLOR"
 
-	# Allocate a per-block output file and set CREATE_BLOCK_OUTPUT_FILE for create_block
+	# Allocate a per-block output file and set CREATE_BLOCK_OUTPUT_FILE for
+	# create_block
 	local create_block_out
 	create_block_out=$(mktemp "$_SLACK_WORKSPACE/process_blocks.block_out.XXXXXX")
 	if [[ -z "$create_block_out" ]]; then
-		echo "_process_blocks_append_block:: failed to create create_block temp file" >&2
 		return 1
 	fi
 	CREATE_BLOCK_OUTPUT_FILE="$create_block_out"
 	export CREATE_BLOCK_OUTPUT_FILE
 
-	# Allocate a temp file for in-place jq updates to BLOCKS_FILE / ATTACHMENTS_FILE
+	# Allocate a temp file for in-place jq updates to BLOCKS_FILE /
+	# ATTACHMENTS_FILE
 	local merge_tmp
 	merge_tmp=$(mktemp "$_SLACK_WORKSPACE/process_blocks.merge_tmp.XXXXXX")
 	if [[ -z "$merge_tmp" ]]; then
@@ -547,19 +567,18 @@ _process_blocks_append_block() {
 	fi
 
 	if ! _validate_block_input_size "$block_value" "$block_type"; then
-		echo "_process_blocks_append_block:: block input too large for type '$block_type'" >&2
 		_cleanup_process_blocks_append_tmp_files "$create_block_out" "$merge_tmp"
 		return 1
 	fi
 
-	if [[ "$block_type" == "file" ]] && [[ "${DELIVERY_METHOD:-api}" == "webhook" ]]; then
+	if [[ "$block_type" == "file" ]] \
+		&& [[ "${DELIVERY_METHOD:-api}" == "webhook" ]]; then
 		echo "_process_blocks_append_block:: file uploads are not supported for webhook delivery" >&2
 		_cleanup_process_blocks_append_tmp_files "$create_block_out" "$merge_tmp"
 		return 1
 	fi
 
 	if ! create_block "$block_value" "$block_type"; then
-		echo "_process_blocks_append_block:: failed to create block type '$block_type': $block_item" >&2
 		_cleanup_process_blocks_append_tmp_files "$create_block_out" "$merge_tmp"
 		return 1
 	fi
@@ -591,17 +610,16 @@ _process_blocks_append_block() {
 	else
 		dest="blocks"
 	fi
-	echo "_process_blocks_append_block:: block ${block_index}: type=${block_type} dest=${dest}" >&2
 
 	if [[ -n "$block_color" ]] || [[ "$block_type" == "table" ]]; then
-		if [[ -n "$block_color" ]] && [[ ! "$block_color" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
+		if [[ -n "$block_color" ]] \
+			&& [[ ! "$block_color" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
 			block_color=$(_resolve_block_color "$block_color")
 		fi
 		if ! jq --slurpfile block "$CREATE_BLOCK_OUTPUT_FILE" \
 			--arg color "${block_color:-}" \
 			'. += [{ color: $color, blocks: [$block[0]]}]' \
 			"$ATTACHMENTS_FILE" >"$merge_tmp"; then
-			echo "_process_blocks_append_block:: failed to append block to attachments" >&2
 			_cleanup_process_blocks_append_tmp_files "$create_block_out" "$merge_tmp"
 			return 1
 		fi

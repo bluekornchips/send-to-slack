@@ -15,7 +15,7 @@ jobs:
   - name: slack-native-format-all-block-types
     plan:
       - put: slack-notification
-        
+
         params:
           channel: ((channel))
           text: "Example of all block types using Slack's native type field format"

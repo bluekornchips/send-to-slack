@@ -31,7 +31,7 @@ main() {
 
 	dest="${1:-}"
 
-	payload=$(mktemp /tmp/resource-in.XXXXXX)
+	payload=$(mktemp "${TMPDIR:-/tmp}/resource-in.XXXXXX")
 	if ! chmod 0600 "$payload"; then
 		echo "in:: failed to secure temp payload ${payload}" >&2
 		rm -f "${payload}"

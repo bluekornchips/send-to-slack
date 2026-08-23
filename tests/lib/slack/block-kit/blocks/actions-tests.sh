@@ -55,28 +55,62 @@ teardown() {
 }
 
 @test "create_button_element:: missing text field" {
-	local input='{"action_id": "test_action"}'
+	local input=$(
+		cat <<-'EOF'
+			{
+			  "action_id": "test_action"
+			}
+		EOF
+	)
 	run create_button_element "$input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "text is required"
 }
 
 @test "create_button_element:: missing text.type" {
-	local input='{"text": {"text": "Click me"}, "action_id": "test_action"}'
+	local input=$(
+		cat <<-'EOF'
+			{
+			  "text": {
+			    "text": "Click me"
+			  },
+			  "action_id": "test_action"
+			}
+		EOF
+	)
 	run create_button_element "$input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "text.type is required"
 }
 
 @test "create_button_element:: missing action_id" {
-	local input='{"text": {"type": "plain_text", "text": "Click me"}}'
+	local input=$(
+		cat <<-'EOF'
+			{
+			  "text": {
+			    "type": "plain_text",
+			    "text": "Click me"
+			  }
+			}
+		EOF
+	)
 	run create_button_element "$input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "action_id is required"
 }
 
 @test "create_button_element:: basic button with plain_text" {
-	local input='{"text": {"type": "plain_text", "text": "Click me"}, "action_id": "test_action"}'
+	local input=$(
+		cat <<-'EOF'
+			{
+			  "text": {
+			    "type": "plain_text",
+			    "text": "Click me"
+			  },
+			  "action_id": "test_action"
+			}
+		EOF
+	)
 	run create_button_element "$input"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.type == "button"' >/dev/null
@@ -86,42 +120,109 @@ teardown() {
 }
 
 @test "create_button_element:: button with mrkdwn text" {
-	local input='{"text": {"type": "mrkdwn", "text": "*Click me*"}, "action_id": "test_action"}'
+	local input=$(
+		cat <<-'EOF'
+			{
+			  "text": {
+			    "type": "mrkdwn",
+			    "text": "*Click me*"
+			  },
+			  "action_id": "test_action"
+			}
+		EOF
+	)
 	run create_button_element "$input"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.text.type == "mrkdwn"' >/dev/null
 }
 
 @test "create_button_element:: button with url" {
-	local input='{"text": {"type": "plain_text", "text": "Visit"}, "action_id": "test_action", "url": "https://example.com"}'
+	local input=$(
+		cat <<-'EOF'
+			{
+			  "text": {
+			    "type": "plain_text",
+			    "text": "Visit"
+			  },
+			  "action_id": "test_action",
+			  "url": "https://example.com"
+			}
+		EOF
+	)
 	run create_button_element "$input"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.url == "https://example.com"' >/dev/null
 }
 
 @test "create_button_element:: button with value" {
-	local input='{"text": {"type": "plain_text", "text": "Click"}, "action_id": "test_action", "value": "clicked"}'
+	local input=$(
+		cat <<-'EOF'
+			{
+			  "text": {
+			    "type": "plain_text",
+			    "text": "Click"
+			  },
+			  "action_id": "test_action",
+			  "value": "clicked"
+			}
+		EOF
+	)
 	run create_button_element "$input"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.value == "clicked"' >/dev/null
 }
 
 @test "create_button_element:: button with style primary" {
-	local input='{"text": {"type": "plain_text", "text": "Submit"}, "action_id": "test_action", "style": "primary"}'
+	local input=$(
+		cat <<-'EOF'
+			{
+			  "text": {
+			    "type": "plain_text",
+			    "text": "Submit"
+			  },
+			  "action_id": "test_action",
+			  "style": "primary"
+			}
+		EOF
+	)
 	run create_button_element "$input"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.style == "primary"' >/dev/null
 }
 
 @test "create_button_element:: button with style danger" {
-	local input='{"text": {"type": "plain_text", "text": "Delete"}, "action_id": "test_action", "style": "danger"}'
+	local input=$(
+		cat <<-'EOF'
+			{
+			  "text": {
+			    "type": "plain_text",
+			    "text": "Delete"
+			  },
+			  "action_id": "test_action",
+			  "style": "danger"
+			}
+		EOF
+	)
 	run create_button_element "$input"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.style == "danger"' >/dev/null
 }
 
 @test "create_button_element:: button with all optional fields" {
-	local input='{"text": {"type": "plain_text", "text": "Full Button"}, "action_id": "test_action", "url": "https://example.com", "value": "full", "style": "primary"}'
+	local input=$(
+		cat <<-'EOF'
+			{
+			  "text": {
+			    "type": "plain_text",
+			    "text": "Full Button"
+			  },
+			  "action_id": "test_action",
+			  "url": "https://example.com",
+			  "value": "full",
+			  "style": "primary"
+			}
+		EOF
+	)
 	run create_button_element "$input"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.url == "https://example.com"' >/dev/null
@@ -146,21 +247,48 @@ teardown() {
 }
 
 @test "create_actions:: missing elements field" {
-	local input='{"block_id": "test"}'
+	local input=$(
+		cat <<-'EOF'
+			{
+			  "block_id": "test"
+			}
+		EOF
+	)
 	run create_actions <<<"$input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "elements array is required"
 }
 
 @test "create_actions:: empty elements array" {
-	local input='{"elements": []}'
+	local input=$(
+		cat <<-'EOF'
+			{
+			  "elements": []
+			}
+		EOF
+	)
 	run create_actions <<<"$input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "elements array is required"
 }
 
 @test "create_actions:: basic actions block with single button" {
-	local input='{"elements": [{"type": "button", "text": {"type": "plain_text", "text": "Click"}, "action_id": "test_action"}]}'
+	local input=$(
+		cat <<-'EOF'
+			{
+			  "elements": [
+			    {
+			      "type": "button",
+			      "text": {
+			        "type": "plain_text",
+			        "text": "Click"
+			      },
+			      "action_id": "test_action"
+			    }
+			  ]
+			}
+		EOF
+	)
 	run create_actions <<<"$input"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.type == "actions"' >/dev/null
@@ -169,7 +297,30 @@ teardown() {
 }
 
 @test "create_actions:: actions block with multiple buttons" {
-	local input='{"elements": [{"type": "button", "text": {"type": "plain_text", "text": "Button 1"}, "action_id": "action1"}, {"type": "button", "text": {"type": "plain_text", "text": "Button 2"}, "action_id": "action2"}]}'
+	local input=$(
+		cat <<-'EOF'
+			{
+			  "elements": [
+			    {
+			      "type": "button",
+			      "text": {
+			        "type": "plain_text",
+			        "text": "Button 1"
+			      },
+			      "action_id": "action1"
+			    },
+			    {
+			      "type": "button",
+			      "text": {
+			        "type": "plain_text",
+			        "text": "Button 2"
+			      },
+			      "action_id": "action2"
+			    }
+			  ]
+			}
+		EOF
+	)
 	run create_actions <<<"$input"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.elements | length == 2' >/dev/null
@@ -178,14 +329,41 @@ teardown() {
 }
 
 @test "create_actions:: actions block with block_id" {
-	local input='{"elements": [{"type": "button", "text": {"type": "plain_text", "text": "Click"}, "action_id": "test_action"}], "block_id": "actions_123"}'
+	local input=$(
+		cat <<-'EOF'
+			{
+			  "elements": [
+			    {
+			      "type": "button",
+			      "text": {
+			        "type": "plain_text",
+			        "text": "Click"
+			      },
+			      "action_id": "test_action"
+			    }
+			  ],
+			  "block_id": "actions_123"
+			}
+		EOF
+	)
 	run create_actions <<<"$input"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.block_id == "actions_123"' >/dev/null
 }
 
 @test "create_actions:: unsupported element type" {
-	local input='{"elements": [{"type": "datepicker", "action_id": "test"}]}'
+	local input=$(
+		cat <<-'EOF'
+			{
+			  "elements": [
+			    {
+			      "type": "datepicker",
+			      "action_id": "test"
+			    }
+			  ]
+			}
+		EOF
+	)
 	run create_actions <<<"$input"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "unsupported element type"

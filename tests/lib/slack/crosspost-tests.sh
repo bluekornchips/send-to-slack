@@ -28,10 +28,14 @@ setup_file() {
 
 setup() {
 	cd "$GIT_ROOT" || return 1
+	# shellcheck source=lib/loader.sh
+	source "$GIT_ROOT/lib/loader.sh"
+	# shellcheck source=lib/slack/api.sh
 	source "$GIT_ROOT/lib/slack/api.sh"
 	source "$SCRIPT"
 	source "$GIT_ROOT/lib/parse/payload.sh"
 	source "$GIT_ROOT/lib/parse/blocks.sh"
+	source "$GIT_ROOT/lib/slack/derived-payload.sh"
 	source "$GIT_ROOT/lib/slack/crosspost.sh"
 
 	SLACK_BOT_USER_OAUTH_TOKEN="test-token"

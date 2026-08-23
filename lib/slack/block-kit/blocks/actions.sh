@@ -18,8 +18,21 @@ DOC_URL_BUTTON_ELEMENT="https://docs.slack.dev/reference/block-kit/blocks/action
 ########################################################
 # Example Strings
 ########################################################
-EXAMPLE_BUTTON_ELEMENT='{"type": "button", "text": {"type": "plain_text", "text": "Click"}, "action_id": "btn_1"}'
-EXAMPLE_ACTIONS_BLOCK="{\"elements\": [$EXAMPLE_BUTTON_ELEMENT]}"
+EXAMPLE_BUTTON_ELEMENT=$(
+	cat <<-'EOF'
+		{
+		  "type": "button",
+		  "text": {
+		    "type": "plain_text",
+		    "text": "Click"
+		  },
+		  "action_id": "btn_1"
+		}
+	EOF
+)
+EXAMPLE_ACTIONS_BLOCK=$(
+	jq -cn --argjson el "$EXAMPLE_BUTTON_ELEMENT" '{elements: [$el]}'
+)
 
 # Create button element following Slack Block Kit format
 #
@@ -72,7 +85,6 @@ create_button_element() {
 	if [[ -z "$action_id" ]] || [[ "$action_id" == "null" ]]; then
 		echo "create_button_element:: action_id is required" >&2
 		echo "create_button_element:: Example: $EXAMPLE_BUTTON_ELEMENT" >&2
-		echo "create_button_element:: See button element docs: $DOC_URL_BUTTON_ELEMENT" >&2
 		return 1
 	fi
 
@@ -142,7 +154,8 @@ create_actions() {
 		echo "create_actions:: invalid JSON format" >&2
 		return 1
 	fi
-	if [[ -z "$elements_json" ]] || [[ "$elements_json" == "null" ]] || [[ "$elements_json" == "[]" ]]; then
+	if [[ -z "$elements_json" ]] || [[ "$elements_json" == "null" ]] || [[ 
+		"$elements_json" == "[]" ]]; then
 		echo "create_actions:: elements array is required and cannot be empty" >&2
 		echo "create_actions:: Example: $EXAMPLE_ACTIONS_BLOCK" >&2
 		return 1
@@ -198,7 +211,8 @@ create_actions() {
 		}')
 
 	if [[ -n "$block_id" ]] && [[ "$block_id" != "null" ]]; then
-		block=$(echo "$block" | jq --arg block_id "$block_id" '. + {block_id: $block_id}')
+		block=$(echo "$block" | jq --arg block_id "$block_id" \
+			'. + {block_id: $block_id}')
 	fi
 
 	echo "$block"

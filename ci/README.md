@@ -4,11 +4,11 @@
 
 Scripts here and the root `Makefile` are wired into three workflows under [.github/workflows/](../.github/workflows/):
 
-| Workflow                                            | When it runs                                     | Role                                                                          |
-| --------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------- |
-| [lint.yaml](../.github/workflows/lint.yaml)         | `pull_request`, push to `main`                   | Install shellcheck v0.11.0, then `make lint`                                  |
-| [run-bats.yaml](../.github/workflows/run-bats.yaml) | `pull_request`                                   | Install `bats`, `jq`, and pinned `yq` v4.45.1, then `./ci/run-bats.sh`        |
-| [build.yaml](../.github/workflows/build.yaml)       | `pull_request` opened, synchronized, or reopened | Matrix of Docker builds via `./ci/build.sh` with healthcheck and test message |
+| Workflow                                            | When it runs                                     | Role                                                                                 |
+| --------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| [lint.yaml](../.github/workflows/lint.yaml)         | `pull_request`, push to `main`                   | Install shellcheck + shfmt, then `make lint`                                         |
+| [run-bats.yaml](../.github/workflows/run-bats.yaml) | `pull_request`, push to `main`                   | PRs: changed-file bats via `./ci/run-bats.sh`; `main`: full `make test`              |
+| [build.yaml](../.github/workflows/build.yaml)       | `pull_request` opened, synchronized, or reopened | Matrix of Docker builds via `./ci/build.sh` with healthcheck and optional Slack send |
 
 ### Concurrency
 
@@ -61,7 +61,7 @@ Always fetches the base branch from origin before comparing.
 
 ### Examples
 
-If `lib/parse/payload.sh` changes, the script finds `tests/lib/parse/payload-tests.sh` because it contains "payload".
+If `lib/parse/payload.sh` changes, the script finds tests under `tests/lib/parse/` whose names or contents reference `payload` (for example `payload-core-tests.sh`, `payload-limits-tests.sh`). Basename matching is intentionally broad.
 
 If `lib/slack/block-kit/blocks/rich-text.sh` changes, the script finds `tests/lib/slack/block-kit/blocks/rich-text-tests.sh` because it contains "rich-text".
 

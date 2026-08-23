@@ -27,5 +27,11 @@ jobs:
           wget -qO- "https://github.com/koalaman/shellcheck/releases/download/${VERSION}/shellcheck-${VERSION}.linux.x86_64.tar.xz" \
             | tar -xJf - --strip-components=1 -C /tmp "shellcheck-${VERSION}/shellcheck"
           sudo mv /tmp/shellcheck /usr/local/bin/shellcheck
+      - name: Install shfmt
+        run: |
+          VERSION=v3.13.1
+          wget -qO /tmp/shfmt "https://github.com/mvdan/sh/releases/download/${VERSION}/shfmt_${VERSION}_linux_amd64"
+          chmod +x /tmp/shfmt
+          sudo mv /tmp/shfmt /usr/local/bin/shfmt
       - name: Run lint
         run: make lint

@@ -18,7 +18,7 @@ jobs:
   - name: actions-button-channel
     plan:
       - put: slack-notification
-        
+
         params:
           <<: *common_slack_params
           blocks:
@@ -38,7 +38,7 @@ jobs:
   - name: actions-button-user
     plan:
       - put: slack-notification
-        
+
         params:
           <<: *common_slack_params
           blocks:

@@ -18,7 +18,13 @@ DOC_URL_MARKDOWN_BLOCK="https://docs.slack.dev/reference/block-kit/blocks/markdo
 ########################################################
 # Example Strings
 ########################################################
-EXAMPLE_MARKDOWN_BLOCK='{"text": "*Bold* and _italic_ text"}'
+EXAMPLE_MARKDOWN_BLOCK=$(
+	cat <<-'EOF'
+		{
+		  "text": "*Bold* and _italic_ text"
+		}
+	EOF
+)
 
 # Process markdown block and create Slack Block Kit markdown block format
 #
@@ -66,7 +72,6 @@ create_markdown() {
 	text_length=${#text_content}
 	if ((text_length > MAX_TEXT_LENGTH)); then
 		echo "create_markdown:: text must be $MAX_TEXT_LENGTH characters or less" >&2
-		echo "create_markdown:: See markdown block limits: $DOC_URL_MARKDOWN_BLOCK" >&2
 		return 1
 	fi
 

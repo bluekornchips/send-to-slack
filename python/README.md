@@ -11,20 +11,17 @@ When users click buttons in Slack messages, Slack sends HTTP POST requests to a 
 From the repository root, the Python targets live in `python/Makefile`. Use `-C python`:
 
 ```bash
+make -C python check          # lint and unit tests
+make -C python python-server  # run the server
+```
+
+Or run the server directly:
+
+```bash
 export SLACK_BOT_USER_OAUTH_TOKEN="xoxb-your-token-here"
 export SLACK_SIGNING_SECRET="your-signing-secret"
 export PORT=3000
 make -C python python-server
-```
-
-Or run directly:
-
-```bash
-cd python
-export SLACK_BOT_USER_OAUTH_TOKEN="xoxb-your-token-here"
-export SLACK_SIGNING_SECRET="your-signing-secret"
-export PORT=3000
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && .venv/bin/python server.py
 ```
 
 The `make -C python python-server` target creates `.venv` under `python/` and installs dependencies on first run.

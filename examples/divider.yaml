@@ -18,7 +18,7 @@ jobs:
   - name: divider-basic-separator
     plan:
       - put: slack-notification
-        
+
         params:
           <<: *common_slack_params
           text: "Testing divider block as basic content separator"
@@ -38,7 +38,7 @@ jobs:
   - name: divider-with-block-id-separating-sections
     plan:
       - put: slack-notification
-        
+
         params:
           <<: *common_slack_params
           text: "Testing divider block with block_id separating multiple sections"

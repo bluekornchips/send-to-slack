@@ -11,7 +11,15 @@ EXPECTED_VERSION="$(tr -d '\r\n' <"$GIT_ROOT/VERSION" 2>/dev/null || echo "")"
 # main
 ########################################################
 @test "main:: returns package version for notification resource" {
-	run env VERSION_PATH="$GIT_ROOT/VERSION" "$SCRIPT" <<<'{"version": {"timestamp": "2023-12-01T12:00:00Z"}}'
+	run env VERSION_PATH="$GIT_ROOT/VERSION" "$SCRIPT" <<<"$(
+		cat <<-'EOF'
+			{
+			  "version": {
+			    "timestamp": "2023-12-01T12:00:00Z"
+			  }
+			}
+		EOF
+	)"
 
 	[[ "$status" -eq 0 ]]
 
@@ -34,7 +42,15 @@ EXPECTED_VERSION="$(tr -d '\r\n' <"$GIT_ROOT/VERSION" 2>/dev/null || echo "")"
 }
 
 @test "main:: returns package version when no version in payload" {
-	run env VERSION_PATH="$GIT_ROOT/VERSION" "$SCRIPT" <<<'{"source": {"url": "https://example.com"}}'
+	run env VERSION_PATH="$GIT_ROOT/VERSION" "$SCRIPT" <<<"$(
+		cat <<-'EOF'
+			{
+			  "source": {
+			    "url": "https://example.com"
+			  }
+			}
+		EOF
+	)"
 
 	[[ "$status" -eq 0 ]]
 
@@ -57,7 +73,15 @@ EXPECTED_VERSION="$(tr -d '\r\n' <"$GIT_ROOT/VERSION" 2>/dev/null || echo "")"
 }
 
 @test "main:: outputs valid JSON array format" {
-	run env VERSION_PATH="$GIT_ROOT/VERSION" "$SCRIPT" <<<'{"version": {"timestamp": "2023-12-01T12:00:00Z"}}'
+	run env VERSION_PATH="$GIT_ROOT/VERSION" "$SCRIPT" <<<"$(
+		cat <<-'EOF'
+			{
+			  "version": {
+			    "timestamp": "2023-12-01T12:00:00Z"
+			  }
+			}
+		EOF
+	)"
 
 	[[ "$status" -eq 0 ]]
 
@@ -80,7 +104,15 @@ EXPECTED_VERSION="$(tr -d '\r\n' <"$GIT_ROOT/VERSION" 2>/dev/null || echo "")"
 }
 
 @test "main:: creates and uses temporary payload file" {
-	run "$SCRIPT" <<<'{"version": {"timestamp": "2023-12-01T12:00:00Z"}}'
+	run "$SCRIPT" <<<"$(
+		cat <<-'EOF'
+			{
+			  "version": {
+			    "timestamp": "2023-12-01T12:00:00Z"
+			  }
+			}
+		EOF
+	)"
 
 	[[ "$status" -eq 0 ]]
 }

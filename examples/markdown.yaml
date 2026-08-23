@@ -18,7 +18,7 @@ jobs:
   - name: markdown-build-notification
     plan:
       - put: slack-notification
-        
+
         params:
           <<: *common_slack_params
           blocks:

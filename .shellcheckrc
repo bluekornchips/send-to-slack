@@ -1,1 +1,4 @@
-disable=SC1090,SC1091,SC2148,SC2034,SC2030,SC2031,SC2329,SC2317
+# Resolve functions from # shellcheck source= paths.
+external-sources=true
+
+disable=SC1090,SC1091,SC2155,SC2148,SC2034,SC2030,SC2031,SC2329,SC2317

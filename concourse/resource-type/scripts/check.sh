@@ -23,7 +23,7 @@ exec 1>&2
 # - 1 if JSON payload is invalid
 main() {
 	local payload
-	payload=$(mktemp /tmp/resource-in.XXXXXX)
+	payload=$(mktemp "${TMPDIR:-/tmp}/resource-in.XXXXXX")
 	if ! chmod 0600 "$payload"; then
 		echo "check:: failed to secure temp payload ${payload}" >&2
 		rm -f "${payload}"

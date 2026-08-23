@@ -1,28 +1,38 @@
-VERSION        := $(shell cat VERSION 2>/dev/null || echo "Unavailable")
-TARGET_VERSION ?= $(VERSION)
-SYSTEM_PREFIX  := /usr/local
-TAG            ?= $(TARGET_VERSION)
+VERSION := $(shell cat VERSION 2>/dev/null || echo "Unavailable")
+TAG       ?= $(VERSION)
+BATS_JOBS ?= $(shell nproc 2>/dev/null || echo 4)
 
-TEST_FILES     := $(shell find tests concourse -name '*-tests.sh' -type f \
+TEST_FILES  := $(shell find tests concourse -name '*-tests.sh' -type f \
 	! -name 'smoke-tests.sh' ! -name 'acceptance-tests.sh')
-SHELL_FILES    := $(shell find . -name "*.sh" -type f)
-BATS_JOBS      ?= $(shell nproc 2>/dev/null || echo 4)
-BATS_FLAGS     := --timing --verbose-run --formatter pretty
+SHELL_FILES := $(shell find . -name '*.sh' -type f)
 
-.PHONY: lint test test-serial test-smoke test-acceptance test-all test-in-docker \
-        concourse-start concourse-stop concourse-stop-clean concourse-load-examples \
-        concourse-clean-restart concourse-run-all-examples
+BATS_FLAGS  := --timing --verbose-run --formatter pretty
+SHFMT_FLAGS := -i 0 -ci -bn -ln=bats
 
 .DEFAULT_GOAL := ci
 
+.PHONY: lint fmt test test-serial test-smoke test-acceptance test-all \
+	test-in-docker concourse-start concourse-stop concourse-load-examples \
+	concourse-clean-restart concourse-run-all-examples ci
+
 #################################################
-# Lint
+# Lint & Format
 #################################################
 
+fmt:
+	@command -v shfmt >/dev/null 2>&1 || { echo "shfmt is not installed" >&2; exit 1; }
+	@echo "fmt: shfmt $$(echo $(SHELL_FILES) | wc -w) files"
+	@shfmt -w $(SHFMT_FLAGS) $(SHELL_FILES)
+	@echo "fmt: shfmt ok"
+
 lint:
+	@command -v shfmt >/dev/null 2>&1 || { echo "shfmt is not installed" >&2; exit 1; }
+	@echo "lint: shfmt $$(echo $(SHELL_FILES) | wc -w) files"
+	@shfmt -d $(SHFMT_FLAGS) $(SHELL_FILES)
+	@echo "lint: shfmt ok"
 	@command -v shellcheck >/dev/null 2>&1 || { echo "shellcheck is not installed" >&2; exit 1; }
 	@echo "lint: shellcheck $$(echo $(SHELL_FILES) | wc -w) files"
-	@shellcheck $(SHELL_FILES)
+	@shellcheck -x $(SHELL_FILES)
 	@echo "lint: shellcheck ok"
 
 #################################################
@@ -77,6 +87,6 @@ concourse-clean-restart:
 		./ci/build.sh
 
 concourse-run-all-examples: concourse-clean-restart
-		./ci/run-all-examples.sh
+	./ci/run-all-examples.sh
 
 ci: lint test

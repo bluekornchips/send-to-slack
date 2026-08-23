@@ -50,7 +50,7 @@ ENVIRONMENT VARIABLES:
   DOCKER_CACHE_TO           	Optional BuildKit cache-to value, e.g. type=gha,mode=max,scope=main
   CHANNEL                   	Required for --send-test-message
   SLACK_BOT_USER_OAUTH_TOKEN  Required for --send-test-message
-  
+
   GitHub Actions variables (only used with --gha flag):
     GITHUB_EVENT_NAME       Event type (pull_request, push, etc.)
     GITHUB_HEAD_REF         Branch name for pull requests
@@ -114,58 +114,58 @@ check_dependencies() {
 parse_args() {
 	while [[ $# -gt 0 ]]; do
 		case "$1" in
-		--gha | --github-action)
-			GITHUB_ACTION="true"
-			export GITHUB_ACTION
-			shift
-			;;
-		--no-cache)
-			NO_CACHE="true"
-			export NO_CACHE
-			shift
-			;;
-		--healthcheck)
-			SEND_HEALTHCHECK_QUERY="true"
-			export SEND_HEALTHCHECK_QUERY
-			shift
-			;;
-		--send-test-message)
-			SEND_TEST_MESSAGE="true"
-			export SEND_TEST_MESSAGE
-			shift
-			;;
-		--dockerfile)
-			shift
-			if [[ $# -eq 0 ]]; then
-				echo "parse_args:: option --dockerfile requires an argument" >&2
-				return 1
-			fi
-			if [[ -n "$1" ]]; then
-				# Non-empty value must match valid choices
-				case "$1" in
-				concourse | test | remote | all)
-					DOCKERFILE_CHOICE="$1"
-					export DOCKERFILE_CHOICE
-					;;
-				*)
-					echo "parse_args:: invalid dockerfile choice: $1 (allowed: concourse|test|remote|all)" >&2
+			--gha | --github-action)
+				GITHUB_ACTION="true"
+				export GITHUB_ACTION
+				shift
+				;;
+			--no-cache)
+				NO_CACHE="true"
+				export NO_CACHE
+				shift
+				;;
+			--healthcheck)
+				SEND_HEALTHCHECK_QUERY="true"
+				export SEND_HEALTHCHECK_QUERY
+				shift
+				;;
+			--send-test-message)
+				SEND_TEST_MESSAGE="true"
+				export SEND_TEST_MESSAGE
+				shift
+				;;
+			--dockerfile)
+				shift
+				if [[ $# -eq 0 ]]; then
+					echo "parse_args:: option --dockerfile requires an argument" >&2
 					return 1
-					;;
-				esac
-			else
-				DOCKERFILE_CHOICE=""
-				export DOCKERFILE_CHOICE
-			fi
-			shift
-			;;
-		-h | --help)
-			usage
-			return 2
-			;;
-		*)
-			echo "parse_args:: unknown option: $1" >&2
-			return 1
-			;;
+				fi
+				if [[ -n "$1" ]]; then
+					# Non-empty value must match valid choices
+					case "$1" in
+						concourse | test | remote | all)
+							DOCKERFILE_CHOICE="$1"
+							export DOCKERFILE_CHOICE
+							;;
+						*)
+							echo "parse_args:: invalid dockerfile choice: $1 (allowed: concourse|test|remote|all)" >&2
+							return 1
+							;;
+					esac
+				else
+					DOCKERFILE_CHOICE=""
+					export DOCKERFILE_CHOICE
+				fi
+				shift
+				;;
+			-h | --help)
+				usage
+				return 2
+				;;
+			*)
+				echo "parse_args:: unknown option: $1" >&2
+				return 1
+				;;
 		esac
 	done
 
@@ -255,18 +255,18 @@ build_image() {
 
 	local dockerfile_path
 	case "$DOCKERFILE_CHOICE" in
-	concourse)
-		dockerfile_path="Docker/Dockerfile.concourse"
-		;;
-	test)
-		dockerfile_path="Docker/Dockerfile.test"
-		;;
-	remote)
-		dockerfile_path="Docker/Dockerfile.remote"
-		;;
-	*)
-		dockerfile_path="Docker/Dockerfile"
-		;;
+		concourse)
+			dockerfile_path="Docker/Dockerfile.concourse"
+			;;
+		test)
+			dockerfile_path="Docker/Dockerfile.test"
+			;;
+		remote)
+			dockerfile_path="Docker/Dockerfile.remote"
+			;;
+		*)
+			dockerfile_path="Docker/Dockerfile"
+			;;
 	esac
 
 	echo "Building Docker image ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} from ${dockerfile_path}."
@@ -395,7 +395,7 @@ send_test_message() {
 		dockerfile_display="Dockerfile.${DOCKERFILE_CHOICE}"
 	fi
 
-	payload_file=$(mktemp /tmp/build-sh.payload.XXXXXX)
+	payload_file=$(mktemp "${TMPDIR:-/tmp}/build-sh.payload.XXXXXX")
 	chmod 0600 "$payload_file"
 	trap 'rm -f "$payload_file"' RETURN ERR
 
@@ -437,7 +437,14 @@ send_test_message() {
 		local repo_url="${server_url}/${repo_value}"
 		repo_cell=$(jq -n --arg rp "$repo_value" --arg ru "$repo_url" '{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [{"type": "link", "url": $ru, "text": $rp}]}]}')
 	else
-		repo_cell='{"type": "raw_text", "text": "N/A"}'
+		repo_cell=$(
+			cat <<-'EOF'
+				{
+				  "type": "raw_text",
+				  "text": "N/A"
+				}
+			EOF
+		)
 	fi
 
 	local branch_cell
@@ -448,7 +455,14 @@ send_test_message() {
 		if [[ -n "$branch_value" ]]; then
 			branch_cell=$(jq -n --arg br "$branch_value" '{"type": "raw_text", "text": $br}')
 		else
-			branch_cell='{"type": "raw_text", "text": "N/A"}'
+			branch_cell=$(
+				cat <<-'EOF'
+					{
+					  "type": "raw_text",
+					  "text": "N/A"
+					}
+				EOF
+			)
 		fi
 	fi
 
@@ -461,21 +475,42 @@ send_test_message() {
 			commit_cell=$(jq -n --arg cs "$commit_short_value" '{"type": "raw_text", "text": $cs}')
 		fi
 	else
-		commit_cell='{"type": "raw_text", "text": "N/A"}'
+		commit_cell=$(
+			cat <<-'EOF'
+				{
+				  "type": "raw_text",
+				  "text": "N/A"
+				}
+			EOF
+		)
 	fi
 
 	local event_cell
 	if [[ -n "${EVENT_TYPE:-}" ]]; then
 		event_cell=$(jq -n --arg et "${EVENT_TYPE}" '{"type": "raw_text", "text": $et}')
 	else
-		event_cell='{"type": "raw_text", "text": "N/A"}'
+		event_cell=$(
+			cat <<-'EOF'
+				{
+				  "type": "raw_text",
+				  "text": "N/A"
+				}
+			EOF
+		)
 	fi
 
 	local workflow_cell
 	if [[ -n "${WORKFLOW_RUN_URL:-}" ]]; then
 		workflow_cell=$(jq -n --arg wu "${WORKFLOW_RUN_URL}" '{"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [{"type": "link", "url": $wu, "text": "View Run"}]}]}')
 	else
-		workflow_cell='{"type": "raw_text", "text": "N/A"}'
+		workflow_cell=$(
+			cat <<-'EOF'
+				{
+				  "type": "raw_text",
+				  "text": "N/A"
+				}
+			EOF
+		)
 	fi
 
 	local message_cell

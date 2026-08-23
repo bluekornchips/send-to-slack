@@ -27,7 +27,8 @@ SUPPORTED_ALIGNMENTS=("left" "center" "right")
 #
 # Returns:
 # - 0 on successful table block creation with valid rows and cells
-# - 1 if TABLE_BLOCK_OUTPUT_FILE unset, input empty, invalid JSON, missing rows, or validation fails
+# - 1 if TABLE_BLOCK_OUTPUT_FILE unset, input empty, invalid JSON, missing rows,
+# or validation fails
 create_table() {
 	if [[ -z "${TABLE_BLOCK_OUTPUT_FILE:-}" ]]; then
 		echo "create_table:: TABLE_BLOCK_OUTPUT_FILE is required" >&2
@@ -113,7 +114,8 @@ create_table() {
 	# Validate column_settings if present
 	if jq -e '.column_settings' "$input_json" >/dev/null 2>&1; then
 		# Must be an array
-		if ! jq -e '.column_settings | type == "array"' "$input_json" >/dev/null 2>&1; then
+		if ! jq -e '.column_settings | type == "array"' "$input_json" \
+			>/dev/null 2>&1; then
 			echo "create_table:: column_settings must be an array" >&2
 			return 1
 		fi
@@ -142,7 +144,8 @@ create_table() {
 
 			# Check is_wrapped if present - must be boolean
 			if jq -e "$setting_path.is_wrapped" "$input_json" >/dev/null 2>&1; then
-				if ! jq -e "$setting_path.is_wrapped | type == \"boolean\"" "$input_json" >/dev/null 2>&1; then
+				if ! jq -e "$setting_path.is_wrapped | type == \"boolean\"" "$input_json" \
+					>/dev/null 2>&1; then
 					echo "create_table:: column_settings[$i].is_wrapped must be a boolean" >&2
 					return 1
 				fi
@@ -150,7 +153,8 @@ create_table() {
 		done
 	fi
 
-	# Check total character count across all cells; fall back to file attachment if over limit.
+	# Check total character count across all cells; fall back to file attachment if
+	# over limit.
 	# For raw_text cells, count .text length.
 	# For rich_text cells, sum all nested .text leaf string lengths.
 	local total_chars
@@ -170,8 +174,10 @@ create_table() {
 		return 0
 	fi
 
-	# Build block from the input file so large JSON is never on the command line, avoids ARG_MAX.
-	# Read from a real file rather than process substitution, some hosts lack /dev/fd.
+	# Build block from the input file so large JSON is never on the command line,
+	# avoids ARG_MAX.
+	# Read from a real file rather than process substitution, some hosts lack
+	# /dev/fd.
 	block_file=$(mktemp "$_SLACK_WORKSPACE/table.block.XXXXXX") || return 1
 	if ! jq --arg block_type "$BLOCK_TYPE" '
 		{ type: $block_type, rows: .rows }
@@ -187,7 +193,8 @@ create_table() {
 }
 
 # Handle table overflow by writing raw JSON to a file and emitting a two-element
-# JSON array containing a context block and a file block to TABLE_BLOCK_OUTPUT_FILE.
+# JSON array containing a context block and a file block to
+# TABLE_BLOCK_OUTPUT_FILE.
 #
 # Inputs:
 # - $1 - input_json_file: path to validated table input JSON file
@@ -217,9 +224,10 @@ _table_overflow_to_file() {
 	json_file=$(mktemp "$_SLACK_WORKSPACE/table.overflow.XXXXXX.json")
 	cp "$input_json_file" "$json_file"
 
-	local context_block
+	local context_msg context_block
+	context_msg="Table too large for inline display (${total_chars} chars, limit ${TABLE_MAX_CHAR_COUNT}). Attached as JSON."
 	context_block=$(jq -n \
-		--arg msg "Table too large for inline display (${total_chars} chars, limit ${TABLE_MAX_CHAR_COUNT}). Attached as JSON." \
+		--arg msg "$context_msg" \
 		'{
 			type: "context",
 			elements: [{ type: "plain_text", text: $msg }]

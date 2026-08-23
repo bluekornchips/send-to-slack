@@ -6,7 +6,10 @@ dependencies = [
     "requests>=2.31.0",
 ]
 
-[project.optional-dependencies]
-test = [
-    "pytest>=7.4.0",
-]
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F"]
+ignore = ["E501"]
