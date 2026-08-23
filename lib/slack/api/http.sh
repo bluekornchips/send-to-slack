@@ -262,8 +262,7 @@ _finalize_slack_delivery() {
 			2>/dev/null || echo "0")
 		sanitized_payload=$(
 			echo "$payload_for_log" \
-				| jq 'del(.thread_ts) | .blocks |= (if type == "array" then [.[] \
-					{type: .type}] else . end)' \
+				| jq 'del(.thread_ts) | .blocks |= (if type == "array" then [.[] | {type: .type}] else . end)' \
 					2>/dev/null || echo "$payload_for_log" | jq . 2>/dev/null
 		)
 		cat <<EOF >&2

@@ -65,6 +65,7 @@ create_text_section() {
 	local pattern
 	pattern=" ${SUPPORTED_TEXT_TYPES[*]} "
 	if ! [[ "$pattern" =~ ${text_type} ]]; then
+		echo "create_text_section:: text type must be one of: ${SUPPORTED_TEXT_TYPES[*]}" >&2
 		echo "create_text_section:: See text object docs: $DOC_URL_TEXT_OBJECT" >&2
 		return 1
 	fi
@@ -82,6 +83,7 @@ create_text_section() {
 	local text_length
 	text_length=${#text}
 	if ((text_length > MAX_TEXT_LENGTH)); then
+		echo "create_text_section:: text length must be less than $MAX_TEXT_LENGTH" >&2
 		return 1
 	fi
 
@@ -137,6 +139,7 @@ create_fields_section() {
 
 	# Validate fields array does not exceed maximum
 	if [[ "$fields_length" -gt "$MAX_FIELDS" ]]; then
+		echo "create_fields_section:: fields array cannot exceed $MAX_FIELDS items" >&2
 		return 1
 	fi
 
@@ -172,6 +175,7 @@ create_fields_section() {
 		local field_text_length
 		field_text_length=${#field_text}
 		if ((field_text_length > MAX_FIELD_TEXT_LENGTH)); then
+			echo "create_fields_section:: field at index $field_index text length must be less than $MAX_FIELD_TEXT_LENGTH" >&2
 			return 1
 		fi
 
@@ -222,6 +226,7 @@ create_section() {
 	local pattern
 	pattern=" ${SUPPORTED_SECTION_TYPES[*]} "
 	if ! [[ "$pattern" =~ ${section_type} ]]; then
+		echo "create_section:: section type must be one of: ${SUPPORTED_SECTION_TYPES[*]}" >&2
 		return 1
 	fi
 

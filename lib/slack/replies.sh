@@ -58,10 +58,12 @@ send_thread_replies() {
 
 	if [[ -z "$input_payload_file" ]] || [[ ! -f "$input_payload_file" ]] \
 		|| [[ ! -r "$input_payload_file" ]]; then
+		echo "send_thread_replies:: input_payload_file is missing or not readable: ${input_payload_file:-empty}" >&2
 		return 1
 	fi
 
 	if [[ -z "$_SLACK_WORKSPACE" ]] || [[ ! -d "$_SLACK_WORKSPACE" ]]; then
+		echo "send_thread_replies:: _SLACK_WORKSPACE is not set or not a directory" >&2
 		return 1
 	fi
 
@@ -77,9 +79,12 @@ send_thread_replies() {
 		return 1
 	fi
 
+	echo "send_thread_replies:: sending ${reply_count} thread reply(s) with thread_ts: ${thread_ts}" >&2
+
 	for ((i = 0; i < reply_count; i++)); do
 		local reply_blocks
 		if ! reply_blocks=$(echo "$thread_replies" | jq ".[$i].blocks"); then
+			echo "send_thread_replies:: warning: failed to read blocks for reply $((i + 1)), skipping" >&2
 			continue
 		fi
 
@@ -96,26 +101,27 @@ send_thread_replies() {
 				"thread_ts": $thread_ts,
 				"blocks": $blocks
 			}
- | if (($pp.username | type) == "string") and (($pp.username | length) > 0) then
+			| if (($pp.username | type) == "string") and (($pp.username | length) > 0) then
 				. + {username: $pp.username}
 				else .
 			end
- | if (($pp.icon_emoji | type) == "string") \
-				and (($pp.icon_emoji | length) > 0) then
+			| if (($pp.icon_emoji | type) == "string") and (($pp.icon_emoji | length) > 0) then
 				. + {icon_emoji: $pp.icon_emoji}
 				else .
 			end
- | if (($pp.icon_url | type) == "string") and (($pp.icon_url | length) > 0) then
+			| if (($pp.icon_url | type) == "string") and (($pp.icon_url | length) > 0) then
 				. + {icon_url: $pp.icon_url}
 				else .
 			end
 			'); then
+			echo "send_thread_replies:: warning: jq failed to build params for reply $((i + 1)), skipping" >&2
 			continue
 		fi
 
 		local reply_payload_file
 		if ! reply_payload_file=$(_build_derived_input_payload "$source_json" \
 			"$reply_params" "thread-reply"); then
+			echo "send_thread_replies:: warning: failed to build payload for reply $((i + 1)), skipping" >&2
 			continue
 		fi
 
@@ -123,11 +129,13 @@ send_thread_replies() {
 
 		local reply_parsed
 		if ! reply_parsed=$(parse_payload "$reply_payload_file"); then
+			echo "send_thread_replies:: warning: reply $((i + 1)) failed to parse, continuing" >&2
 			rm -f "${reply_payload_file}"
 			continue
 		fi
 
 		if ! send_notification "$reply_parsed"; then
+			echo "send_thread_replies:: warning: reply $((i + 1)) failed to send, continuing" >&2
 			rm -f "${reply_payload_file}"
 			continue
 		fi

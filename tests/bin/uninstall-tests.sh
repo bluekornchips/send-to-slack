@@ -30,7 +30,7 @@ setup_file() {
 	INSTALL_BASENAME_VALUE="$INSTALL_BASENAME"
 
 	# Export functions so they're available in test subshells
-	export -f uninstall_binary normalize_prefix file_has_signature validate_prefix _install_lib_rel_paths install_from_source
+	export -f uninstall_binary normalize_prefix file_has_signature validate_prefix _install_lib_rel_paths install_from_source _resolve_install_root _assemble_install_staging _validate_install_tree
 
 	export GIT_ROOT
 	export INSTALL_SCRIPT
@@ -134,12 +134,7 @@ teardown() {
 	mkdir -p "${source_dir}/bin" "${source_dir}/lib/slack/block-kit/blocks" "${source_dir}/lib/slack/utils" "${source_dir}/lib/parse"
 
 	cp "${GIT_ROOT}/bin/send-to-slack.sh" "${source_dir}/bin/send-to-slack.sh"
-	cp "${GIT_ROOT}/lib/metadata.sh" "${GIT_ROOT}/lib/health-check.sh" "${GIT_ROOT}/lib/get-version.sh" "${source_dir}/lib/"
-	cp "${GIT_ROOT}/lib/parse"/*.sh "${source_dir}/lib/parse/"
-	cp "${GIT_ROOT}/lib/slack/api.sh" "${GIT_ROOT}/lib/slack/crosspost.sh" "${GIT_ROOT}/lib/slack/replies.sh" "${GIT_ROOT}/lib/slack/derived-payload.sh" "${source_dir}/lib/slack/"
-	cp "${GIT_ROOT}/lib/slack/utils"/*.sh "${source_dir}/lib/slack/utils/"
-	cp "${GIT_ROOT}/lib/slack/block-kit/create-block.sh" "${source_dir}/lib/slack/block-kit/"
-	cp "${GIT_ROOT}/lib/slack/block-kit/blocks"/*.sh "${source_dir}/lib/slack/block-kit/blocks/"
+	cp -a "${GIT_ROOT}/lib/." "${source_dir}/lib/"
 	if [[ -f "${GIT_ROOT}/VERSION" ]]; then
 		cp "${GIT_ROOT}/VERSION" "${source_dir}/VERSION"
 	fi

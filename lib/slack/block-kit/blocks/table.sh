@@ -105,6 +105,7 @@ create_table() {
 			local cell_type
 			cell_type=$(jq -r "$cell_path.type" "$input_json")
 			if ! [[ " ${SUPPORTED_CELL_TYPES[*]} " =~ ${cell_type} ]]; then
+				echo "create_table:: cell [$i,$j] type must be one of: ${SUPPORTED_CELL_TYPES[*]}, got: $cell_type" >&2
 				return 1
 			fi
 		done
@@ -123,6 +124,7 @@ create_table() {
 		local column_settings_length
 		column_settings_length=$(jq -r '.column_settings | length' "$input_json")
 		if ((column_settings_length > MAX_COLUMN_SETTINGS)); then
+			echo "create_table:: column_settings cannot exceed $MAX_COLUMN_SETTINGS entries" >&2
 			return 1
 		fi
 
@@ -135,6 +137,7 @@ create_table() {
 				local align_value
 				align_value=$(jq -r "$setting_path.align" "$input_json")
 				if ! [[ " ${SUPPORTED_ALIGNMENTS[*]} " =~ ${align_value} ]]; then
+					echo "create_table:: column_settings[$i].align must be one of: ${SUPPORTED_ALIGNMENTS[*]}, got: $align_value" >&2
 					return 1
 				fi
 			fi
@@ -221,10 +224,10 @@ _table_overflow_to_file() {
 	json_file=$(mktemp "$_SLACK_WORKSPACE/table.overflow.XXXXXX.json")
 	cp "$input_json_file" "$json_file"
 
-	local context_block
+	local context_msg context_block
+	context_msg="Table too large for inline display (${total_chars} chars, limit ${TABLE_MAX_CHAR_COUNT}). Attached as JSON."
 	context_block=$(jq -n \
-		--arg msg "Table too large for inline display (${total_chars} chars," \
-		" limit ${TABLE_MAX_CHAR_COUNT}). Attached as JSON." \
+		--arg msg "$context_msg" \
 		'{
 			type: "context",
 			elements: [{ type: "plain_text", text: $msg }]

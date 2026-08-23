@@ -37,6 +37,7 @@ crosspost_notification() {
 	fi
 
 	if [[ ! -f "${input_payload}" ]] || [[ ! -r "${input_payload}" ]]; then
+		echo "crosspost_notification:: input_payload must be a readable file: ${input_payload}" >&2
 		return 1
 	fi
 
@@ -144,8 +145,11 @@ crosspost_notification() {
 			continue
 		fi
 
+		echo "crosspost_notification:: parsing crosspost payload for channel ${channel}" >&2
+
 		local parsed_payload
 		if ! parsed_payload=$(parse_payload "${temp_payload}"); then
+			echo "crosspost_notification:: failed to parse payload for channel ${channel}" >&2
 			rm -f "${temp_payload}"
 			any_failed=1
 			continue
@@ -154,6 +158,7 @@ crosspost_notification() {
 		echo "crosspost_notification:: sending notification to channel ${channel}" >&2
 
 		if ! send_notification "${parsed_payload}"; then
+			echo "crosspost_notification:: failed to send notification to channel ${channel}" >&2
 			rm -f "${temp_payload}"
 			any_failed=1
 			continue

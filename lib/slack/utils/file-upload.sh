@@ -441,6 +441,7 @@ validate_file_path() {
 		fi
 
 		if [[ ${#matched_files[@]} -gt 1 ]]; then
+			echo "file_upload:: glob matched multiple files: $FILE_PATH" >&2
 			return 1
 		fi
 
@@ -537,6 +538,7 @@ validate_upload_environment() {
 	fi
 
 	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
+		echo "file_upload:: SLACK_BOT_USER_OAUTH_TOKEN environment variable is required" >&2
 		return 1
 	fi
 

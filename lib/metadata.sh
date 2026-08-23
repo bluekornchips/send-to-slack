@@ -51,10 +51,8 @@ create_metadata() {
 			--arg ts "${message_ts}" \
 			--arg ch "${channel}" \
 			'[]
-        + (if ($ts != "" and $ts != "null") then [{"name": "message_ts", \
-        	"value": $ts}] else [] end)
-        + (if ($ch != "" and $ch != "null") then [{"name": "channel", "value": \
-        	$ch}] else [] end)'
+        + (if ($ts != "" and $ts != "null") then [{"name": "message_ts", "value": $ts}] else [] end)
+        + (if ($ch != "" and $ch != "null") then [{"name": "channel", "value": $ch}] else [] end)'
 	)
 
 	if [[ "${SHOW_METADATA}" != "true" ]]; then
@@ -87,16 +85,13 @@ create_metadata() {
 				metadata_before_strip="$METADATA"
 				if ! METADATA=$(echo "$METADATA" | jq \
 					--arg payload "$stripped" \
-					'. += [{"name": "payload", "value": $payload},' \
-					'{"name": "payload_note", "value": "blocks and attachments' \
-					' excluded: payload exceeded safe metadata size"}]' \
+					'. += [{"name": "payload", "value": $payload}, {"name": "payload_note", "value": "blocks and attachments excluded: payload exceeded safe metadata size"}]' \
 					2>/dev/null); then
 					echo "create_metadata:: failed to append stripped payload" \
 						"to metadata" >&2
 					METADATA="$metadata_before_strip"
 					if ! METADATA=$(echo "$METADATA" | jq \
-						'. += [{"name": "payload_skipped", "value": "payload too' \
-						' large for metadata"}]' \
+						'. += [{"name": "payload_skipped", "value": "payload too large for metadata"}]' \
 						2>/dev/null); then
 						METADATA="$metadata_before_strip"
 					fi
@@ -104,8 +99,7 @@ create_metadata() {
 			else
 				metadata_before_strip="$METADATA"
 				if ! METADATA=$(echo "$METADATA" | jq \
-					'. += [{"name": "payload_skipped", "value": "payload too large' \
-					' for metadata"}]' \
+					'. += [{"name": "payload_skipped", "value": "payload too large for metadata"}]' \
 					2>/dev/null); then
 					echo "create_metadata:: failed to append payload_skipped to metadata" >&2
 					METADATA="$metadata_before_strip"
@@ -156,8 +150,7 @@ emit_concourse_output() {
 		--argjson metadata "${METADATA}" \
 		'{
       version: (
-        if $version_message_ts != "" then {timestamp: $timestamp, message_ts: \
-        	$version_message_ts }
+        if $version_message_ts != "" then {timestamp: $timestamp, message_ts: $version_message_ts}
         else { timestamp: $timestamp }
         end
       ),

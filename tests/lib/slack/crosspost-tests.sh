@@ -28,6 +28,9 @@ setup_file() {
 
 setup() {
 	cd "$GIT_ROOT" || return 1
+	# shellcheck source=lib/loader.sh
+	source "$GIT_ROOT/lib/loader.sh"
+	# shellcheck source=lib/slack/api.sh
 	source "$GIT_ROOT/lib/slack/api.sh"
 	source "$SCRIPT"
 	source "$GIT_ROOT/lib/parse/payload.sh"

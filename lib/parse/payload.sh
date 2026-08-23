@@ -171,6 +171,7 @@ _resolve_from_file_path() {
 	raw_path="${raw_path#"$leading"}"
 	if [[ -z "$raw_path" ]] || [[ "$raw_path" == "." ]] \
 		|| [[ "$raw_path" == ".." ]]; then
+		echo "parse_payload:: params.from_file is empty or invalid: ${raw_path:-empty}" >&2
 		return 1
 	fi
 
@@ -257,6 +258,7 @@ _load_from_file_params() {
 	local source_file_path
 	source_file_path=$(jq -r '.params.from_file' "$INPUT_PAYLOAD")
 	source_file_path=$(_resolve_from_file_path "$source_file_path") || return 1
+	echo "load_input_payload_params:: loading params from file: ${source_file_path}" >&2
 
 	if ! jq . "$source_file_path" >/dev/null 2>&1; then
 		return 1
@@ -328,6 +330,7 @@ _resolve_delivery_method() {
 	elif [[ -n "${WEBHOOK_URL:-}" ]]; then
 		DELIVERY_METHOD="webhook"
 	else
+		echo "load_configuration:: either source.slack_bot_user_oauth_token or source.webhook_url is required" >&2
 		return 1
 	fi
 
@@ -401,6 +404,7 @@ _validate_bot_identity_params() {
 		-n "$bot_identity_icon_emoji_param" ||
 		-n "$bot_identity_icon_url_param" ]]; then
 		if [[ "$DELIVERY_METHOD" != "api" ]]; then
+			echo "load_configuration:: params.username, params.icon_emoji, and params.icon_url require API delivery with a bot token, not webhook" >&2
 			return 1
 		fi
 	fi
@@ -425,6 +429,7 @@ _resolve_ephemeral_user() {
 		"$INPUT_PAYLOAD")
 	if [[ -n "$ephemeral_user_param" ]]; then
 		if [[ "$DELIVERY_METHOD" != "api" ]]; then
+			echo "load_configuration:: params.ephemeral_user requires API delivery with a bot token, not webhook" >&2
 			return 1
 		fi
 		EPHEMERAL_USER="$ephemeral_user_param"
@@ -502,6 +507,9 @@ load_configuration() {
 	[[ -z "${SLACK_BOT_USER_OAUTH_TOKEN:-}" ]] && token_preview="empty"
 	[[ -z "${WEBHOOK_URL:-}" ]] && webhook_preview="empty"
 	[[ -n "${EPHEMERAL_USER:-}" ]] && ephemeral_preview="set"
+
+	echo "load_configuration:: method=${DELIVERY_METHOD} channel=${CHANNEL:-none} dry_run=${DRY_RUN}" >&2
+	echo "load_configuration:: token=${token_preview} webhook=${webhook_preview} ephemeral=${ephemeral_preview}" >&2
 
 	return 0
 }

@@ -117,12 +117,14 @@ _validate_block_counts() {
 	local attachments_file="$2"
 
 	if [[ -z "$blocks_file" ]] || [[ -z "$attachments_file" ]]; then
+		echo "_validate_block_counts:: blocks_file and attachments_file are required" >&2
 		return 1
 	fi
 
 	local block_count
 	block_count=$(jq '. | length' "$blocks_file")
 	if ((block_count > MAX_BLOCKS)); then
+		echo "parse_payload:: block count ($block_count) exceeds Slack's maximum of $MAX_BLOCKS blocks per message" >&2
 		echo "parse_payload:: See block limits: $DOC_URL_BLOCK_KIT_BLOCKS" >&2
 		return 1
 	fi
@@ -130,6 +132,7 @@ _validate_block_counts() {
 	local attachment_count
 	attachment_count=$(jq '. | length' "$attachments_file")
 	if ((attachment_count > MAX_ATTACHMENTS)); then
+		echo "parse_payload:: attachment count ($attachment_count) exceeds Slack's maximum of $MAX_ATTACHMENTS attachments per message" >&2
 		echo "parse_payload:: See attachment limits: $DOC_URL_LEGACY_ATTACHMENTS" >&2
 		return 1
 	fi
@@ -141,6 +144,7 @@ _validate_block_counts() {
 	fi
 	local total_block_count=$((block_count + attachment_block_count))
 	if ((total_block_count > MAX_BLOCKS)); then
+		echo "parse_payload:: total block count ($total_block_count) exceeds Slack's maximum of $MAX_BLOCKS blocks per message" >&2
 		echo "parse_payload:: See block limits: $DOC_URL_BLOCK_KIT_BLOCKS" >&2
 		return 1
 	fi
@@ -175,11 +179,13 @@ _validate_thread_replies() {
 	for ((ri = 0; ri < reply_count; ri++)); do
 		reply_blocks=$(echo "$thread_replies_raw" | jq ".[$ri].blocks // empty")
 		if [[ -z "$reply_blocks" || "$reply_blocks" == "null" ]]; then
+			echo "parse_payload:: thread.replies[$ri].blocks is required and must be non-empty" >&2
 			return 1
 		fi
 
 		if ! echo "$reply_blocks" | jq -e \
 			'type == "array" and length > 0' >/dev/null 2>&1; then
+			echo "parse_payload:: thread.replies[$ri].blocks is required and must be non-empty" >&2
 			return 1
 		fi
 	done
@@ -214,6 +220,7 @@ _build_slack_payload() {
 	fi
 
 	if [[ -z "${BLOCKS_FILE:-}" ]] || [[ -z "${ATTACHMENTS_FILE:-}" ]]; then
+		echo "_build_slack_payload:: blocks_file and attachments_file are required" >&2
 		return 1
 	fi
 
@@ -223,8 +230,7 @@ _build_slack_payload() {
 			--arg channel "${CHANNEL}" \
 			--slurpfile blocks "${BLOCKS_FILE}" \
 			--slurpfile attachments "${ATTACHMENTS_FILE}" \
-			'{ "channel": $channel, "blocks": $blocks[0], "attachments":' \
-			' $attachments[0] }')
+			'{ "channel": $channel, "blocks": $blocks[0], "attachments": $attachments[0] }')
 	else
 		payload=$(jq -n \
 			--slurpfile blocks "${BLOCKS_FILE}" \
@@ -255,6 +261,7 @@ _build_slack_payload() {
 		"$text_field" != "empty" ]]; then
 		local text_length=${#text_field}
 		if ((text_length > MAX_TEXT_LENGTH)); then
+			echo "_build_slack_payload:: text field length ($text_length) exceeds Slack's maximum of $MAX_TEXT_LENGTH characters" >&2
 			return 1
 		fi
 		payload=$(jq --arg text "$text_field" '. + {text: $text}' <<<"$payload")
@@ -337,6 +344,7 @@ process_blocks() {
 				local loaded_content
 				loaded_content=$(_load_block_item_from_file "$block_from_file_path") \
 					|| return 1
+				echo "process_blocks:: expanded block from file: ${block_from_file_path}" >&2
 				if echo "$loaded_content" | jq -e 'type == "array"' >/dev/null 2>&1; then
 					local nested_items
 					nested_items=$(jq -c '.[]' <<<"$loaded_content") || return 1
@@ -357,6 +365,7 @@ process_blocks() {
 		local attachment_count_debug
 		block_count_debug=$(jq '. | length' "$BLOCKS_FILE")
 		attachment_count_debug=$(jq '. | length' "$ATTACHMENTS_FILE")
+		echo "process_blocks:: completed: ${block_count_debug} blocks, ${attachment_count_debug} attachments" >&2
 
 		if ! _validate_block_counts "$BLOCKS_FILE" "$ATTACHMENTS_FILE"; then
 			return 1
@@ -564,6 +573,7 @@ _process_blocks_append_block() {
 
 	if [[ "$block_type" == "file" ]] \
 		&& [[ "${DELIVERY_METHOD:-api}" == "webhook" ]]; then
+		echo "_process_blocks_append_block:: file uploads are not supported for webhook delivery" >&2
 		_cleanup_process_blocks_append_tmp_files "$create_block_out" "$merge_tmp"
 		return 1
 	fi

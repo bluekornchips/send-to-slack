@@ -46,6 +46,32 @@ require_runtime_commands() {
 	return 1
 }
 
+# Report whether envsubst is available for block variable interpolation
+#
+# Arguments:
+#   $1 - mode: "verbose" for health-check output, "quiet" for send path
+#
+# Returns:
+# - 0 always
+_health_check_envsubst() {
+	local mode="${1:-quiet}"
+
+	if command -v envsubst >/dev/null 2>&1; then
+		if [[ "$mode" == "verbose" ]]; then
+			echo "health_check:: envsubst found: $(command -v envsubst)"
+		fi
+
+		return 0
+	fi
+
+	if [[ "$mode" == "verbose" ]]; then
+		echo "health_check:: envsubst not found; block variable interpolation will" \
+			"not work (install GNU gettext, e.g. brew install gettext on macOS)" >&2
+	fi
+
+	return 0
+}
+
 # Optionally call Slack auth.test when a bot token is set
 #
 # Reads environment:
@@ -153,6 +179,8 @@ health_check() {
 	if ! require_runtime_commands "verbose"; then
 		errors=$((errors + 1))
 	fi
+
+	_health_check_envsubst "verbose"
 
 	if ! _health_check_slack_api; then
 		errors=$((errors + 1))

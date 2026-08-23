@@ -164,6 +164,7 @@ create_actions() {
 	local elements_count
 	elements_count=$(jq 'length' <<<"$elements_json")
 	if ((elements_count > MAX_ELEMENTS)); then
+		echo "create_actions:: elements array cannot exceed $MAX_ELEMENTS elements" >&2
 		return 1
 	fi
 
@@ -182,6 +183,7 @@ create_actions() {
 		fi
 
 		if ! [[ " ${SUPPORTED_ELEMENT_TYPES[*]} " =~ ${element_type} ]]; then
+			echo "create_actions:: unsupported element type: $element_type. Only button is supported." >&2
 			return 1
 		fi
 

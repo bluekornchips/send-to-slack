@@ -128,6 +128,7 @@ create_image() {
 	fi
 
 	if [[ "${#alt_text}" -gt "$MAX_ALT_TEXT_LENGTH" ]]; then
+		echo "create_image:: alt_text must be $MAX_ALT_TEXT_LENGTH characters or less" >&2
 		return 1
 	fi
 
@@ -160,6 +161,7 @@ create_image() {
 			fi
 
 			if [[ "${#title_text}" -gt "$MAX_TITLE_TEXT_LENGTH" ]]; then
+				echo "create_image:: title text must be $MAX_TITLE_TEXT_LENGTH characters or less" >&2
 				return 1
 			fi
 
@@ -175,6 +177,7 @@ create_image() {
 		fi
 		if [[ -n "$block_id" ]] && [[ "$block_id" != "null" ]]; then
 			if [[ "${#block_id}" -gt "$MAX_BLOCK_ID_LENGTH" ]]; then
+				echo "create_image:: block_id must be $MAX_BLOCK_ID_LENGTH characters or less" >&2
 				return 1
 			fi
 		fi

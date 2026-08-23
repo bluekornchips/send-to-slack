@@ -37,6 +37,9 @@ setup_file() {
 }
 
 setup() {
+	# shellcheck source=lib/loader.sh
+	source "$GIT_ROOT/lib/loader.sh"
+	# shellcheck source=lib/slack/api.sh
 	source "$GIT_ROOT/lib/slack/api.sh"
 	source "$GIT_ROOT/lib/metadata.sh"
 	source "$GIT_ROOT/lib/parse/payload.sh"

@@ -119,6 +119,7 @@ resolve_user_id() {
 	fi
 
 	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
+		echo "resolve_user_id:: SLACK_BOT_USER_OAUTH_TOKEN environment variable is required" >&2
 		return 1
 	fi
 
@@ -223,6 +224,7 @@ resolve_channel_id() {
 	fi
 
 	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
+		echo "resolve_channel_id:: SLACK_BOT_USER_OAUTH_TOKEN environment variable is required" >&2
 		return 1
 	fi
 
@@ -322,6 +324,7 @@ resolve_dm_id() {
 	fi
 
 	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
+		echo "resolve_dm_id:: SLACK_BOT_USER_OAUTH_TOKEN environment variable is required" >&2
 		return 1
 	fi
 

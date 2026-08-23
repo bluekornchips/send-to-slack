@@ -8,12 +8,12 @@ Command line options, environment variables, health check, and debug mode for `s
 - Use `-f`, `-file`, or `--file` to point at a payload file.
 - Use `-v` or `--version` to display version information and exit.
 - Use `-h` or `--help` to display usage information and exit.
-- Use `--health-check` to validate `jq`, `curl`, and optional Slack API connectivity without sending a message. It does not check `envsubst`; see [Getting Started](getting-started.md) prerequisites.
+- Use `--health-check` to validate `jq`, `curl`, report `envsubst` availability, and optionally test Slack API connectivity without sending a message.
 - Emits Concourse-style JSON (`version`, `metadata`) to stdout unless `SEND_TO_SLACK_OUTPUT` is set.
 
 ## Health check
 
-Use `--health-check` to validate dependencies `jq` and `curl` and optionally test Slack Web API connectivity if `SLACK_BOT_USER_OAUTH_TOKEN` is set. There is no separate probe for Incoming Webhook URLs. The check does not verify `envsubst`; payloads that use variable interpolation in blocks still need `envsubst` on PATH at send time. Returns exit code 0 on success, 1 on failure. Skips the API check if `DRY_RUN` or `SKIP_SLACK_API_CHECK` is set.
+Use `--health-check` to validate dependencies `jq` and `curl`, report whether `envsubst` is available for block variable interpolation, and optionally test Slack Web API connectivity if `SLACK_BOT_USER_OAUTH_TOKEN` is set. There is no separate probe for Incoming Webhook URLs. A missing `envsubst` is reported as a warning and does not fail the check; payloads that use variable interpolation in blocks still need `envsubst` on PATH at send time. Returns exit code 0 on success, 1 on failure. Skips the API check if `DRY_RUN` or `SKIP_SLACK_API_CHECK` is set.
 
 ## Environment variables
 

@@ -76,7 +76,7 @@ EOF
 #
 # Returns:
 # - 0 on success, 1 if no tools available
-check_install_dependencies() {
+check_dependencies() {
 	# Git takes priority, archive path needs curl and tar
 	if command -v "git" >/dev/null 2>&1; then
 		return 0
@@ -86,7 +86,7 @@ check_install_dependencies() {
 		return 0
 	fi
 
-	echo "check_install_dependencies:: missing required commands: need 'git'," \
+	echo "check_dependencies:: missing required commands: need 'git'," \
 		"or 'curl' and 'tar'" >&2
 	return 1
 }
@@ -730,7 +730,7 @@ main() {
 				"downloading from GitHub instead" >&2
 			version=""
 		else
-			if ! check_install_dependencies; then
+			if ! check_dependencies; then
 				return 1
 			fi
 			if ! ensure_prefix "$prefix"; then
@@ -748,7 +748,7 @@ main() {
 		fi
 	fi
 
-	if ! check_install_dependencies; then
+	if ! check_dependencies; then
 		return 1
 	fi
 

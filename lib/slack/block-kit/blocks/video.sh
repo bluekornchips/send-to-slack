@@ -95,10 +95,12 @@ _video_optional_description() {
 	local description_text
 	description_text=$(jq -r '.description.text // empty' <<<"$input")
 	if [[ -z "$description_text" ]] || [[ "$description_text" == "null" ]]; then
+		echo "create_video:: description.text field is required when description is present" >&2
 		return 1
 	fi
 
 	if [[ "${#description_text}" -gt "$MAX_DESCRIPTION_TEXT_LENGTH" ]]; then
+		echo "create_video:: description text must be 2000 characters or less" >&2
 		return 1
 	fi
 
@@ -187,6 +189,7 @@ create_video() {
 	fi
 
 	if [[ "${#alt_text}" -gt "$MAX_ALT_TEXT_LENGTH" ]]; then
+		echo "create_video:: alt_text must be $MAX_ALT_TEXT_LENGTH characters or less" >&2
 		return 1
 	fi
 
@@ -220,6 +223,7 @@ create_video() {
 	fi
 
 	if [[ "${#title_text}" -gt "$MAX_TITLE_TEXT_LENGTH" ]]; then
+		echo "create_video:: title text must be $MAX_TITLE_TEXT_LENGTH characters or less" >&2
 		return 1
 	fi
 
@@ -256,9 +260,7 @@ create_video() {
 		--arg thumbnail_url "$thumbnail_url" \
 		--arg alt_text "$alt_text" \
 		--argjson title "$title_json" \
-		'{ type: $block_type, video_url: $video_url,' \
-		' thumbnail_url: $thumbnail_url, alt_text: $alt_text,' \
-		' title: $title }')
+		'{ type: $block_type, video_url: $video_url, thumbnail_url: $thumbnail_url, alt_text: $alt_text, title: $title }')
 
 	if [[ -n "$title_url" ]] && [[ "$title_url" != "null" ]]; then
 		block=$(jq --arg title_url "$title_url" '. + {title_url: $title_url}' \

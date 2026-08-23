@@ -395,7 +395,7 @@ send_test_message() {
 		dockerfile_display="Dockerfile.${DOCKERFILE_CHOICE}"
 	fi
 
-	payload_file=$(mktemp /tmp/build-sh.payload.XXXXXX)
+	payload_file=$(mktemp "${TMPDIR:-/tmp}/build-sh.payload.XXXXXX")
 	chmod 0600 "$payload_file"
 	trap 'rm -f "$payload_file"' RETURN ERR
 
