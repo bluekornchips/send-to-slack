@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # Payload loading, sanitization, validation, and delivery configuration
-# For process_blocks and full parse flow, load lib/parse/blocks.sh after this file, see bin/send-to-slack.sh _load_libs
+# For process_blocks and full parse flow, load lib/parse/blocks.sh after this
+# file, see bin/send-to-slack.sh _load_libs
 # SEND_TO_SLACK_ROOT is set by bin/send-to-slack.sh before this file is sourced
 #
 
@@ -123,7 +124,6 @@ EOF
 #   1 if invalid JSON
 validate_input_payload_json() {
 	if [[ ! -f "$INPUT_PAYLOAD" ]]; then
-		echo "validate_input_payload_json:: payload file not found: $INPUT_PAYLOAD" >&2
 		return 1
 	fi
 
@@ -169,8 +169,8 @@ _resolve_from_file_path() {
 	local leading
 	leading="${raw_path%%[![:space:]]*}"
 	raw_path="${raw_path#"$leading"}"
-	if [[ -z "$raw_path" ]] || [[ "$raw_path" == "." ]] || [[ "$raw_path" == ".." ]]; then
-		echo "parse_payload:: params.from_file is empty or invalid: ${raw_path:-empty}" >&2
+	if [[ -z "$raw_path" ]] || [[ "$raw_path" == "." ]] \
+		|| [[ "$raw_path" == ".." ]]; then
 		return 1
 	fi
 
@@ -180,15 +180,21 @@ _resolve_from_file_path() {
 		for base in "${SEND_TO_SLACK_PAYLOAD_BASE_DIR:-}" "$PWD"; do
 			[[ -z "$base" ]] || [[ ! -d "$base" ]] && continue
 			candidate="${base}/${raw_path}"
-			[[ -f "$candidate" ]] && [[ -r "$candidate" ]] && echo "$candidate" && return 0
-			[[ -d "$candidate" ]] && echo "parse_payload:: params.from_file path is a directory: ${candidate}" >&2 && return 1
+			[[ -f "$candidate" ]] && [[ -r "$candidate" ]] \
+				&& echo "$candidate" && return 0
+			[[ -d "$candidate" ]] && echo \
+				"parse_payload:: params.from_file path is a directory:" \
+				" ${candidate}" >&2 \
+				&& return 1
 		done
 		echo "parse_payload:: payload from file not found: ${raw_path}" >&2
 		return 1
 	fi
 
 	[[ -f "$candidate" ]] && [[ -r "$candidate" ]] && echo "$candidate" && return 0
-	[[ -d "$candidate" ]] && echo "parse_payload:: params.from_file path is a directory: ${candidate}" >&2 && return 1
+	[[ -d "$candidate" ]] && echo \
+		"parse_payload:: params.from_file path is a directory: ${candidate}" >&2 \
+		&& return 1
 	echo "parse_payload:: payload from file not found: ${raw_path}" >&2
 
 	return 1
@@ -224,11 +230,11 @@ _load_raw_params() {
 	echo "$parsed_params" >"$parsed_params_file"
 
 	local updated_payload
-	updated_payload=$(jq --slurpfile parsed_params "$parsed_params_file" '.params = $parsed_params[0]' "$INPUT_PAYLOAD")
+	updated_payload=$(jq --slurpfile parsed_params "$parsed_params_file" \
+		'.params = $parsed_params[0]' "$INPUT_PAYLOAD")
 	echo "$updated_payload" >"$INPUT_PAYLOAD"
 	local param_keys
 	param_keys=$(echo "$parsed_params" | jq -r 'keys | join(", ")')
-	echo "load_input_payload_params:: loaded from params.raw, keys: ${param_keys}" >&2
 
 	return 0
 }
@@ -251,10 +257,8 @@ _load_from_file_params() {
 	local source_file_path
 	source_file_path=$(jq -r '.params.from_file' "$INPUT_PAYLOAD")
 	source_file_path=$(_resolve_from_file_path "$source_file_path") || return 1
-	echo "load_input_payload_params:: loading params from file: ${source_file_path}" >&2
 
 	if ! jq . "$source_file_path" >/dev/null 2>&1; then
-		echo "parse_payload:: payload file contains invalid JSON: $source_file_path" >&2
 		return 1
 	fi
 
@@ -262,15 +266,16 @@ _load_from_file_params() {
 	file_params=$(jq '.' "$source_file_path")
 
 	local file_params_file
-	file_params_file=$(mktemp "$_SLACK_WORKSPACE/load_payload_params.from_file.XXXXXX")
+	file_params_file=$(mktemp \
+		"$_SLACK_WORKSPACE/load_payload_params.from_file.XXXXXX")
 	echo "$file_params" >"$file_params_file"
 
 	local updated_payload
-	updated_payload=$(jq --slurpfile file_params "$file_params_file" '.params = $file_params[0]' "$INPUT_PAYLOAD")
+	updated_payload=$(jq --slurpfile file_params "$file_params_file" \
+		'.params = $file_params[0]' "$INPUT_PAYLOAD")
 	echo "$updated_payload" >"$INPUT_PAYLOAD"
 	local param_keys
 	param_keys=$(jq -r '.params | keys | join(", ")' "$INPUT_PAYLOAD")
-	echo "load_input_payload_params:: loaded from params.from_file: ${source_file_path}, keys: ${param_keys}" >&2
 
 	return 0
 }
@@ -306,7 +311,8 @@ load_input_payload_params() {
 _resolve_delivery_method() {
 	local token_from_payload
 	local webhook_from_payload
-	token_from_payload=$(jq -r '.source.slack_bot_user_oauth_token // empty' "$INPUT_PAYLOAD")
+	token_from_payload=$(jq -r '.source.slack_bot_user_oauth_token // empty' \
+		"$INPUT_PAYLOAD")
 	webhook_from_payload=$(jq -r '.source.webhook_url // empty' "$INPUT_PAYLOAD")
 
 	if [[ -n "$token_from_payload" ]]; then
@@ -322,7 +328,6 @@ _resolve_delivery_method() {
 	elif [[ -n "${WEBHOOK_URL:-}" ]]; then
 		DELIVERY_METHOD="webhook"
 	else
-		echo "load_configuration:: either source.slack_bot_user_oauth_token or source.webhook_url is required" >&2
 		return 1
 	fi
 
@@ -352,12 +357,15 @@ _resolve_channel() {
 		if [[ -z "$CHANNEL" ]]; then
 			if [[ -n "$env_channel_value" ]]; then
 				CHANNEL="$env_channel_value"
-				echo "load_configuration:: params.channel not set, using CHANNEL from environment" >&2
+				echo "load_configuration:: params.channel not set, using" \
+					"CHANNEL from environment" >&2
 			else
 				if [[ "$source_exists" == "true" ]]; then
-					echo "load_configuration:: params.channel is required for API delivery" >&2
+					echo "load_configuration:: params.channel is required for" \
+						"API delivery" >&2
 				else
-					echo "load_configuration:: params.channel is required and missing from payload and environment" >&2
+					echo "load_configuration:: params.channel is required and" \
+						"missing from payload and environment" >&2
 				fi
 				return 1
 			fi
@@ -382,13 +390,17 @@ _validate_bot_identity_params() {
 	local bot_identity_username_param
 	local bot_identity_icon_emoji_param
 	local bot_identity_icon_url_param
-	bot_identity_username_param=$(jq -r '.params.username // empty' "$INPUT_PAYLOAD")
-	bot_identity_icon_emoji_param=$(jq -r '.params.icon_emoji // empty' "$INPUT_PAYLOAD")
-	bot_identity_icon_url_param=$(jq -r '.params.icon_url // empty' "$INPUT_PAYLOAD")
+	bot_identity_username_param=$(jq -r '.params.username // empty' \
+		"$INPUT_PAYLOAD")
+	bot_identity_icon_emoji_param=$(jq -r '.params.icon_emoji // empty' \
+		"$INPUT_PAYLOAD")
+	bot_identity_icon_url_param=$(jq -r '.params.icon_url // empty' \
+		"$INPUT_PAYLOAD")
 
-	if [[ -n "$bot_identity_username_param" || -n "$bot_identity_icon_emoji_param" || -n "$bot_identity_icon_url_param" ]]; then
+	if [[ -n "$bot_identity_username_param" ||
+		-n "$bot_identity_icon_emoji_param" ||
+		-n "$bot_identity_icon_url_param" ]]; then
 		if [[ "$DELIVERY_METHOD" != "api" ]]; then
-			echo "load_configuration:: params.username, params.icon_emoji, and params.icon_url require API delivery with a bot token, not webhook" >&2
 			return 1
 		fi
 	fi
@@ -409,10 +421,10 @@ _validate_bot_identity_params() {
 _resolve_ephemeral_user() {
 	unset EPHEMERAL_USER 2>/dev/null || true
 	local ephemeral_user_param
-	ephemeral_user_param=$(jq -r '.params.ephemeral_user // empty' "$INPUT_PAYLOAD")
+	ephemeral_user_param=$(jq -r '.params.ephemeral_user // empty' \
+		"$INPUT_PAYLOAD")
 	if [[ -n "$ephemeral_user_param" ]]; then
 		if [[ "$DELIVERY_METHOD" != "api" ]]; then
-			echo "load_configuration:: params.ephemeral_user requires API delivery with a bot token, not webhook" >&2
 			return 1
 		fi
 		EPHEMERAL_USER="$ephemeral_user_param"
@@ -448,8 +460,10 @@ _resolve_dry_run() {
 # Uses global variable: INPUT_PAYLOAD
 #
 # Side Effects:
-#   Exports SLACK_BOT_USER_OAUTH_TOKEN, WEBHOOK_URL, CHANNEL, DRY_RUN, DELIVERY_METHOD
-#   Sets and exports EPHEMERAL_USER when params.ephemeral_user is set, otherwise unsets EPHEMERAL_USER
+# Exports SLACK_BOT_USER_OAUTH_TOKEN, WEBHOOK_URL, CHANNEL, DRY_RUN,
+# DELIVERY_METHOD
+# Sets and exports EPHEMERAL_USER when params.ephemeral_user is set, otherwise
+# unsets EPHEMERAL_USER
 #
 # Returns:
 #   0 on success
@@ -488,8 +502,6 @@ load_configuration() {
 	[[ -z "${SLACK_BOT_USER_OAUTH_TOKEN:-}" ]] && token_preview="empty"
 	[[ -z "${WEBHOOK_URL:-}" ]] && webhook_preview="empty"
 	[[ -n "${EPHEMERAL_USER:-}" ]] && ephemeral_preview="set"
-	echo "load_configuration:: method=${DELIVERY_METHOD} channel=${CHANNEL:-none} dry_run=${DRY_RUN}" >&2
-	echo "load_configuration:: token=${token_preview} webhook=${webhook_preview} ephemeral=${ephemeral_preview}" >&2
 
 	return 0
 }
@@ -520,7 +532,8 @@ parse_payload() {
 	fi
 
 	# Log sanitized payload if params.debug is true
-	# This is one of the few options that can be used take precedence over the .from_file and .raw options
+	# This is one of the few options that can be used take precedence over the
+	# .from_file and .raw options
 	local debug_enabled
 	debug_enabled=$(jq -r '.params.debug // false' "$INPUT_PAYLOAD")
 	if [[ "$debug_enabled" == "true" ]]; then

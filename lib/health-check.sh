@@ -4,44 +4,46 @@
 # Source this file from send-to-slack.sh, do not execute directly
 #
 
-# Verify jq is available on PATH
+# Verify required runtime commands are available on PATH
 #
-# Side Effects:
-# - Writes one status line to stdout or stderr
-#
-# Returns:
-# - 0 if jq is found
-# - 1 if jq is missing
-_health_check_require_jq() {
-	if ! command -v jq >/dev/null 2>&1; then
-		echo "health_check:: jq not found in PATH" >&2
-
-		return 1
-	fi
-
-	echo "health_check:: jq found: $(command -v jq)"
-
-	return 0
-}
-
-# Verify curl is available on PATH
-#
-# Side Effects:
-# - Writes one status line to stdout or stderr
+# Arguments:
+#   $1 - mode: "verbose" for health-check output, "quiet" for send path
 #
 # Returns:
-# - 0 if curl is found
-# - 1 if curl is missing
-_health_check_require_curl() {
-	if ! command -v curl >/dev/null 2>&1; then
-		echo "health_check:: curl not found in PATH" >&2
+# - 0 if all required commands are available
+# - 1 if any required command is missing
+require_runtime_commands() {
+	local mode="${1:-quiet}"
+	local missing_deps=()
+	local cmd
+	local required_commands=("jq" "curl")
 
-		return 1
+	for cmd in "${required_commands[@]}"; do
+		if ! command -v "$cmd" >/dev/null 2>&1; then
+			missing_deps+=("$cmd")
+		fi
+	done
+
+	if [[ ${#missing_deps[@]} -eq 0 ]]; then
+		if [[ "$mode" == "verbose" ]]; then
+			echo "health_check:: jq found: $(command -v jq)"
+			echo "health_check:: curl found: $(command -v curl)"
+		fi
+		return 0
 	fi
 
-	echo "health_check:: curl found: $(command -v curl)"
+	if [[ "$mode" == "verbose" ]]; then
+		for cmd in "${missing_deps[@]}"; do
+			echo "health_check:: ${cmd} not found in PATH" >&2
+		done
+	else
+		echo "require_runtime_commands:: missing required dependencies:" \
+			"${missing_deps[*]}" >&2
+		echo "require_runtime_commands:: please install missing dependencies and" \
+			"try again" >&2
+	fi
 
-	return 0
+	return 1
 }
 
 # Optionally call Slack auth.test when a bot token is set
@@ -58,7 +60,8 @@ _health_check_require_curl() {
 # - 1 when the caller should increment its error counter
 _health_check_slack_api() {
 	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
-		echo "health_check:: SLACK_BOT_USER_OAUTH_TOKEN not set, skipping API connectivity check"
+		echo "health_check:: SLACK_BOT_USER_OAUTH_TOKEN not set, skipping API" \
+			"connectivity check"
 
 		return 0
 	fi
@@ -66,7 +69,8 @@ _health_check_slack_api() {
 	echo "health_check:: Testing Slack API connectivity."
 
 	if [[ "${DRY_RUN}" == "true" || "${SKIP_SLACK_API_CHECK}" == "true" ]]; then
-		echo "health_check:: Slack API connectivity check skipped (DRY_RUN or SKIP_SLACK_API_CHECK set)"
+		echo "health_check:: Slack API connectivity check skipped (DRY_RUN or" \
+			"SKIP_SLACK_API_CHECK set)"
 
 		return 0
 	fi
@@ -146,11 +150,7 @@ health_check() {
 
 	echo "health_check:: Starting health check."
 
-	if ! _health_check_require_jq; then
-		errors=$((errors + 1))
-	fi
-
-	if ! _health_check_require_curl; then
+	if ! require_runtime_commands "verbose"; then
 		errors=$((errors + 1))
 	fi
 
@@ -167,4 +167,13 @@ health_check() {
 	echo "health_check:: Health check failed with ${errors} error(s)" >&2
 
 	return 1
+}
+
+# Check for required external commands
+#
+# Returns:
+#   0 if all dependencies are available
+#   1 if any dependency is missing
+check_dependencies() {
+	require_runtime_commands "quiet"
 }
