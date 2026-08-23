@@ -32,7 +32,7 @@ lint:
 	@echo "lint: shfmt ok"
 	@command -v shellcheck >/dev/null 2>&1 || { echo "shellcheck is not installed" >&2; exit 1; }
 	@echo "lint: shellcheck $$(echo $(SHELL_FILES) | wc -w) files"
-	@shellcheck $(SHELL_FILES)
+	@shellcheck -x $(SHELL_FILES)
 	@echo "lint: shellcheck ok"
 
 #################################################
