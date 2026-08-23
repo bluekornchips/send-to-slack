@@ -135,8 +135,7 @@ _post_file_contents() {
 	fi
 
 	local http_code
-	http_code=$(tail -n1 <<<"$http_response")
-
+	http_code=$(sed -n '$p' <<<"$http_response")
 	local response_body
 	response_body=$(sed '$d' <<<"$http_response")
 

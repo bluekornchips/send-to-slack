@@ -111,68 +111,25 @@ crosspost_notification() {
 		NOTIFICATION_PERMALINK="$original_permalink"
 		export NOTIFICATION_PERMALINK
 
-		# Build full payload: source + crosspost params with channel replaced
-		local crosspost_payload
-		local crosspost_source_file
-		local crosspost_params_file
-
-		if ! crosspost_source_file=$(mktemp "$_SLACK_WORKSPACE/crosspost.source.XXXXXX"); then
-			echo "crosspost_notification:: mktemp failed for crosspost source file" >&2
+		local channel_params
+		if ! channel_params=$(jq -n \
+			--argjson params "$crosspost_params" \
+			--arg channel "$channel" \
+			'$params + {"channel": $channel}'); then
+			echo "crosspost_notification:: failed to build params for channel ${channel}" >&2
 			any_failed=1
 			continue
 		fi
 
-		if ! crosspost_params_file=$(mktemp "$_SLACK_WORKSPACE/crosspost.params.XXXXXX"); then
-			echo "crosspost_notification:: mktemp failed for crosspost params file" >&2
-			any_failed=1
-			continue
-		fi
-
-		if ! chmod 0600 "${crosspost_source_file}" "${crosspost_params_file}"; then
-			echo "crosspost_notification:: failed to secure crosspost temp files" >&2
-			rm -f "${crosspost_source_file}" "${crosspost_params_file}"
-			any_failed=1
-			continue
-		fi
-
-		echo "$source_json" >"${crosspost_source_file}"
-		echo "$crosspost_params" >"${crosspost_params_file}"
-
-		if ! crosspost_payload=$(jq -n \
-			--slurpfile source "${crosspost_source_file}" \
-			--slurpfile params "${crosspost_params_file}" \
-			--arg channel "${channel}" \
-			'{
-				"source": $source[0],
-				"params": ($params[0] + {"channel": $channel})
-			}'); then
-			echo "crosspost_notification:: failed to build crosspost payload for channel ${channel}" >&2
-			rm -f "${crosspost_source_file}" "${crosspost_params_file}"
-			any_failed=1
-			continue
-		fi
-
-		rm -f "${crosspost_source_file}" "${crosspost_params_file}"
-
-		# Write payload to temp file for parsing
 		local temp_payload
-		if ! temp_payload=$(mktemp "$_SLACK_WORKSPACE/send-to-slack.crosspost-payload.XXXXXX"); then
-			echo "crosspost_notification:: mktemp failed for crosspost payload file" >&2
+		if ! temp_payload=$(_build_derived_input_payload "$source_json" "$channel_params" "crosspost"); then
+			echo "crosspost_notification:: failed to build crosspost payload for channel ${channel}" >&2
 			any_failed=1
 			continue
 		fi
 
-		if ! chmod 0600 "${temp_payload}"; then
-			echo "crosspost_notification:: failed to secure temp payload ${temp_payload}" >&2
-			rm -f "${temp_payload}"
-			any_failed=1
-			continue
-		fi
-
-		echo "$crosspost_payload" >"${temp_payload}"
 		echo "crosspost_notification:: parsing crosspost payload for channel ${channel}" >&2
 
-		# Parse the payload using the same parser as regular messages
 		local parsed_payload
 		if ! parsed_payload=$(parse_payload "${temp_payload}"); then
 			echo "crosspost_notification:: failed to parse payload for channel ${channel}" >&2

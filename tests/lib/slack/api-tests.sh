@@ -21,7 +21,6 @@ setup_file() {
 }
 
 setup() {
-	source "$GIT_ROOT/lib/curl-http.sh"
 	source "$SCRIPT"
 
 	SLACK_BOT_USER_OAUTH_TOKEN="test-token"
