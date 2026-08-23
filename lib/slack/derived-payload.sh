@@ -27,18 +27,21 @@ _build_derived_input_payload() {
 	fi
 
 	local source_file params_file payload_file
-	if ! source_file=$(mktemp "${_SLACK_WORKSPACE}/${name_prefix}.source.XXXXXX"); then
+	if ! source_file=$(mktemp \
+		"${_SLACK_WORKSPACE}/${name_prefix}.source.XXXXXX"); then
 		echo "_build_derived_input_payload:: mktemp failed for source file" >&2
 		return 1
 	fi
 
-	if ! params_file=$(mktemp "${_SLACK_WORKSPACE}/${name_prefix}.params.XXXXXX"); then
+	if ! params_file=$(mktemp \
+		"${_SLACK_WORKSPACE}/${name_prefix}.params.XXXXXX"); then
 		echo "_build_derived_input_payload:: mktemp failed for params file" >&2
 		rm -f "${source_file}"
 		return 1
 	fi
 
-	if ! payload_file=$(mktemp "${_SLACK_WORKSPACE}/${name_prefix}.payload.XXXXXX"); then
+	if ! payload_file=$(mktemp \
+		"${_SLACK_WORKSPACE}/${name_prefix}.payload.XXXXXX"); then
 		echo "_build_derived_input_payload:: mktemp failed for payload file" >&2
 		rm -f "${source_file}" "${params_file}"
 		return 1

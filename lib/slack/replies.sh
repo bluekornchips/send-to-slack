@@ -1,24 +1,30 @@
 #!/usr/bin/env bash
 #
-# Thread replies handler, source this file from send-to-slack.sh, do not execute directly.
+# Thread replies handler, source this file from send-to-slack.sh, do not execute
+# directly.
 # Sends each entry in thread_replies as a separate message in a thread.
-# Depends on: send_notification from lib/slack/api.sh, parse_payload, _build_derived_input_payload, _SLACK_WORKSPACE
+# Depends on: send_notification from lib/slack/api.sh, parse_payload,
+# _build_derived_input_payload, _SLACK_WORKSPACE
 #
 
 # Send each entry in thread_replies as a separate thread message
 #
 # Inputs:
-# - $1 input_payload_file: path to original input payload file, used to read source credentials
+# - $1 input_payload_file: path to original input payload file, used to read
+# source credentials
 # - $2 thread_ts: the thread timestamp to reply to
-# - $3 parsed_payload: the parsed payload JSON string, used to read thread_replies and channel
+# - $3 parsed_payload: the parsed payload JSON string, used to read
+# thread_replies and channel
 #
 # Side Effects:
 # - Calls send_notification for each reply entry
 # - Writes diagnostic and warning lines to stderr, success lines to stderr
 #
 # Returns:
-# - 0 when replies are skipped, or when all iterations finish, including per-reply parse or send warnings
-# - 1 when jq is missing, parsed payload or input file cannot be read, or workspace is invalid
+# - 0 when replies are skipped, or when all iterations finish, including
+# per-reply parse or send warnings
+# - 1 when jq is missing, parsed payload or input file cannot be read, or
+# workspace is invalid
 send_thread_replies() {
 	local input_payload_file="$1"
 	local thread_ts="$2"
@@ -30,12 +36,13 @@ send_thread_replies() {
 	fi
 
 	local thread_replies
-	if ! thread_replies=$(echo "$parsed_payload" | jq '.thread_replies // empty'); then
-		echo "send_thread_replies:: failed to read thread_replies from parsed payload" >&2
+	if ! thread_replies=$(echo "$parsed_payload" \
+		| jq '.thread_replies // empty'); then
 		return 1
 	fi
 
-	if [[ -z "$thread_replies" || "$thread_replies" == "null" || "$thread_replies" == "[]" ]]; then
+	if [[ -z "$thread_replies" || "$thread_replies" == "null" ||
+		"$thread_replies" == "[]" ]]; then
 		return 0
 	fi
 
@@ -49,13 +56,12 @@ send_thread_replies() {
 		return 0
 	fi
 
-	if [[ -z "$input_payload_file" ]] || [[ ! -f "$input_payload_file" ]] || [[ ! -r "$input_payload_file" ]]; then
-		echo "send_thread_replies:: input_payload_file is missing or not readable: ${input_payload_file:-empty}" >&2
+	if [[ -z "$input_payload_file" ]] || [[ ! -f "$input_payload_file" ]] \
+		|| [[ ! -r "$input_payload_file" ]]; then
 		return 1
 	fi
 
 	if [[ -z "$_SLACK_WORKSPACE" ]] || [[ ! -d "$_SLACK_WORKSPACE" ]]; then
-		echo "send_thread_replies:: _SLACK_WORKSPACE is not set or not a directory" >&2
 		return 1
 	fi
 
@@ -71,12 +77,9 @@ send_thread_replies() {
 		return 1
 	fi
 
-	echo "send_thread_replies:: sending ${reply_count} thread reply(s) with thread_ts: ${thread_ts}" >&2
-
 	for ((i = 0; i < reply_count; i++)); do
 		local reply_blocks
 		if ! reply_blocks=$(echo "$thread_replies" | jq ".[$i].blocks"); then
-			echo "send_thread_replies:: warning: failed to read blocks for reply $((i + 1)), skipping" >&2
 			continue
 		fi
 
@@ -93,26 +96,26 @@ send_thread_replies() {
 				"thread_ts": $thread_ts,
 				"blocks": $blocks
 			}
-			| if (($pp.username | type) == "string") and (($pp.username | length) > 0) then
+ | if (($pp.username | type) == "string") and (($pp.username | length) > 0) then
 				. + {username: $pp.username}
 				else .
 			end
-			| if (($pp.icon_emoji | type) == "string") and (($pp.icon_emoji | length) > 0) then
+ | if (($pp.icon_emoji | type) == "string") \
+				and (($pp.icon_emoji | length) > 0) then
 				. + {icon_emoji: $pp.icon_emoji}
 				else .
 			end
-			| if (($pp.icon_url | type) == "string") and (($pp.icon_url | length) > 0) then
+ | if (($pp.icon_url | type) == "string") and (($pp.icon_url | length) > 0) then
 				. + {icon_url: $pp.icon_url}
 				else .
 			end
 			'); then
-			echo "send_thread_replies:: warning: jq failed to build params for reply $((i + 1)), skipping" >&2
 			continue
 		fi
 
 		local reply_payload_file
-		if ! reply_payload_file=$(_build_derived_input_payload "$source_json" "$reply_params" "thread-reply"); then
-			echo "send_thread_replies:: warning: failed to build payload for reply $((i + 1)), skipping" >&2
+		if ! reply_payload_file=$(_build_derived_input_payload "$source_json" \
+			"$reply_params" "thread-reply"); then
 			continue
 		fi
 
@@ -120,13 +123,11 @@ send_thread_replies() {
 
 		local reply_parsed
 		if ! reply_parsed=$(parse_payload "$reply_payload_file"); then
-			echo "send_thread_replies:: warning: reply $((i + 1)) failed to parse, continuing" >&2
 			rm -f "${reply_payload_file}"
 			continue
 		fi
 
 		if ! send_notification "$reply_parsed"; then
-			echo "send_thread_replies:: warning: reply $((i + 1)) failed to send, continuing" >&2
 			rm -f "${reply_payload_file}"
 			continue
 		fi

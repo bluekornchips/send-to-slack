@@ -1,27 +1,33 @@
 #!/usr/bin/env bash
 #
 # Crosspost notification handler
-# Sends a message to additional channels using the same params as a regular message.
-# Depends on: send_notification from lib/slack/api.sh, parse_payload, _SLACK_WORKSPACE, NOTIFICATION_PERMALINK
+# Sends a message to additional channels using the same params as a regular
+# message.
+# Depends on: send_notification from lib/slack/api.sh, parse_payload,
+# _SLACK_WORKSPACE, NOTIFICATION_PERMALINK
 #
 
 # Send crosspost notifications to additional channels
 #
 # Crosspost accepts the same params as a regular message.
-# The "channel" field works exactly like params.channel, it accepts string or array.
+# The "channel" field works exactly like params.channel, it accepts string or
+# array.
 # $NOTIFICATION_PERMALINK is available for use in blocks via envsubst.
 #
 # Arguments:
 #   $1 - input_payload: Path to the original input payload file
 #
 # Side Effects:
-#   - Creates and removes temporary files under _SLACK_WORKSPACE during the send loop
-#   - Sets and exports NOTIFICATION_PERMALINK per channel, restored from the value at function entry
+# - Creates and removes temporary files under _SLACK_WORKSPACE during the send
+# loop
+# - Sets and exports NOTIFICATION_PERMALINK per channel, restored from the value
+# at function entry
 #   - Invokes jq, parse_payload, and send_notification
 #
 # Returns:
 #   0 on success or if no crosspost configured
-#   1 on invalid input, missing jq, unusable _SLACK_WORKSPACE, or if any channel fails to build, parse, or send
+# 1 on invalid input, missing jq, unusable _SLACK_WORKSPACE, or if any channel
+# fails to build, parse, or send
 crosspost_notification() {
 	local input_payload="$1"
 
@@ -31,7 +37,6 @@ crosspost_notification() {
 	fi
 
 	if [[ ! -f "${input_payload}" ]] || [[ ! -r "${input_payload}" ]]; then
-		echo "crosspost_notification:: input_payload must be a readable file: ${input_payload}" >&2
 		return 1
 	fi
 
@@ -51,20 +56,24 @@ crosspost_notification() {
 	# Extract channel(s) and normalize to array format.
 	# Supports both crosspost.channel and crosspost.channels for compatibility.
 	local channels_json
-	channels_json=$(jq '.params.crosspost.channels // .params.crosspost.channel // null' "$input_payload")
+	channels_json=$(jq \
+		'.params.crosspost.channels // .params.crosspost.channel // null' \
+		"$input_payload")
 	if [[ "$channels_json" == "null" ]] || [[ -z "$channels_json" ]]; then
 		echo "crosspost_notification:: channel not set, skipping." >&2
 		return 0
 	fi
 
-	channels_json=$(echo "${channels_json}" | jq 'if type == "string" then [.] elif type == "array" then . else [] end')
+	channels_json=$(echo "${channels_json}" | jq \
+		'if type == "string" then [.] elif type == "array" then . else [] end')
 	if [[ "${channels_json}" == "[]" ]]; then
 		echo "crosspost_notification:: channel is empty, skipping." >&2
 		return 0
 	fi
 
-	if [[ -z "${_SLACK_WORKSPACE:-}" ]] || [[ ! -d "${_SLACK_WORKSPACE}" ]] || [[ ! -w "${_SLACK_WORKSPACE}" ]]; then
-		echo "crosspost_notification:: _SLACK_WORKSPACE must be a writable directory" >&2
+	if [[ -z "${_SLACK_WORKSPACE:-}" ]] \
+		|| [[ ! -d "${_SLACK_WORKSPACE}" ]] \
+		|| [[ ! -w "${_SLACK_WORKSPACE}" ]]; then
 		return 1
 	fi
 
@@ -78,22 +87,29 @@ crosspost_notification() {
 
 	# Get all crosspost params except channel selectors and no_link
 	local crosspost_params
-	crosspost_params=$(jq '.params.crosspost | del(.channel, .channels, .no_link)' "$input_payload")
+	crosspost_params=$(jq \
+		'.params.crosspost | del(.channel, .channels, .no_link)' \
+		"$input_payload")
 
-	# Save the original permalink before the loop, as send_notification overwrites NOTIFICATION_PERMALINK
+	# Save the original permalink before the loop, as send_notification overwrites
+	# NOTIFICATION_PERMALINK
 	local original_permalink="$NOTIFICATION_PERMALINK"
 
 	# By default, append a permalink block unless no_link is true
-	if [[ "$no_link" != "true" ]] && [[ "${DELIVERY_METHOD:-api}" != "webhook" ]]; then
+	if [[ "$no_link" != "true" ]] \
+		&& [[ "${DELIVERY_METHOD:-api}" != "webhook" ]]; then
 		# Add a context block with the permalink at the end of blocks
 		local permalink_block
 		permalink_block=$(jq -n \
 			--arg link "<$NOTIFICATION_PERMALINK|View original message>" \
 			'{"context": {"elements": [{"type": "mrkdwn", "text": $link}]}}
 		')
-		crosspost_params=$(echo "$crosspost_params" | jq --argjson link "$permalink_block" '.blocks = (.blocks // []) + [$link]')
-	elif [[ "$no_link" != "true" ]] && [[ "${DELIVERY_METHOD:-api}" == "webhook" ]]; then
-		echo "crosspost_notification:: webhook delivery does not support permalink, skipping automatic link block" >&2
+		crosspost_params=$(echo "$crosspost_params" | jq --argjson link \
+			"$permalink_block" '.blocks = (.blocks // []) + [$link]')
+	elif [[ "$no_link" != "true" ]] \
+		&& [[ "${DELIVERY_METHOD:-api}" == "webhook" ]]; then
+		echo "crosspost_notification:: webhook delivery does not support" \
+			"permalink, skipping automatic link block" >&2
 	fi
 
 	local channel_count
@@ -107,7 +123,8 @@ crosspost_notification() {
 		channel=$(jq -r ".[$i]" <<<"${channels_json}")
 		echo "crosspost_notification:: processing channel ${channel}" >&2
 
-		# Restore original permalink before each iteration, as send_notification overwrites it
+		# Restore original permalink before each iteration, as send_notification
+		# overwrites it
 		NOTIFICATION_PERMALINK="$original_permalink"
 		export NOTIFICATION_PERMALINK
 
@@ -116,23 +133,19 @@ crosspost_notification() {
 			--argjson params "$crosspost_params" \
 			--arg channel "$channel" \
 			'$params + {"channel": $channel}'); then
-			echo "crosspost_notification:: failed to build params for channel ${channel}" >&2
 			any_failed=1
 			continue
 		fi
 
 		local temp_payload
-		if ! temp_payload=$(_build_derived_input_payload "$source_json" "$channel_params" "crosspost"); then
-			echo "crosspost_notification:: failed to build crosspost payload for channel ${channel}" >&2
+		if ! temp_payload=$(_build_derived_input_payload "$source_json" \
+			"$channel_params" "crosspost"); then
 			any_failed=1
 			continue
 		fi
 
-		echo "crosspost_notification:: parsing crosspost payload for channel ${channel}" >&2
-
 		local parsed_payload
 		if ! parsed_payload=$(parse_payload "${temp_payload}"); then
-			echo "crosspost_notification:: failed to parse payload for channel ${channel}" >&2
 			rm -f "${temp_payload}"
 			any_failed=1
 			continue
@@ -141,7 +154,6 @@ crosspost_notification() {
 		echo "crosspost_notification:: sending notification to channel ${channel}" >&2
 
 		if ! send_notification "${parsed_payload}"; then
-			echo "crosspost_notification:: failed to send notification to channel ${channel}" >&2
 			rm -f "${temp_payload}"
 			any_failed=1
 			continue
@@ -150,9 +162,9 @@ crosspost_notification() {
 		local block_count
 		block_count=$(echo "${parsed_payload}" | jq '.blocks | length // 0')
 
-		echo "crosspost_notification:: sent to channel ${channel} (blocks=${block_count})" >&2
 		echo "crosspost_notification:: crosspost payload (sanitized):" >&2
-		echo "${parsed_payload}" | jq '{channel, blocks: [.blocks[]? | {type: .type}]}' 2>/dev/null >&2
+		echo "${parsed_payload}" | jq \
+			'{channel, blocks: [.blocks[]? | {type: .type}]}' 2>/dev/null >&2
 
 		echo "crosspost_notification:: sent to channel ${channel}" >&2
 		rm -f "${temp_payload}"

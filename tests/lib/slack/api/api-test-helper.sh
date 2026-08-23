@@ -9,8 +9,8 @@ api_test_setup_file() {
 		fail "Failed to get git root"
 	fi
 
-	# shellcheck source=lib/bootstrap.sh
-	source "${GIT_ROOT}/lib/bootstrap.sh"
+	# shellcheck source=lib/loader.sh
+	source "${GIT_ROOT}/lib/loader.sh"
 
 	SCRIPT="${GIT_ROOT}/lib/slack/api.sh"
 	if [[ ! -f "$SCRIPT" ]]; then
@@ -22,8 +22,8 @@ api_test_setup_file() {
 }
 
 api_test_setup() {
-	# shellcheck source=lib/bootstrap.sh
-	source "${GIT_ROOT}/lib/bootstrap.sh"
+	# shellcheck source=lib/loader.sh
+	source "${GIT_ROOT}/lib/loader.sh"
 	# shellcheck source=lib/slack/api.sh
 	source "$SCRIPT"
 
