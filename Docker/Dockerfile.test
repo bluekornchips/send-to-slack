@@ -29,3 +29,4 @@ RUN chmod +x /opt/resource/check /opt/resource/in /opt/resource/out /opt/resourc
 ENTRYPOINT ["/bin/bash"]
 
 
+
