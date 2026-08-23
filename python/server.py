@@ -59,14 +59,16 @@ def parse_payload() -> Dict[str, Any]:
     body = request.get_data(as_text=True)
     if not body:
         raise ValueError('Payload is required')
-    
-    if 'payload=' in body:
-        params = urllib.parse.parse_qs(body)
+
+    content_type = (request.content_type or '').split(';', 1)[0].strip().lower()
+    if content_type == 'application/x-www-form-urlencoded':
+        params = urllib.parse.parse_qs(body, keep_blank_values=True)
         encoded = params.get('payload', [None])[0]
-        if encoded:
-            return json.loads(urllib.parse.unquote_plus(encoded))
-    
-    return json.loads(body) if isinstance(body, str) else body
+        if not encoded:
+            raise ValueError('Missing payload field in form body')
+        return json.loads(encoded)
+
+    return json.loads(body)
 
 
 def _verify_slack_signature(req: Request) -> bool:
@@ -144,7 +146,7 @@ def handle_actions():
             send_slack_message(channel_id, DEFAULT_MESSAGE)
         else:
             return Response(f'Unknown action_id: {action_id}', status=400)
-        
+
         return Response('', status=200)
     except ValueError as exc:
         return Response(str(exc), status=400)
@@ -165,6 +167,6 @@ if __name__ == '__main__':
     if not SLACK_SIGNING_SECRET:
         logger.error('SLACK_SIGNING_SECRET required')
         exit(1)
-    
+
     logger.info('Starting server on host %s port %s', DEFAULT_BIND_HOST, PORT)
     app.run(host=DEFAULT_BIND_HOST, port=PORT)
