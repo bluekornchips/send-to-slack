@@ -189,22 +189,22 @@ create_block() {
 	local script_path=""
 
 	case "$block_type" in
-	"rich-text") script_path="$RICH_TEXT_BLOCK_FILE" ;;
-	"table") script_path="$TABLE_BLOCK_FILE" ;;
-	"section") script_path="$SECTION_BLOCK_FILE" ;;
-	"header") script_path="$HEADER_BLOCK_FILE" ;;
-	"context") script_path="$CONTEXT_BLOCK_FILE" ;;
-	"divider") script_path="$DIVIDER_BLOCK_FILE" ;;
-	"markdown") script_path="$MARKDOWN_BLOCK_FILE" ;;
-	"actions") script_path="$ACTIONS_BLOCK_FILE" ;;
-	"image") script_path="$IMAGE_BLOCK_FILE" ;;
-	"video") script_path="$VIDEO_BLOCK_FILE" ;;
-	"file") script_path="$FILE_UPLOAD_SCRIPT" ;;
-	*)
-		echo "create_block:: unsupported block type: $block_type. Skipping." >&2
-		echo "create_block:: See supported block types: $DOC_URL_BLOCK_KIT_BLOCKS" >&2
-		return 0
-		;;
+		"rich-text") script_path="$RICH_TEXT_BLOCK_FILE" ;;
+		"table") script_path="$TABLE_BLOCK_FILE" ;;
+		"section") script_path="$SECTION_BLOCK_FILE" ;;
+		"header") script_path="$HEADER_BLOCK_FILE" ;;
+		"context") script_path="$CONTEXT_BLOCK_FILE" ;;
+		"divider") script_path="$DIVIDER_BLOCK_FILE" ;;
+		"markdown") script_path="$MARKDOWN_BLOCK_FILE" ;;
+		"actions") script_path="$ACTIONS_BLOCK_FILE" ;;
+		"image") script_path="$IMAGE_BLOCK_FILE" ;;
+		"video") script_path="$VIDEO_BLOCK_FILE" ;;
+		"file") script_path="$FILE_UPLOAD_SCRIPT" ;;
+		*)
+			echo "create_block:: unsupported block type: $block_type. Skipping." >&2
+			echo "create_block:: See supported block types: $DOC_URL_BLOCK_KIT_BLOCKS" >&2
+			return 0
+			;;
 	esac
 
 	if ! _validate_block_script "$script_path"; then
@@ -227,30 +227,30 @@ create_block() {
 	if [[ "$script_exit_code" -ne 0 ]]; then
 		echo "create_block:: block script failed with exit code $script_exit_code" >&2
 		case "$block_type" in
-		"section")
-			echo "create_block:: See section block docs: $DOC_URL_BLOCK_KIT_SECTION" >&2
-			;;
-		"header")
-			echo "create_block:: See header block docs: $DOC_URL_BLOCK_KIT_HEADER" >&2
-			;;
-		"image")
-			echo "create_block:: See image block docs: $DOC_URL_BLOCK_KIT_IMAGE" >&2
-			;;
-		"context")
-			echo "create_block:: See context block docs: $DOC_URL_BLOCK_KIT_CONTEXT" >&2
-			;;
-		"markdown")
-			echo "create_block:: See markdown block docs: $DOC_URL_BLOCK_KIT_MARKDOWN" >&2
-			;;
-		"rich-text")
-			echo "create_block:: See rich text block docs: $DOC_URL_BLOCK_KIT_RICH_TEXT" >&2
-			;;
-		"actions")
-			echo "create_block:: See actions block docs: $DOC_URL_BLOCK_KIT_ACTIONS" >&2
-			;;
-		"video")
-			echo "create_block:: See video block docs: $DOC_URL_BLOCK_KIT_VIDEO" >&2
-			;;
+			"section")
+				echo "create_block:: See section block docs: $DOC_URL_BLOCK_KIT_SECTION" >&2
+				;;
+			"header")
+				echo "create_block:: See header block docs: $DOC_URL_BLOCK_KIT_HEADER" >&2
+				;;
+			"image")
+				echo "create_block:: See image block docs: $DOC_URL_BLOCK_KIT_IMAGE" >&2
+				;;
+			"context")
+				echo "create_block:: See context block docs: $DOC_URL_BLOCK_KIT_CONTEXT" >&2
+				;;
+			"markdown")
+				echo "create_block:: See markdown block docs: $DOC_URL_BLOCK_KIT_MARKDOWN" >&2
+				;;
+			"rich-text")
+				echo "create_block:: See rich text block docs: $DOC_URL_BLOCK_KIT_RICH_TEXT" >&2
+				;;
+			"actions")
+				echo "create_block:: See actions block docs: $DOC_URL_BLOCK_KIT_ACTIONS" >&2
+				;;
+			"video")
+				echo "create_block:: See video block docs: $DOC_URL_BLOCK_KIT_VIDEO" >&2
+				;;
 		esac
 		return 1
 	fi
@@ -299,7 +299,7 @@ create_block() {
 		'walk(if . == null or . == "" or . == [] or . == {} or
 			(type == "object" and .type == "text" and
 				(.text == "" or .text == null)
-			) then empty else . 
+			) then empty else .
 		end)
 		' "$CREATE_BLOCK_OUTPUT_FILE" >"$filter_tmp" && mv "$filter_tmp" "$CREATE_BLOCK_OUTPUT_FILE"
 

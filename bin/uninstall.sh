@@ -115,11 +115,11 @@ validate_prefix() {
 	fi
 
 	case "$prefix" in
-	/usr/local/*) ;;
-	/usr/* | /etc/*)
-		echo "validate_prefix:: refusing system prefix: $prefix" >&2
-		return 1
-		;;
+		/usr/local/*) ;;
+		/usr/* | /etc/*)
+			echo "validate_prefix:: refusing system prefix: $prefix" >&2
+			return 1
+			;;
 	esac
 
 	return 0
@@ -226,28 +226,28 @@ main() {
 
 	while [[ $# -gt 0 ]]; do
 		case "$1" in
-		--prefix)
-			shift
-			if [[ -z "${1:-}" ]]; then
-				echo "main:: --prefix requires a value" >&2
+			--prefix)
+				shift
+				if [[ -z "${1:-}" ]]; then
+					echo "main:: --prefix requires a value" >&2
+					return 1
+				fi
+				prefix="$1"
+				;;
+			--prefix=*)
+				prefix="${1#*=}"
+				;;
+			--force)
+				force=1
+				;;
+			-h | --help)
+				usage
+				return 0
+				;;
+			*)
+				echo "main:: unknown option: $1" >&2
 				return 1
-			fi
-			prefix="$1"
-			;;
-		--prefix=*)
-			prefix="${1#*=}"
-			;;
-		--force)
-			force=1
-			;;
-		-h | --help)
-			usage
-			return 0
-			;;
-		*)
-			echo "main:: unknown option: $1" >&2
-			return 1
-			;;
+				;;
 		esac
 		shift
 	done

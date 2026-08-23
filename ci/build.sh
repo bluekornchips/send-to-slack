@@ -50,7 +50,7 @@ ENVIRONMENT VARIABLES:
   DOCKER_CACHE_TO           	Optional BuildKit cache-to value, e.g. type=gha,mode=max,scope=main
   CHANNEL                   	Required for --send-test-message
   SLACK_BOT_USER_OAUTH_TOKEN  Required for --send-test-message
-  
+
   GitHub Actions variables (only used with --gha flag):
     GITHUB_EVENT_NAME       Event type (pull_request, push, etc.)
     GITHUB_HEAD_REF         Branch name for pull requests
@@ -114,58 +114,58 @@ check_dependencies() {
 parse_args() {
 	while [[ $# -gt 0 ]]; do
 		case "$1" in
-		--gha | --github-action)
-			GITHUB_ACTION="true"
-			export GITHUB_ACTION
-			shift
-			;;
-		--no-cache)
-			NO_CACHE="true"
-			export NO_CACHE
-			shift
-			;;
-		--healthcheck)
-			SEND_HEALTHCHECK_QUERY="true"
-			export SEND_HEALTHCHECK_QUERY
-			shift
-			;;
-		--send-test-message)
-			SEND_TEST_MESSAGE="true"
-			export SEND_TEST_MESSAGE
-			shift
-			;;
-		--dockerfile)
-			shift
-			if [[ $# -eq 0 ]]; then
-				echo "parse_args:: option --dockerfile requires an argument" >&2
-				return 1
-			fi
-			if [[ -n "$1" ]]; then
-				# Non-empty value must match valid choices
-				case "$1" in
-				concourse | test | remote | all)
-					DOCKERFILE_CHOICE="$1"
-					export DOCKERFILE_CHOICE
-					;;
-				*)
-					echo "parse_args:: invalid dockerfile choice: $1 (allowed: concourse|test|remote|all)" >&2
+			--gha | --github-action)
+				GITHUB_ACTION="true"
+				export GITHUB_ACTION
+				shift
+				;;
+			--no-cache)
+				NO_CACHE="true"
+				export NO_CACHE
+				shift
+				;;
+			--healthcheck)
+				SEND_HEALTHCHECK_QUERY="true"
+				export SEND_HEALTHCHECK_QUERY
+				shift
+				;;
+			--send-test-message)
+				SEND_TEST_MESSAGE="true"
+				export SEND_TEST_MESSAGE
+				shift
+				;;
+			--dockerfile)
+				shift
+				if [[ $# -eq 0 ]]; then
+					echo "parse_args:: option --dockerfile requires an argument" >&2
 					return 1
-					;;
-				esac
-			else
-				DOCKERFILE_CHOICE=""
-				export DOCKERFILE_CHOICE
-			fi
-			shift
-			;;
-		-h | --help)
-			usage
-			return 2
-			;;
-		*)
-			echo "parse_args:: unknown option: $1" >&2
-			return 1
-			;;
+				fi
+				if [[ -n "$1" ]]; then
+					# Non-empty value must match valid choices
+					case "$1" in
+						concourse | test | remote | all)
+							DOCKERFILE_CHOICE="$1"
+							export DOCKERFILE_CHOICE
+							;;
+						*)
+							echo "parse_args:: invalid dockerfile choice: $1 (allowed: concourse|test|remote|all)" >&2
+							return 1
+							;;
+					esac
+				else
+					DOCKERFILE_CHOICE=""
+					export DOCKERFILE_CHOICE
+				fi
+				shift
+				;;
+			-h | --help)
+				usage
+				return 2
+				;;
+			*)
+				echo "parse_args:: unknown option: $1" >&2
+				return 1
+				;;
 		esac
 	done
 
@@ -255,18 +255,18 @@ build_image() {
 
 	local dockerfile_path
 	case "$DOCKERFILE_CHOICE" in
-	concourse)
-		dockerfile_path="Docker/Dockerfile.concourse"
-		;;
-	test)
-		dockerfile_path="Docker/Dockerfile.test"
-		;;
-	remote)
-		dockerfile_path="Docker/Dockerfile.remote"
-		;;
-	*)
-		dockerfile_path="Docker/Dockerfile"
-		;;
+		concourse)
+			dockerfile_path="Docker/Dockerfile.concourse"
+			;;
+		test)
+			dockerfile_path="Docker/Dockerfile.test"
+			;;
+		remote)
+			dockerfile_path="Docker/Dockerfile.remote"
+			;;
+		*)
+			dockerfile_path="Docker/Dockerfile"
+			;;
 	esac
 
 	echo "Building Docker image ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} from ${dockerfile_path}."
