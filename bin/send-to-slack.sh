@@ -1,8 +1,19 @@
 #!/usr/bin/env bash
+# shellcheck source=lib/loader.sh
+# shellcheck source=lib/cli.sh
+# shellcheck source=lib/delivery.sh
+# shellcheck source=lib/get-version.sh
+# shellcheck source=lib/health-check.sh
+# shellcheck source=lib/metadata.sh
+# shellcheck source=lib/parse/payload.sh
+# shellcheck source=lib/runtime.sh
 #
 # Send to Slack script
 # Processes JSON payload from stdin and sends message to Slack channel via API
 # Supports Block Kit formatting, file uploads, and attachments
+#
+# Library loading lives in lib/loader.sh. Helpers are loaded from an explicit
+# manifest.
 #
 
 ########################################################
@@ -10,530 +21,44 @@
 ########################################################
 SHOW_METADATA="true"
 SHOW_PAYLOAD="true"
-GITHUB_URL="https://github.com/bluekornchips/send-to-slack"
 
-# Source library files under lib/, except block-kit block scripts (run standalone).
-# lib/parse/blocks.sh is sourced last so it loads after lib/parse/payload.sh.
-#
-# Inputs:
-# - $1 - root_dir: repository or install root
-#
-# Side Effects:
-# - SEND_TO_SLACK_ROOT must already be set and exported before calling
+# Locate and source loader helpers before loading the rest of lib/
 #
 # Returns:
 # - 0 on success
-# - 1 if lib is missing, a file is missing, or source fails
-_load_libs() {
-	local root_dir="$1"
-	[[ -z "$root_dir" ]] && return 1
-
-	local lib_root="${root_dir}/lib"
-	if [[ ! -d "$lib_root" ]]; then
-		echo "_load_libs:: lib directory not found: ${lib_root}" >&2
-		return 1
-	fi
-
-	local lib_list_file
-	if ! lib_list_file=$(mktemp "${TMPDIR:-/tmp}/send-to-slack-libs.XXXXXX"); then
-		echo "_load_libs:: mktemp failed for library list" >&2
-		return 1
-	fi
-
-	if ! find "$lib_root" \
-		-mindepth 1 \
-		-type f \
-		-name '*.sh' \
-		! -path "${lib_root}/slack/block-kit/blocks/*" |
-		LC_ALL=C sort >"$lib_list_file"; then
-		rm -f "$lib_list_file"
-		echo "_load_libs:: find failed under ${lib_root}" >&2
-		return 1
-	fi
-
-	local deferred_blocks=""
-	local abs
-	while IFS= read -r abs; do
-		[[ -z "$abs" ]] && continue
-		if [[ "$abs" == "${lib_root}/parse/blocks.sh" ]]; then
-			deferred_blocks="$abs"
-			continue
-		fi
-		if [[ ! -f "$abs" ]]; then
-			rm -f "$lib_list_file"
-			echo "_load_libs:: cannot locate required library at ${abs}" >&2
-			return 1
-		fi
-		# shellcheck source=/dev/null
-		source "$abs"
-	done <"$lib_list_file"
-	rm -f "$lib_list_file"
-
-	if [[ -n "$deferred_blocks" ]]; then
-		if [[ ! -f "$deferred_blocks" ]]; then
-			echo "_load_libs:: cannot locate required library at ${deferred_blocks}" >&2
-			return 1
-		fi
-		source "$deferred_blocks"
-	fi
-
-	return 0
-}
-
-usage() {
-	cat <<EOF
-Usage: send-to-slack [OPTIONS]
-
-Send messages to Slack using Block Kit formatting.
-
-OPTIONS:
-  -f, -file, --file <path>  Read payload from file instead of stdin
-  -v, --version             Display version information and exit
-  -h, --help                Display this help message and exit
-  --health-check            Validate dependencies and Slack API connectivity without sending
-
-For more information, see: https://github.com/bluekornchips/send-to-slack
-EOF
-	return 0
-}
-
-# Resolve commit from git metadata when available
-#
-# Inputs:
-# - $1 - root_path: Base directory for repository or packaged copy
-#
-# Outputs:
-# - Writes commit string to stdout on success
-#
-# Returns:
-# - 0 on success, 1 on missing
-get_commit() {
-	local root_path="$1"
-	[[ -z "$root_path" ]] && return 1
-
-	local commit_value
-	if ! command -v git >/dev/null 2>&1; then
-		return 1
-	fi
-
-	if [[ ! -d "${root_path}/.git" ]]; then
-		return 1
-	fi
-
-	if ! commit_value=$(git -C "$root_path" rev-parse --short HEAD 2>/dev/null); then
-		return 1
-	fi
-
-	if [[ -z "$commit_value" ]]; then
-		echo "get_commit:: failed to get commit" >&2
-		return 1
-	fi
-
-	echo "$commit_value"
-
-	return 0
-}
-
-# Print version information for CLI output
-#
-# Inputs:
-# - $1 - root_path: Base directory for repository or packaged copy
-#
-# Outputs:
-# - Writes version info to stdout
-#
-# Returns:
-# - 0 on success, 1 if root_path is empty
-print_version() {
-	local root_path="$1"
-	[[ -z "$root_path" ]] && return 1
-
-	local version
-	if ! version=$(get_version "$root_path"); then
-		version="unknown"
-	fi
-
-	local commit
-	if ! commit=$(get_commit "$root_path"); then
-		commit="unknown"
-	fi
-
-	cat <<EOF
-send-to-slack, (${GITHUB_URL})
-version: ${version}
-commit: ${commit}
-EOF
-
-	return 0
-}
-
-# Check for required external commands
-#
-# Returns:
-#   0 if all dependencies are available
-#   1 if any dependency is missing
-check_dependencies() {
-	local missing_deps=()
-	local required_commands=("jq" "curl")
-
-	for cmd in "${required_commands[@]}"; do
-		if ! command -v "$cmd" >/dev/null 2>&1; then
-			missing_deps+=("$cmd")
-		fi
-	done
-
-	if [[ ${#missing_deps[@]} -gt 0 ]]; then
-		echo "check_dependencies:: missing required dependencies: ${missing_deps[*]}" >&2
-		echo "check_dependencies:: please install missing dependencies and try again" >&2
-		return 1
-	fi
-
-	return 0
-}
-
-# Find the root directory of the send-to-slack source bundle
-#
-# Outputs:
-#   Writes root_dir path to stdout
-#
-# Returns:
-#   0 on success
-#   1 if root directory cannot be located
-find_root_dir() {
+# - 1 if loader cannot be located
+_source_loader() {
 	local script_path
 	local script_dir
 	local parent_dir
-	local link_target
+	local candidate
 
 	script_path="${BASH_SOURCE[0]}"
 	if [[ -L "$script_path" ]]; then
+		local link_target
 		link_target=$(readlink "$script_path" 2>/dev/null || true)
 		if [[ -z "$link_target" || "$link_target" != /* ]]; then
-			echo "find_root_dir:: expected absolute symlink target at ${script_path}" >&2
+			echo "_source_loader:: expected absolute symlink target at" \
+				"${script_path}" >&2
 			return 1
 		fi
 		script_path="$link_target"
 	fi
 
 	script_dir=$(cd "$(dirname "$script_path")" && pwd)
-	if [[ -z "$script_dir" ]]; then
-		echo "find_root_dir:: cannot determine script directory" >&2
-		return 1
-	fi
-
 	parent_dir=$(cd "${script_dir}/.." && pwd)
 
-	if [[ -f "${script_dir}/lib/parse/payload.sh" ]]; then
-		echo "$script_dir"
-		return 0
-	fi
-
-	if [[ -n "$parent_dir" && -f "${parent_dir}/lib/parse/payload.sh" ]]; then
-		echo "$parent_dir"
-		return 0
-	fi
-
-	echo "find_root_dir:: cannot locate lib/parse/payload.sh (checked: ${script_dir}, ${parent_dir})" >&2
-
-	return 1
-}
-
-# Initialize script environment and locate root directory
-#
-# Outputs:
-#   Writes root_dir path to stdout
-#
-# Returns:
-#   0 on success
-#   1 if root directory cannot be located
-initialize_script_environment() {
-	local root_dir
-	local lib_dir
-
-	if ! root_dir=$(find_root_dir); then
-		return 1
-	fi
-
-	lib_dir="${root_dir}/lib"
-
-	if [[ ! -f "${lib_dir}/parse/payload.sh" ]]; then
-		echo "initialize_script_environment:: cannot locate lib/parse/payload.sh (lib_dir: ${lib_dir})" >&2
-		return 1
-	fi
-
-	echo "$root_dir"
-
-	return 0
-}
-
-# Parse command line arguments
-#
-# Arguments:
-#   $@ - Command line arguments
-#
-# Side Effects:
-#   Sets health_check_mode and SEND_TO_SLACK_CLI_INPUT_FILE
-#
-# Returns:
-#   0 on success
-#   1 on parse error
-#   2 if version or help was requested
-parse_main_args() {
-	health_check_mode=false
-	SEND_TO_SLACK_CLI_INPUT_FILE=""
-
-	while [[ $# -gt 0 ]]; do
-		case "$1" in
-		-v | --version)
-			local root_dir
-			if ! root_dir=$(find_root_dir); then
-				echo "parse_main_args:: cannot determine root directory" >&2
-				return 1
-			fi
-			print_version "$root_dir"
-			return 2
-			;;
-		-h | --help)
-			usage
-			return 2
-			;;
-		--health-check)
-			health_check_mode=true
-			shift
-			;;
-		-f | -file | --file)
-			if [[ -n "${SEND_TO_SLACK_CLI_INPUT_FILE}" ]]; then
-				echo "parse_main_args:: -f|-file|--file option can only be specified once" >&2
-				return 1
-			fi
-			if [[ $# -lt 2 ]]; then
-				echo "parse_main_args:: -f|-file|--file requires a file path argument" >&2
-				return 1
-			fi
-			SEND_TO_SLACK_CLI_INPUT_FILE="$2"
-			shift 2
-			;;
-		*)
-			echo "parse_main_args:: unknown option: ${1}" >&2
-			echo "parse_main_args:: use -h for usage" >&2
-			return 1
-			;;
-		esac
+	for candidate in "${script_dir}/lib/loader.sh" \
+		"${parent_dir}/lib/loader.sh"; do
+		if [[ -f "$candidate" ]]; then
+			# shellcheck source=lib/loader.sh disable=SC1090,SC1091
+			source "$candidate"
+			return 0
+		fi
 	done
 
-	export SEND_TO_SLACK_CLI_INPUT_FILE
-
-	return 0
-}
-
-# Process input from stdin or from SEND_TO_SLACK_CLI_INPUT_FILE
-#
-# Arguments:
-#   $1 - output_file: Path to write the input payload to
-#
-# Inputs:
-# - SEND_TO_SLACK_CLI_INPUT_FILE: when set to a non-empty path, read that file
-#
-# Side Effects:
-# - Writes input payload to output_file
-# - May export SEND_TO_SLACK_INPUT_SOURCE=stdin
-#
-# Returns:
-# - 0 on success
-# - 1 on validation or read failure
-process_input_to_file() {
-	local output_file="$1"
-	if ! { touch "${output_file}" && chmod 0600 "${output_file}"; }; then
-		echo "process_input_to_file:: failed to secure output file ${output_file}" >&2
-		return 1
-	fi
-
-	local use_stdin="false"
-	local input_file="${SEND_TO_SLACK_CLI_INPUT_FILE:-}"
-	if [[ -n "${input_file}" ]]; then
-		if [[ ! -f "${input_file}" ]]; then
-			echo "process_input_to_file:: input file does not exist: ${input_file}" >&2
-			return 1
-		fi
-		use_stdin="false"
-	else
-		if [[ -t 0 ]]; then
-			echo "process_input_to_file:: no input provided: use -f|--file <path> or provide input via stdin" >&2
-			return 1
-		fi
-		use_stdin="true"
-	fi
-
-	echo "process_input_to_file:: reading input into ${output_file}" >&2
-
-	if [[ "${use_stdin}" == "true" ]]; then
-		if ! cat >"${output_file}"; then
-			echo "process_input_to_file:: failed to read from stdin" >&2
-			return 1
-		fi
-
-		if [[ ! -s "${output_file}" ]]; then
-			echo "process_input_to_file:: no input received on stdin" >&2
-			return 1
-		fi
-	else
-		if ! cat -- "${input_file}" >"${output_file}"; then
-			echo "process_input_to_file:: failed to read input file: ${input_file}" >&2
-			ls -l "${input_file}" >&2
-			return 1
-		fi
-
-		if [[ ! -s "${output_file}" ]]; then
-			echo "process_input_to_file:: input file is empty: ${input_file}" >&2
-			return 1
-		fi
-	fi
-
-	if [[ "${use_stdin}" == "true" ]]; then
-		SEND_TO_SLACK_INPUT_SOURCE="stdin"
-		export SEND_TO_SLACK_INPUT_SOURCE
-	fi
-
-	return 0
-}
-
-# Create temp workspace and register cleanup trap
-#
-# Side Effects:
-# - Sets and exports _SLACK_WORKSPACE
-# - Installs EXIT and ERR trap to remove the directory
-#
-# Returns:
-# - 0 on success
-# - 1 if mktemp fails
-init_slack_workspace() {
-	_SLACK_WORKSPACE=$(mktemp -d "${TMPDIR:-/tmp}/send-to-slack.run.XXXXXX")
-	if [[ -z "${_SLACK_WORKSPACE}" ]]; then
-		echo "init_slack_workspace:: mktemp failed" >&2
-		return 1
-	fi
-
-	export _SLACK_WORKSPACE
-
-	trap 'rm -rf "$_SLACK_WORKSPACE"' EXIT ERR
-
-	return 0
-}
-
-# UTC timestamp for Concourse version JSON
-#
-# Outputs:
-# - ISO-like UTC timestamp string
-#
-# Returns:
-# - 0 always
-get_timestamp_utc() {
-	date -u +%Y-%m-%dT%H:%M:%SZ
-	return 0
-}
-
-# Apply params.debug overrides to logging globals
-#
-# Inputs:
-# - $1 - input_payload: path to raw input JSON
-#
-# Side Effects:
-# - May set SHOW_METADATA, SHOW_PAYLOAD, LOG_VERBOSE
-#
-# Returns:
-# - 0 on success, 1 if input_payload path is empty
-apply_debug_from_payload() {
-	local input_payload="$1"
-	[[ -z "$input_payload" ]] && return 1
-
-	local debug_enabled
-	debug_enabled=$(jq -r '.params.debug // false' "${input_payload}")
-	if [[ "$debug_enabled" == "true" ]]; then
-		SHOW_METADATA="true"
-		SHOW_PAYLOAD="true"
-		LOG_VERBOSE="true"
-		export SHOW_METADATA
-		export SHOW_PAYLOAD
-		export LOG_VERBOSE
-	fi
-
-	return 0
-}
-
-# Extract a non-null string field from Slack API RESPONSE JSON
-#
-# Arguments:
-#   $1 - field: jq field name (e.g. ts, channel)
-#
-# Outputs:
-#   Field value on stdout, or empty if missing/null/invalid JSON
-#
-# Returns:
-#   0 always
-_response_field() {
-	local field="$1"
-	local value=""
-	if [[ -n "${RESPONSE:-}" ]] && jq . >/dev/null 2>&1 <<<"$RESPONSE"; then
-		value=$(jq -r --arg f "$field" '.[$f] // empty' <<<"$RESPONSE")
-	fi
-	[[ "$value" == "null" ]] && value=""
-	printf '%s' "$value"
-	return 0
-}
-
-# Send notification, thread replies, and crosspost for a parsed payload
-#
-# Inputs:
-# - $1 - input_payload: path to raw Concourse-style input JSON
-# - $2 - parsed_payload: JSON string from parse_payload
-#
-# Side Effects:
-# - Calls send_notification, send_thread_replies, crosspost_notification
-# - Uses/sets RESPONSE and delivery globals
-#
-# Returns:
-# - 0 on success
-# - 1 on delivery failure
-run_send_from_input() {
-	local input_payload="$1"
-	local parsed_payload="$2"
-
-	echo "main:: sending notification"
-	if ! send_notification "$parsed_payload"; then
-		echo "main:: failed to send notification" >&2
-		return 1
-	fi
-
-	if [[ "${DELIVERY_METHOD:-api}" != "api" ]]; then
-		echo "main:: delivery method webhook does not support thread replies, skipping send_thread_replies" >&2
-		echo "main:: delivery method webhook does not support crosspost, skipping crosspost_notification" >&2
-		return 0
-	fi
-
-	if [[ -n "${EPHEMERAL_USER:-}" ]]; then
-		echo "main:: chat.postEphemeral does not support thread replies or crosspost, skipping send_thread_replies and crosspost_notification" >&2
-		return 0
-	fi
-
-	local primary_ts
-	primary_ts=$(_response_field "ts")
-
-	local reply_thread_ts
-	reply_thread_ts=$(jq -r '.thread_ts // empty' <<<"$parsed_payload")
-	if [[ -z "$reply_thread_ts" || "$reply_thread_ts" == "null" ]]; then
-		reply_thread_ts="${primary_ts:-}"
-	fi
-
-	if ! send_thread_replies "${input_payload}" "$reply_thread_ts" "$parsed_payload"; then
-		echo "main:: send_thread_replies encountered failures, continuing" >&2
-	fi
-
-	if ! crosspost_notification "${input_payload}"; then
-		echo "main:: failed to crosspost notification" >&2
-		return 1
-	fi
-
-	return 0
+	echo "_source_loader:: cannot locate lib/loader.sh" >&2
+	return 1
 }
 
 # Main entry point that processes stdin payload and sends to Slack
@@ -554,22 +79,28 @@ main() {
 	local timestamp
 	local root_dir
 	local parse_result
-	local update_rc
 
+	if ! _source_loader; then
+		return 1
+	fi
+
+	# shellcheck source=lib/loader.sh
 	if ! root_dir=$(initialize_script_environment); then
 		return 1
 	fi
 
-	# Install root for lib helpers, lib/parse/payload.sh and Block Kit expect this before load
 	SEND_TO_SLACK_ROOT="$root_dir"
 	export SEND_TO_SLACK_ROOT
 
+	# shellcheck source=lib/loader.sh
 	if ! _load_libs "${root_dir}"; then
 		return 1
 	fi
 
+	health_check_mode=false
 	parse_result=0
-	parse_main_args "$@" || parse_result=$?
+	# shellcheck source=lib/cli.sh
+	parse_main_args "$root_dir" "$@" || parse_result=$?
 
 	if [[ "$parse_result" -eq 2 ]]; then
 		return 0
@@ -581,12 +112,14 @@ main() {
 	fi
 
 	local version
+	# shellcheck source=lib/get-version.sh
 	if ! version=$(get_version "$root_dir"); then
 		version="unknown"
 	fi
 	echo "main:: send-to-slack ${version}"
 
 	if [[ "$health_check_mode" == "true" ]]; then
+		# shellcheck source=lib/health-check.sh
 		if ! health_check; then
 			return 1
 		fi
@@ -597,25 +130,30 @@ main() {
 	export SHOW_METADATA
 	export SHOW_PAYLOAD
 
-	if ! check_dependencies; then
+	# shellcheck source=lib/health-check.sh
+	if ! require_runtime_commands; then
 		return 1
 	fi
 
 	echo "main:: starting task to send notification to Slack from Concourse"
 
+	# shellcheck source=lib/runtime.sh
 	if ! init_slack_workspace; then
 		return 1
 	fi
 
 	input_payload="${_SLACK_WORKSPACE}/input_payload"
 
+	# shellcheck source=lib/runtime.sh
 	if ! process_input_to_file "${input_payload}"; then
 		echo "main:: failed to process input" >&2
 		return 1
 	fi
 
+	# shellcheck source=lib/runtime.sh
 	timestamp=$(get_timestamp_utc)
 
+	# shellcheck source=lib/runtime.sh
 	apply_debug_from_payload "${input_payload}"
 
 	if [[ -n "${SEND_TO_SLACK_INPUT_SOURCE:-}" ]]; then
@@ -631,6 +169,7 @@ main() {
 
 	local parsed_payload_file
 	parsed_payload_file="${_SLACK_WORKSPACE}/parsed_payload"
+	# shellcheck source=lib/parse/payload.sh
 	if ! parse_payload "${input_payload}" >"${parsed_payload_file}"; then
 		echo "main:: failed to parse payload" >&2
 		return 1
@@ -639,32 +178,25 @@ main() {
 	parsed_payload=$(cat "${parsed_payload_file}")
 	rm -f "${parsed_payload_file}"
 
-	update_rc=0
-	run_chat_update_from_input "${input_payload}" "${parsed_payload}" || update_rc=$?
-
-	if [[ "$update_rc" -eq 1 ]]; then
-		return 1
-	fi
-
-	if [[ "$update_rc" -eq 2 ]]; then
-		if ! run_send_from_input "${input_payload}" "${parsed_payload}"; then
-			return 1
-		fi
-	elif [[ "$update_rc" -ne 0 ]]; then
-		echo "main:: unexpected run_chat_update_from_input exit code: ${update_rc}" >&2
+	# shellcheck source=lib/delivery.sh
+	if ! run_delivery_from_input "${input_payload}" "${parsed_payload}"; then
 		return 1
 	fi
 
 	local meta_ts meta_ch
+	# shellcheck source=lib/delivery.sh
 	meta_ts=$(_response_field "ts")
+	# shellcheck source=lib/delivery.sh
 	meta_ch=$(_response_field "channel")
 
 	echo "main:: creating Concourse metadata"
+	# shellcheck source=lib/metadata.sh
 	if ! create_metadata "$parsed_payload" "$meta_ts" "$meta_ch"; then
 		echo "main:: failed to create metadata" >&2
 		return 1
 	fi
 
+	# shellcheck source=lib/metadata.sh
 	if ! emit_concourse_output "${timestamp}" "${meta_ts}"; then
 		return 1
 	fi
