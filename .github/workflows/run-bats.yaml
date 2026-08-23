@@ -2,6 +2,8 @@ name: run-bats-tests
 
 on:
   pull_request:
+  push:
+    branches: [main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -32,7 +34,12 @@ jobs:
             chmod +x /usr/local/bin/yq
           fi
 
-      - name: Run shell tests
+      - name: Run shell tests (changed files on PR)
+        if: github.event_name == 'pull_request'
         env:
           GITHUB_BASE_REF: ${{ github.base_ref }}
         run: ./ci/run-bats.sh
+
+      - name: Run full bats suite
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: make test
