@@ -28,7 +28,6 @@ ERROR_CODES_TRUE_FAILURES=(
 	"invalid_attachments"
 	"message_not_found"
 	"cant_update_message")
-ERROR_CODES_RETRYABLE=("rate_limited")
 
 # Check if error code is in the given list. Used for retry vs fail branching.
 #
@@ -49,6 +48,24 @@ _is_error_in_list() {
 	done
 
 	return 1
+}
+
+# Split curl output captured with -w "\n%{http_code}" into body and status.
+#
+# Arguments:
+#   $1 - curl_output: full curl stdout (body + trailing http code line)
+#
+# Side Effects:
+# - Sets CURL_HTTP_BODY and CURL_HTTP_CODE
+#
+# Returns:
+# - 0 always
+_parse_curl_http_response() {
+	local curl_output="$1"
+	CURL_HTTP_CODE=$(sed -n '$p' <<<"$curl_output")
+	CURL_HTTP_BODY=$(sed '$d' <<<"$curl_output")
+	export CURL_HTTP_CODE CURL_HTTP_BODY
+	return 0
 }
 
 ########################################################
@@ -86,31 +103,19 @@ handle_slack_api_error() {
 		echo "handle_slack_api_error:: Rate limited. Slack API is throttling requests." >&2
 		echo "handle_slack_api_error:: Consider implementing retry logic or reducing request frequency." >&2
 		echo "handle_slack_api_error:: See: $DOC_URL_RATE_LIMITS" >&2
-		if [[ -n "$context" ]]; then
-			echo "handle_slack_api_error:: Context: $context" >&2
-		fi
 		;;
 	"invalid_auth")
 		echo "handle_slack_api_error:: Authentication failed. Check your SLACK_BOT_USER_OAUTH_TOKEN." >&2
 		echo "handle_slack_api_error:: Token may be expired or invalid." >&2
 		echo "handle_slack_api_error:: See: $DOC_URL_AUTHENTICATION" >&2
-		if [[ -n "$context" ]]; then
-			echo "handle_slack_api_error:: Context: $context" >&2
-		fi
 		;;
 	"channel_not_found")
 		echo "handle_slack_api_error:: Channel not found. Verify the channel name/ID exists and the bot has access." >&2
 		echo "handle_slack_api_error:: See: $DOC_URL_CONVERSATIONS_LIST" >&2
-		if [[ -n "$context" ]]; then
-			echo "handle_slack_api_error:: Context: $context" >&2
-		fi
 		;;
 	"not_in_channel")
 		echo "handle_slack_api_error:: Bot is not in the specified channel. Invite the bot to the channel first." >&2
 		echo "handle_slack_api_error:: See: $DOC_URL_CONVERSATIONS_JOIN" >&2
-		if [[ -n "$context" ]]; then
-			echo "handle_slack_api_error:: Context: $context" >&2
-		fi
 		;;
 	"missing_scope")
 		echo "handle_slack_api_error:: Missing required OAuth scope. Check your bot's scopes in Slack app settings." >&2
@@ -125,27 +130,22 @@ handle_slack_api_error() {
 		echo "handle_slack_api_error:: Invalid blocks in payload. Check block structure and validation rules." >&2
 		echo "handle_slack_api_error:: See: $DOC_URL_BLOCK_KIT_BLOCKS" >&2
 		echo "handle_slack_api_error:: Use Block Kit Builder to validate: https://app.slack.com/block-kit-builder" >&2
-		if [[ -n "$context" ]]; then
-			echo "handle_slack_api_error:: Context: $context" >&2
-		fi
 		;;
 	"invalid_attachments")
 		echo "handle_slack_api_error:: Invalid attachments in payload. Common issues:" >&2
 		echo "handle_slack_api_error:: - Attachment structure must match Slack's format" >&2
 		echo "handle_slack_api_error:: - Maximum 20 attachments per message" >&2
 		echo "handle_slack_api_error:: See: $DOC_URL_LEGACY_ATTACHMENTS" >&2
-		if [[ -n "$context" ]]; then
-			echo "handle_slack_api_error:: Context: $context" >&2
-		fi
 		;;
 	*)
 		echo "handle_slack_api_error:: Slack API error: $error_code" >&2
 		echo "handle_slack_api_error:: See: $DOC_URL_CHAT_POSTMESSAGE_ERRORS" >&2
-		if [[ -n "$context" ]]; then
-			echo "handle_slack_api_error:: Context: $context" >&2
-		fi
 		;;
 	esac
+
+	if [[ -n "$context" ]]; then
+		echo "handle_slack_api_error:: Context: $context" >&2
+	fi
 
 	if [[ -n "$response" ]]; then
 		echo "handle_slack_api_error:: Full Slack API response:" >&2
@@ -225,13 +225,16 @@ get_message_permalink() {
 
 # Retry a command with exponential backoff
 #
+# Exit code 2 from the command is treated as a permanent failure and is not retried.
+#
 # Arguments:
 #   $1 - max_attempts: Maximum number of retry attempts, default: RETRY_MAX_ATTEMPTS
 #   $@ - command and arguments to execute, no eval
 #
 # Returns:
 #   0 on success
-#   1 on failure after all retries
+#   2 on permanent failure (command returned 2)
+#   otherwise last non-zero exit code after all retries
 retry_with_backoff() {
 	local max_attempts="${1:-$RETRY_MAX_ATTEMPTS}"
 	shift
@@ -252,7 +255,6 @@ retry_with_backoff() {
 	while [[ "$attempt" -le "$max_attempts" ]]; do
 		echo "retry_with_backoff:: executing command (attempt ${attempt}/${max_attempts})" >&2
 
-		# Execute the command and capture exit code
 		local cmd_status=0
 		"$@" || cmd_status=$?
 
@@ -260,9 +262,12 @@ retry_with_backoff() {
 			return 0
 		fi
 
+		if [[ "$cmd_status" -eq 2 ]]; then
+			return 2
+		fi
+
 		last_exit_code=$cmd_status
 
-		# Check if we should retry
 		if [[ "$attempt" -lt "$max_attempts" ]]; then
 			echo "retry_with_backoff:: Attempt $attempt failed, retrying in ${delay}s." >&2
 			sleep "$delay"
@@ -282,15 +287,72 @@ retry_with_backoff() {
 	return $last_exit_code
 }
 
-# Send payload using Slack Web API
+# POST JSON to a Slack Web API method URL
 #
 # Arguments:
-#   $1 - payload_file: file path with JSON payload body
-#   $2 - payload: payload JSON string for error logging
+#   $1 - api_url: full Slack API method URL
+#   $2 - payload_file: file path with JSON payload body
+#   $3 - payload: payload JSON string for error logging
+#   $4 - log_prefix: prefix for stderr messages
 #
 # Side Effects:
 # - Sets SEND_NOTIFICATION_RESPONSE with API response body
 # - Logs API errors to stderr
+#
+# Returns:
+# - 0 on success
+# - 1 on retryable failure
+# - 2 on permanent failure
+_slack_api_post() {
+	local api_url="$1"
+	local payload_file="$2"
+	local payload="$3"
+	local log_prefix="${4:-_slack_api_post}"
+
+	local curl_output
+	curl_output=$(curl -X POST "${api_url}" \
+		-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
+		-H "Content-type: application/json; charset=utf-8" \
+		-d "@${payload_file}" \
+		--silent --show-error \
+		--max-time 30 \
+		--connect-timeout 10 \
+		-w "\n%{http_code}" 2>&1)
+
+	_parse_curl_http_response "$curl_output"
+	SEND_NOTIFICATION_RESPONSE="${CURL_HTTP_BODY}"
+	export SEND_NOTIFICATION_RESPONSE
+
+	if [[ "$CURL_HTTP_CODE" != "200" ]]; then
+		echo "${log_prefix}:: HTTP error code: $CURL_HTTP_CODE" >&2
+		return 1
+	fi
+
+	if ! echo "$SEND_NOTIFICATION_RESPONSE" | jq . >/dev/null 2>&1; then
+		echo "${log_prefix}:: Invalid JSON response from Slack API" >&2
+		return 1
+	fi
+
+	if ! echo "$SEND_NOTIFICATION_RESPONSE" | jq -e '.ok == true' >/dev/null 2>&1; then
+		local error_code
+		error_code=$(echo "$SEND_NOTIFICATION_RESPONSE" | jq -r '.error // "unknown"' 2>/dev/null)
+		if _is_error_in_list "$error_code" "${ERROR_CODES_TRUE_FAILURES[@]}"; then
+			handle_slack_api_error "$SEND_NOTIFICATION_RESPONSE" "$log_prefix"
+			echo "${log_prefix}:: Full request payload:" >&2
+			jq . <<<"$payload" >&2
+			return 2
+		fi
+		return 1
+	fi
+
+	return 0
+}
+
+# Send payload using Slack Web API (chat.postMessage or chat.postEphemeral)
+#
+# Arguments:
+#   $1 - payload_file: file path with JSON payload body
+#   $2 - payload: payload JSON string for error logging
 #
 # Returns:
 # - 0 on success
@@ -306,44 +368,7 @@ _send_by_api() {
 		api_url="${SLACK_API_URL}/${CHAT_POST_EPHEMERAL}"
 	fi
 
-	local curl_output
-	curl_output=$(curl -X POST "${api_url}" \
-		-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
-		-H "Content-type: application/json; charset=utf-8" \
-		-d "@${payload_file}" \
-		--silent --show-error \
-		--max-time 30 \
-		--connect-timeout 10 \
-		-w "\n%{http_code}" 2>&1)
-
-	local http_code
-	http_code=$(echo "$curl_output" | sed -n '$p')
-	SEND_NOTIFICATION_RESPONSE=$(echo "$curl_output" | sed '$d')
-	export SEND_NOTIFICATION_RESPONSE
-
-	if [[ "$http_code" != "200" ]]; then
-		echo "send_notification:: HTTP error code: $http_code" >&2
-		return 1
-	fi
-
-	if ! echo "$SEND_NOTIFICATION_RESPONSE" | jq . >/dev/null 2>&1; then
-		echo "send_notification:: Invalid JSON response from Slack API" >&2
-		return 1
-	fi
-
-	if ! echo "$SEND_NOTIFICATION_RESPONSE" | jq -e '.ok == true' >/dev/null 2>&1; then
-		local error_code
-		error_code=$(echo "$SEND_NOTIFICATION_RESPONSE" | jq -r '.error // "unknown"' 2>/dev/null)
-		if _is_error_in_list "$error_code" "${ERROR_CODES_TRUE_FAILURES[@]}"; then
-			handle_slack_api_error "$SEND_NOTIFICATION_RESPONSE" "send_notification"
-			echo "send_notification:: Full request payload:" >&2
-			jq . <<<"$payload" >&2
-			return 2
-		fi
-		return 1
-	fi
-
-	return 0
+	_slack_api_post "$api_url" "$payload_file" "$payload" "_send_by_api"
 }
 
 # Send chat.update payload using Slack Web API
@@ -351,10 +376,6 @@ _send_by_api() {
 # Arguments:
 #   $1 - payload_file: file path with JSON payload body
 #   $2 - payload: payload JSON string for error logging
-#
-# Side Effects:
-# - Sets SEND_NOTIFICATION_RESPONSE with API response body
-# - Logs API errors to stderr
 #
 # Returns:
 # - 0 on success
@@ -364,44 +385,7 @@ _send_update_by_api() {
 	local payload_file="$1"
 	local payload="$2"
 
-	local curl_output
-	curl_output=$(curl -X POST "${SLACK_API_URL}/${CHAT_UPDATE}" \
-		-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
-		-H "Content-type: application/json; charset=utf-8" \
-		-d "@${payload_file}" \
-		--silent --show-error \
-		--max-time 30 \
-		--connect-timeout 10 \
-		-w "\n%{http_code}" 2>&1)
-
-	local http_code
-	http_code=$(echo "$curl_output" | sed -n '$p')
-	SEND_NOTIFICATION_RESPONSE=$(echo "$curl_output" | sed '$d')
-	export SEND_NOTIFICATION_RESPONSE
-
-	if [[ "$http_code" != "200" ]]; then
-		echo "update_message:: HTTP error code: $http_code" >&2
-		return 1
-	fi
-
-	if ! echo "$SEND_NOTIFICATION_RESPONSE" | jq . >/dev/null 2>&1; then
-		echo "update_message:: Invalid JSON response from Slack API" >&2
-		return 1
-	fi
-
-	if ! echo "$SEND_NOTIFICATION_RESPONSE" | jq -e '.ok == true' >/dev/null 2>&1; then
-		local error_code
-		error_code=$(echo "$SEND_NOTIFICATION_RESPONSE" | jq -r '.error // "unknown"' 2>/dev/null)
-		if _is_error_in_list "$error_code" "${ERROR_CODES_TRUE_FAILURES[@]}"; then
-			handle_slack_api_error "$SEND_NOTIFICATION_RESPONSE" "update_message"
-			echo "update_message:: Full request payload:" >&2
-			jq . <<<"$payload" >&2
-			return 2
-		fi
-		return 1
-	fi
-
-	return 0
+	_slack_api_post "${SLACK_API_URL}/${CHAT_UPDATE}" "$payload_file" "$payload" "_send_update_by_api"
 }
 
 # Update an existing Slack message via chat.update
@@ -467,51 +451,28 @@ update_message() {
 		return 1
 	fi
 
-	local response=""
-	local attempt=1
-	local delay="$RETRY_INITIAL_DELAY"
-	local last_exit_code=1
-
 	local payload_file
 	payload_file=$(mktemp "${_SLACK_WORKSPACE:-/tmp}/update_message.payload.XXXXXX")
 	printf '%s' "$update_body" >"$payload_file"
 
-	while [[ "$attempt" -le "$RETRY_MAX_ATTEMPTS" ]]; do
-		echo "update_message:: chat.update attempt ${attempt}/${RETRY_MAX_ATTEMPTS}" >&2
+	_update_message_attempt() {
+		echo "update_message:: chat.update attempt" >&2
+		_send_update_by_api "$payload_file" "$update_body"
+	}
 
-		local api_status=0
-		_send_update_by_api "$payload_file" "$update_body" || api_status=$?
-		response="${SEND_NOTIFICATION_RESPONSE:-}"
-		if [[ "$api_status" -eq 0 ]]; then
-			break
-		fi
+	local retry_status=0
+	retry_with_backoff "$RETRY_MAX_ATTEMPTS" _update_message_attempt || retry_status=$?
+	local response="${SEND_NOTIFICATION_RESPONSE:-}"
+	rm -f "$payload_file"
 
-		if [[ "$api_status" -eq 2 ]]; then
-			rm -f "$payload_file"
-			return 1
-		fi
-		last_exit_code=1
-
-		if [[ "$attempt" -lt "$RETRY_MAX_ATTEMPTS" ]] && [[ "$last_exit_code" -ne 0 ]]; then
-			echo "update_message:: Attempt $attempt failed, retrying in ${delay}s." >&2
-			sleep "$delay"
-
-			delay=$((delay * RETRY_BACKOFF_MULTIPLIER))
-			if [[ "$delay" -gt "$RETRY_MAX_DELAY" ]]; then
-				delay="$RETRY_MAX_DELAY"
-			fi
-
-			attempt=$((attempt + 1))
-		else
+	if [[ "$retry_status" -ne 0 ]]; then
+		if [[ "$retry_status" -ne 2 ]]; then
 			echo "update_message:: Failed to update message after $RETRY_MAX_ATTEMPTS attempts" >&2
 			echo "update_message:: Full request payload:" >&2
 			jq . <<<"$update_body" >&2
-			rm -f "$payload_file"
-			return 1
 		fi
-	done
-
-	rm -f "$payload_file"
+		return 1
+	fi
 
 	local resp_channel=""
 	local resp_ts=""
@@ -573,7 +534,7 @@ run_chat_update_from_input() {
 
 	if [[ -z "$update_ts" ]] && [[ -n "$message_ts_file" ]]; then
 		if [[ ! -f "$message_ts_file" ]]; then
-			echo "main:: params.message_ts_file: file not found: ${message_ts_file}" >&2
+			echo "run_chat_update_from_input:: params.message_ts_file: file not found: ${message_ts_file}" >&2
 
 			return 1
 		fi
@@ -584,17 +545,17 @@ run_chat_update_from_input() {
 		return 2
 	fi
 
-	echo "main:: updating existing Slack message via chat.update"
+	echo "run_chat_update_from_input:: updating existing Slack message via chat.update"
 	local update_channel
 	update_channel=$(jq -r '.params.channel // empty' "${input_payload}")
 
 	if [[ -z "$update_channel" || "$update_channel" == "null" ]]; then
-		echo "main:: params.channel is required when params.message_ts is set" >&2
+		echo "run_chat_update_from_input:: params.channel is required when params.message_ts is set" >&2
 		return 1
 	fi
 
 	if [[ "${DELIVERY_METHOD:-api}" != "api" ]]; then
-		echo "main:: params.message_ts requires API delivery, not webhook" >&2
+		echo "run_chat_update_from_input:: params.message_ts requires API delivery, not webhook" >&2
 		return 1
 	fi
 
@@ -602,13 +563,13 @@ run_chat_update_from_input() {
 	update_channel_resolved="$update_channel"
 	if [[ "${DRY_RUN:-}" != "true" ]]; then
 		if ! update_channel_resolved=$(resolve_channel_id "$update_channel"); then
-			echo "main:: failed to resolve params.channel for chat.update, channel ID is required" >&2
+			echo "run_chat_update_from_input:: failed to resolve params.channel for chat.update, channel ID is required" >&2
 			return 1
 		fi
 	fi
 
 	if ! update_message "$update_channel_resolved" "$update_ts" "$parsed_payload"; then
-		echo "main:: failed to update Slack message" >&2
+		echo "run_chat_update_from_input:: failed to update Slack message" >&2
 		return 1
 	fi
 
@@ -639,16 +600,15 @@ _send_by_webhook() {
 		--connect-timeout 10 \
 		-w "\n%{http_code}" 2>&1)
 
-	local webhook_http_code
-	webhook_http_code=$(echo "$webhook_output" | sed -n '$p')
-	SEND_NOTIFICATION_RESPONSE=$(echo "$webhook_output" | sed '$d')
+	_parse_curl_http_response "$webhook_output"
+	SEND_NOTIFICATION_RESPONSE="${CURL_HTTP_BODY}"
 	export SEND_NOTIFICATION_RESPONSE
 
-	if [[ "$webhook_http_code" =~ ^2[0-9]{2}$ ]]; then
+	if [[ "$CURL_HTTP_CODE" =~ ^2[0-9]{2}$ ]]; then
 		return 0
 	fi
 
-	echo "send_notification:: webhook HTTP error code: $webhook_http_code" >&2
+	echo "_send_by_webhook:: webhook HTTP error code: $CURL_HTTP_CODE" >&2
 
 	return 1
 }
@@ -694,56 +654,32 @@ send_notification() {
 		return 1
 	fi
 
-	local response=""
-	local attempt=1
-	local delay="$RETRY_INITIAL_DELAY"
-	local last_exit_code=1
-
 	local payload_file
 	payload_file=$(mktemp "$_SLACK_WORKSPACE/send_notification.payload.XXXXXX")
 	printf '%s' "$payload" >"$payload_file"
 
-	while [[ "$attempt" -le "$RETRY_MAX_ATTEMPTS" ]]; do
-		echo "send_notification:: delivering message using method ${DELIVERY_METHOD} (attempt ${attempt}/${RETRY_MAX_ATTEMPTS})" >&2
-
+	_send_notification_attempt() {
+		echo "send_notification:: delivering message using method ${DELIVERY_METHOD}" >&2
 		if [[ "$DELIVERY_METHOD" == "api" ]]; then
-			local api_status=0
-			_send_by_api "$payload_file" "$payload" || api_status=$?
-			response="${SEND_NOTIFICATION_RESPONSE:-}"
-			if [[ "$api_status" -eq 0 ]]; then
-				break
-			fi
-			if [[ "$api_status" -eq 2 ]]; then
-				return 1
-			fi
-			last_exit_code=1
+			_send_by_api "$payload_file" "$payload"
 		else
-			local webhook_status=0
-			_send_by_webhook "$payload_file" || webhook_status=$?
-			response="${SEND_NOTIFICATION_RESPONSE:-}"
-			if [[ "$webhook_status" -eq 0 ]]; then
-				break
-			fi
-			last_exit_code=1
+			_send_by_webhook "$payload_file"
 		fi
+	}
 
-		if [[ "$attempt" -lt "$RETRY_MAX_ATTEMPTS" ]] && [[ "$last_exit_code" -ne 0 ]]; then
-			echo "send_notification:: Attempt $attempt failed, retrying in ${delay}s." >&2
-			sleep "$delay"
+	local retry_status=0
+	retry_with_backoff "$RETRY_MAX_ATTEMPTS" _send_notification_attempt || retry_status=$?
+	local response="${SEND_NOTIFICATION_RESPONSE:-}"
+	rm -f "$payload_file"
 
-			delay=$((delay * RETRY_BACKOFF_MULTIPLIER))
-			if [[ "$delay" -gt "$RETRY_MAX_DELAY" ]]; then
-				delay="$RETRY_MAX_DELAY"
-			fi
-
-			attempt=$((attempt + 1))
-		else
+	if [[ "$retry_status" -ne 0 ]]; then
+		if [[ "$retry_status" -ne 2 ]]; then
 			echo "send_notification:: Failed to send notification after $RETRY_MAX_ATTEMPTS attempts" >&2
 			echo "send_notification:: Full request payload:" >&2
 			jq . <<<"$payload" >&2
-			return 1
 		fi
-	done
+		return 1
+	fi
 
 	# Extract channel and timestamp from API response for permalink support
 	local channel=""

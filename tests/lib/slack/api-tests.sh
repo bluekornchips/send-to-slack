@@ -85,6 +85,19 @@ mock_curl_failure() {
 }
 
 ########################################################
+# _parse_curl_http_response
+########################################################
+
+@test "_parse_curl_http_response:: splits body and http code" {
+	local curl_output
+	curl_output=$(printf '%s\n%s' '{"ok":true}' '200')
+
+	_parse_curl_http_response "$curl_output"
+	[[ "$CURL_HTTP_CODE" == "200" ]]
+	[[ "$CURL_HTTP_BODY" == '{"ok":true}' ]]
+}
+
+########################################################
 # send_notification
 ########################################################
 

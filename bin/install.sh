@@ -166,41 +166,18 @@ file_has_signature() {
 	return 1
 }
 
-# List lib/*.sh paths to copy, relative to repository root.
-# Rules match bin/send-to-slack.sh _send_to_slack_lib_rel_paths.
-#
-# Inputs:
-# - $1 - root_dir: extracted send-to-slack source root
-#
-# Outputs:
-# - One relative path per line, e.g. lib/parse/payload.sh
-#
-# Returns:
-# - 0 on success
-# - 1 if lib discovery fails
+# List lib/*.sh to install, relative to root_dir.
 _install_lib_rel_paths() {
 	local root_dir="$1"
-	local lib_root="${root_dir}/lib"
 	local abs
-	local abs_paths
 
-	# Capture paths, then iterate without process substitution, some hosts lack /dev/fd.
-	if ! abs_paths=$(find "$lib_root" \
+	find "${root_dir}/lib" \
 		-mindepth 1 \
-		-maxdepth 4 \
 		-type f \
-		-name '*.sh' \
-		! -path "${lib_root}/slack/block-kit/blocks/*" |
-		LC_ALL=C sort); then
-		return 1
-	fi
-
-	while IFS= read -r abs; do
-		[[ -z "$abs" ]] && continue
+		-name '*.sh' |
+		LC_ALL=C sort | while IFS= read -r abs; do
 		printf '%s\n' "${abs#"${root_dir}/"}"
-	done <<<"$abs_paths"
-
-	return 0
+	done
 }
 
 # Install from extracted source directory
@@ -238,14 +215,6 @@ install_from_source() {
 	local rel
 	local rel_paths
 	rel_paths=$(_install_lib_rel_paths "$source_dir") || return 1
-
-	while IFS= read -r rel; do
-		[[ -z "$rel" ]] && continue
-		if [[ ! -f "${source_dir}/${rel}" ]]; then
-			echo "install_from_source:: missing ${rel}" >&2
-			return 1
-		fi
-	done <<<"$rel_paths"
 
 	if [[ ! -d "${source_dir}/lib/slack/block-kit/blocks" ]]; then
 		echo "install_from_source:: missing lib/slack/block-kit/blocks directory" >&2
@@ -307,21 +276,6 @@ install_from_source() {
 			return 1
 		fi
 	done
-
-	if ! cp "${source_dir}/lib/parse"/*.sh "${install_root}/lib/parse/"; then
-		echo "install_from_source:: failed to copy lib/parse files" >&2
-		return 1
-	fi
-
-	if ! cp "${source_dir}/lib/slack/utils"/*.sh "${install_root}/lib/slack/utils/"; then
-		echo "install_from_source:: failed to copy lib/slack/utils files" >&2
-		return 1
-	fi
-
-	if ! cp "${source_dir}/lib/slack/block-kit/blocks"/*.sh "${install_root}/lib/slack/block-kit/blocks/"; then
-		echo "install_from_source:: failed to copy lib/slack/block-kit/blocks files" >&2
-		return 1
-	fi
 
 	if [[ -f "${source_dir}/VERSION" ]]; then
 		if ! cp "${source_dir}/VERSION" "${install_root}/VERSION"; then

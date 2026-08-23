@@ -11,64 +11,9 @@
 SHOW_METADATA="true"
 SHOW_PAYLOAD="true"
 GITHUB_URL="https://github.com/bluekornchips/send-to-slack"
-MAX_DEPTH=4
 
-# List .sh files under lib, sorted for stable order
-#
-# Excludes lib/slack/block-kit/blocks/*.sh, those run as standalone scripts from create_block
-#
-# Inputs:
-# - $1 - root_dir: repository or install root
-#
-# Outputs:
-# - Writes one absolute path per line to stdout
-#
-# Returns:
-# - 0 always
-_send_to_slack_lib_abs_paths() {
-	local root_dir="$1"
-	local lib_root="${root_dir}/lib"
-
-	find "$lib_root" \
-		-mindepth 1 \
-		-maxdepth "$MAX_DEPTH" \
-		-type f \
-		-name '*.sh' \
-		! -path "${lib_root}/slack/block-kit/blocks/*" |
-		LC_ALL=C sort
-
-	return 0
-}
-
-# Same discovery as _send_to_slack_lib_abs_paths, paths relative to root_dir
-#
-# Inputs:
-# - $1 - root_dir: repository or install root
-#
-# Outputs:
-# - Writes one path relative to root_dir per line, e.g. lib/parse/payload.sh
-#
-# Returns:
-# - 0 on success
-# - 1 if lib discovery fails
-_send_to_slack_lib_rel_paths() {
-	local root_dir="$1"
-	local abs
-	local abs_paths
-
-	abs_paths=$(_send_to_slack_lib_abs_paths "$root_dir") || return 1
-
-	while IFS= read -r abs; do
-		[[ -z "$abs" ]] && continue
-		printf '%s\n' "${abs#"${root_dir}/"}"
-	done <<<"$abs_paths"
-
-	return 0
-}
-
-# Source every library file discovered under lib/, see _send_to_slack_lib_abs_paths
-#
-# lib/parse/blocks.sh is sourced last so lexicographic order does not load it before payload.sh
+# Source library files under lib/, except block-kit block scripts (run standalone).
+# lib/parse/blocks.sh is sourced last so it loads after lib/parse/payload.sh.
 #
 # Inputs:
 # - $1 - root_dir: repository or install root
@@ -89,12 +34,25 @@ _load_libs() {
 		return 1
 	fi
 
+	local lib_list_file
+	if ! lib_list_file=$(mktemp "${TMPDIR:-/tmp}/send-to-slack-libs.XXXXXX"); then
+		echo "_load_libs:: mktemp failed for library list" >&2
+		return 1
+	fi
+
+	if ! find "$lib_root" \
+		-mindepth 1 \
+		-type f \
+		-name '*.sh' \
+		! -path "${lib_root}/slack/block-kit/blocks/*" |
+		LC_ALL=C sort >"$lib_list_file"; then
+		rm -f "$lib_list_file"
+		echo "_load_libs:: find failed under ${lib_root}" >&2
+		return 1
+	fi
+
 	local deferred_blocks=""
 	local abs
-	local abs_paths
-
-	abs_paths=$(_send_to_slack_lib_abs_paths "$root_dir") || return 1
-
 	while IFS= read -r abs; do
 		[[ -z "$abs" ]] && continue
 		if [[ "$abs" == "${lib_root}/parse/blocks.sh" ]]; then
@@ -102,11 +60,14 @@ _load_libs() {
 			continue
 		fi
 		if [[ ! -f "$abs" ]]; then
+			rm -f "$lib_list_file"
 			echo "_load_libs:: cannot locate required library at ${abs}" >&2
 			return 1
 		fi
+		# shellcheck source=/dev/null
 		source "$abs"
-	done <<<"$abs_paths"
+	done <"$lib_list_file"
+	rm -f "$lib_list_file"
 
 	if [[ -n "$deferred_blocks" ]]; then
 		if [[ ! -f "$deferred_blocks" ]]; then
@@ -311,14 +272,13 @@ initialize_script_environment() {
 #   $@ - Command line arguments
 #
 # Side Effects:
-#   Sets health_check_mode, SEND_TO_SLACK_CLI_INPUT_FILE, clears main_args then fills it
+#   Sets health_check_mode and SEND_TO_SLACK_CLI_INPUT_FILE
 #
 # Returns:
 #   0 on success
 #   1 on parse error
 #   2 if version or help was requested
 parse_main_args() {
-	main_args=()
 	health_check_mode=false
 	SEND_TO_SLACK_CLI_INPUT_FILE=""
 
@@ -500,6 +460,82 @@ apply_debug_from_payload() {
 	return 0
 }
 
+# Extract a non-null string field from Slack API RESPONSE JSON
+#
+# Arguments:
+#   $1 - field: jq field name (e.g. ts, channel)
+#
+# Outputs:
+#   Field value on stdout, or empty if missing/null/invalid JSON
+#
+# Returns:
+#   0 always
+_response_field() {
+	local field="$1"
+	local value=""
+	if [[ -n "${RESPONSE:-}" ]] && jq . >/dev/null 2>&1 <<<"$RESPONSE"; then
+		value=$(jq -r --arg f "$field" '.[$f] // empty' <<<"$RESPONSE")
+	fi
+	[[ "$value" == "null" ]] && value=""
+	printf '%s' "$value"
+	return 0
+}
+
+# Send notification, thread replies, and crosspost for a parsed payload
+#
+# Inputs:
+# - $1 - input_payload: path to raw Concourse-style input JSON
+# - $2 - parsed_payload: JSON string from parse_payload
+#
+# Side Effects:
+# - Calls send_notification, send_thread_replies, crosspost_notification
+# - Uses/sets RESPONSE and delivery globals
+#
+# Returns:
+# - 0 on success
+# - 1 on delivery failure
+run_send_from_input() {
+	local input_payload="$1"
+	local parsed_payload="$2"
+
+	echo "main:: sending notification"
+	if ! send_notification "$parsed_payload"; then
+		echo "main:: failed to send notification" >&2
+		return 1
+	fi
+
+	if [[ "${DELIVERY_METHOD:-api}" != "api" ]]; then
+		echo "main:: delivery method webhook does not support thread replies, skipping send_thread_replies" >&2
+		echo "main:: delivery method webhook does not support crosspost, skipping crosspost_notification" >&2
+		return 0
+	fi
+
+	if [[ -n "${EPHEMERAL_USER:-}" ]]; then
+		echo "main:: chat.postEphemeral does not support thread replies or crosspost, skipping send_thread_replies and crosspost_notification" >&2
+		return 0
+	fi
+
+	local primary_ts
+	primary_ts=$(_response_field "ts")
+
+	local reply_thread_ts
+	reply_thread_ts=$(jq -r '.thread_ts // empty' <<<"$parsed_payload")
+	if [[ -z "$reply_thread_ts" || "$reply_thread_ts" == "null" ]]; then
+		reply_thread_ts="${primary_ts:-}"
+	fi
+
+	if ! send_thread_replies "${input_payload}" "$reply_thread_ts" "$parsed_payload"; then
+		echo "main:: send_thread_replies encountered failures, continuing" >&2
+	fi
+
+	if ! crosspost_notification "${input_payload}"; then
+		echo "main:: failed to crosspost notification" >&2
+		return 1
+	fi
+
+	return 0
+}
+
 # Main entry point that processes stdin payload and sends to Slack
 #
 # Inputs:
@@ -610,59 +646,18 @@ main() {
 		return 1
 	fi
 
-	if [[ "$update_rc" -eq 0 ]]; then
-		:
-	elif [[ "$update_rc" -eq 2 ]]; then
-		echo "main:: sending notification"
-		if ! send_notification "$parsed_payload"; then
-			echo "main:: failed to send notification" >&2
+	if [[ "$update_rc" -eq 2 ]]; then
+		if ! run_send_from_input "${input_payload}" "${parsed_payload}"; then
 			return 1
 		fi
-
-		if [[ "${DELIVERY_METHOD:-api}" == "api" ]]; then
-			if [[ -n "${EPHEMERAL_USER:-}" ]]; then
-				echo "main:: chat.postEphemeral does not support thread replies or crosspost, skipping send_thread_replies and crosspost_notification" >&2
-			else
-				local primary_ts
-				if [[ -n "${RESPONSE:-}" ]] && jq . >/dev/null 2>&1 <<<"$RESPONSE"; then
-					primary_ts=$(echo "$RESPONSE" | jq -r '.ts // empty')
-				else
-					primary_ts=""
-				fi
-
-				local reply_thread_ts
-				reply_thread_ts=$(echo "$parsed_payload" | jq -r '.thread_ts // empty')
-				if [[ -z "$reply_thread_ts" || "$reply_thread_ts" == "null" ]]; then
-					reply_thread_ts="${primary_ts:-}"
-				fi
-
-				if ! send_thread_replies "${input_payload}" "$reply_thread_ts" "$parsed_payload"; then
-					echo "main:: send_thread_replies encountered failures, continuing" >&2
-				fi
-
-				if ! crosspost_notification "${input_payload}"; then
-					echo "main:: failed to crosspost notification" >&2
-					return 1
-				fi
-			fi
-		else
-			echo "main:: delivery method webhook does not support thread replies, skipping send_thread_replies" >&2
-			echo "main:: delivery method webhook does not support crosspost, skipping crosspost_notification" >&2
-		fi
-	else
+	elif [[ "$update_rc" -ne 0 ]]; then
 		echo "main:: unexpected run_chat_update_from_input exit code: ${update_rc}" >&2
 		return 1
 	fi
 
-	local meta_ts=""
-	local meta_ch=""
-	if [[ -n "${RESPONSE:-}" ]] && jq . >/dev/null 2>&1 <<<"$RESPONSE"; then
-		meta_ts=$(echo "$RESPONSE" | jq -r '.ts // empty')
-		meta_ch=$(echo "$RESPONSE" | jq -r '.channel // empty')
-	fi
-
-	[[ "$meta_ts" == "null" ]] && meta_ts=""
-	[[ "$meta_ch" == "null" ]] && meta_ch=""
+	local meta_ts meta_ch
+	meta_ts=$(_response_field "ts")
+	meta_ch=$(_response_field "channel")
 
 	echo "main:: creating Concourse metadata"
 	if ! create_metadata "$parsed_payload" "$meta_ts" "$meta_ch"; then
