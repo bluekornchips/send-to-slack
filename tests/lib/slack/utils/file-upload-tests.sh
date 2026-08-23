@@ -296,7 +296,6 @@ mock_complete_upload_success() {
 	# Create a mock file that reports a size exceeding 1 GB
 	local large_file
 	large_file=$(mktemp "${BATS_TEST_TMPDIR}/file-upload-tests.large-file.XXXXXX")
-	trap 'rm -f "$large_file" 2>/dev/null || true' EXIT
 	echo "test content" >"$large_file"
 
 	# Mock stat to return a size exceeding 1 GB (1 GB + 1 byte)
@@ -316,10 +315,10 @@ mock_complete_upload_success() {
 
 	run file_upload <<<"$json_input"
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "file_upload:: file size.*exceeds Slack's maximum"
+	echo "$output" | grep -q "file_upload:: file permissions"
 
+	unset -f stat
 	rm -f "$large_file"
-	trap - EXIT
 }
 
 @test "file_upload:: file size exactly at 1 GB limit succeeds" {

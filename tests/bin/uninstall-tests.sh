@@ -171,46 +171,30 @@ teardown() {
 }
 
 @test "uninstall.sh:: defaults to /usr/local/bin for root" {
-	if [[ "$(id -u)" -ne 0 ]]; then
-		skip "not running as root"
-	fi
-
-	local root_prefix="/usr/local/bin"
-	local root_target="${root_prefix}/${INSTALL_BASENAME_VALUE}"
-
-	# Install as root
-	run "$INSTALL_SCRIPT" --version local --prefix "$root_prefix"
+	run bash -c '
+		id() {
+			if [[ "${1:-}" == "-u" ]]; then
+				echo 0
+				return 0
+			fi
+			command id "$@"
+		}
+		export -f id
+		# shellcheck source=bin/uninstall.sh disable=SC1090,SC1091
+		source "'"$UNINSTALL_SCRIPT"'"
+		[[ "$DEFAULT_PREFIX" == "/usr/local/bin" ]]
+	'
 	[[ "$status" -eq 0 ]]
-
-	# Uninstall without --prefix should use default (/usr/local/bin)
-	run "$UNINSTALL_SCRIPT"
-	[[ "$status" -eq 0 ]]
-	[[ ! -f "$root_target" ]]
 }
 
 @test "uninstall.sh:: allows /usr/local/* prefix" {
-	local usr_local_prefix
-	local usr_local_parent
-	local usr_local_target
-
-	usr_local_prefix="/usr/local/bin"
-	usr_local_parent="/usr/local"
-	usr_local_target="${usr_local_prefix}/${INSTALL_BASENAME_VALUE}"
-
-	# install_from_source uses install_root under /usr/local for this prefix, so non-root
-	# needs write on /usr/local and on the bin directory. Writable bin alone is not enough.
-	if [[ "$(id -u)" -ne 0 ]]; then
-		if [[ ! -w "$usr_local_parent" ]] || [[ ! -w "$usr_local_prefix" ]]; then
-			skip "cannot write to ${usr_local_parent} and ${usr_local_prefix}"
-		fi
-	fi
-
-	# Install to /usr/local/bin
-	run "$INSTALL_SCRIPT" --version local --prefix "$usr_local_prefix"
+	run validate_prefix "/usr/local/bin"
 	[[ "$status" -eq 0 ]]
 
-	# Uninstall should work with /usr/local/* prefix
-	run "$UNINSTALL_SCRIPT" --prefix "$usr_local_prefix"
+	run validate_prefix "/usr/local/send-to-slack"
 	[[ "$status" -eq 0 ]]
-	[[ ! -f "$usr_local_target" ]]
+
+	run validate_prefix "/usr/bin"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "refusing system prefix"
 }
