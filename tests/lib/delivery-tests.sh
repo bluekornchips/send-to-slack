@@ -114,8 +114,7 @@ setup() {
 
 	run run_send_from_input "/tmp/input.json" '{"text":"hi"}'
 	[[ "$status" -eq 0 ]]
-	echo "$output" \
-		grep -q "chat.postEphemeral does not support thread replies or crosspost"
+	echo "$output" | grep -q "chat.postEphemeral does not support thread replies or crosspost"
 }
 
 @test "run_send_from_input:: continues when thread replies fail and fails on crosspost" {

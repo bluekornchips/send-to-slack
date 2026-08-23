@@ -145,7 +145,7 @@ teardown() {
 	echo "$output" | grep -q "timestamp"
 	echo "$output" | grep -q "main:: parsing payload"
 	echo "$output" | grep -q "main:: creating Concourse metadata"
-	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "delivery:: sending notification"
 	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
 
 	[[ -f "$ACCEPTANCE_TEST_FILE" ]] && rm -f "$ACCEPTANCE_TEST_FILE"
@@ -231,7 +231,7 @@ teardown() {
 	echo "$output" | grep -q "main:: parsing payload"
 	echo "$output" | grep -q "load_input_payload_params:: loading params from params.raw"
 	echo "$output" | grep -q "main:: creating Concourse metadata"
-	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "delivery:: sending notification"
 	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
 }
 
@@ -306,7 +306,7 @@ teardown() {
 	echo "$output" | grep -q "main:: parsing payload"
 	echo "$output" | grep -q "load_input_payload_params:: loading params from file"
 	echo "$output" | grep -q "main:: creating Concourse metadata"
-	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "delivery:: sending notification"
 	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
 
 	[[ -f "$ACCEPTANCE_PAYLOAD_FILE" ]] && rm -f "$ACCEPTANCE_PAYLOAD_FILE"
@@ -375,7 +375,7 @@ teardown() {
 	echo "$output" | grep -q "main:: parsing payload"
 	echo "$output" | grep -q "process_blocks:: expanded block from file"
 	echo "$output" | grep -q "main:: creating Concourse metadata"
-	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "delivery:: sending notification"
 	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
 }
 
@@ -441,7 +441,7 @@ teardown() {
 	echo "$output" | grep -q "timestamp"
 	echo "$output" | grep -q "main:: parsing payload"
 	echo "$output" | grep -q "main:: creating Concourse metadata"
-	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "delivery:: sending notification"
 	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
 }
 
@@ -494,7 +494,7 @@ teardown() {
 	echo "$output" | grep -q "timestamp"
 	echo "$output" | grep -q "main:: parsing payload"
 	echo "$output" | grep -q "main:: creating Concourse metadata"
-	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "delivery:: sending notification"
 	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
 
 	local send_count
@@ -585,7 +585,7 @@ teardown() {
 	echo "$output" | grep -q "timestamp"
 	echo "$output" | grep -q "main:: parsing payload"
 	echo "$output" | grep -q "main:: creating Concourse metadata"
-	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "delivery:: sending notification"
 
 	local parsed_payload_file
 	parsed_payload_file=$(mktemp "${BATS_TEST_TMPDIR}/acceptance-tests.parsed-payload.XXXXXX")
@@ -679,7 +679,7 @@ teardown() {
 	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "main:: parsing payload"
-	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "delivery:: sending notification"
 	echo "$output" | grep -q "send_thread_replies:: sending 2 thread reply(s)"
 	echo "$output" | grep -q "reply 1 of 2 sent"
 	echo "$output" | grep -q "reply 2 of 2 sent"
@@ -789,7 +789,7 @@ teardown() {
 	run "$SCRIPT" <"$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "main:: parsing payload"
-	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "delivery:: sending notification"
 	echo "$output" | grep -q "send_thread_replies:: sending 2 thread reply(s)"
 	echo "$output" | grep -q "reply 1 of 2 sent"
 	echo "$output" | grep -q "reply 2 of 2 sent"
@@ -845,7 +845,7 @@ teardown() {
 	echo "$output" | grep -q "timestamp"
 	echo "$output" | grep -q "main:: parsing payload"
 	echo "$output" | grep -q "main:: creating Concourse metadata"
-	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "delivery:: sending notification"
 	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
 
 	echo ""
@@ -903,7 +903,7 @@ teardown() {
 	echo "$output" | grep -q "timestamp"
 	echo "$output" | grep -q "main:: parsing payload"
 	echo "$output" | grep -q "main:: creating Concourse metadata"
-	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "delivery:: sending notification"
 	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
 
 	echo ""
@@ -961,7 +961,7 @@ teardown() {
 	echo "$output" | grep -q "timestamp"
 	echo "$output" | grep -q "main:: parsing payload"
 	echo "$output" | grep -q "main:: creating Concourse metadata"
-	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "delivery:: sending notification"
 	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
 
 	echo ""
@@ -1028,7 +1028,7 @@ teardown() {
 	echo "$output" | grep -q "main:: parsing payload"
 	echo "$output" | grep -q "load_configuration:: method=webhook"
 	echo "$output" | grep -q "main:: creating Concourse metadata"
-	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "delivery:: sending notification"
 	echo "$output" | grep -q "send_notification:: message delivered successfully via webhook"
 	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
 }
@@ -1200,9 +1200,9 @@ teardown() {
 	echo "$output" | grep -q "version"
 	echo "$output" | grep -q "timestamp"
 	echo "$output" | grep -q "main:: parsing payload"
-	echo "$output" | grep -q "main:: chat.postEphemeral does not support thread replies or crosspost, skipping send_thread_replies and crosspost_notification"
+	echo "$output" | grep -q "delivery:: chat.postEphemeral does not support thread replies or crosspost, skipping send_thread_replies and crosspost_notification"
 	echo "$output" | grep -q "main:: creating Concourse metadata"
-	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "delivery:: sending notification"
 	echo "$output" | grep -q "send_notification:: message delivered successfully via api"
 	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
 }
@@ -1254,7 +1254,7 @@ teardown() {
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "version"
 	echo "$output" | grep -q "main:: parsing payload"
-	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "delivery:: sending notification"
 	echo "$output" | grep -q "send_notification:: message delivered successfully via api"
 	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
 }
@@ -1310,7 +1310,7 @@ teardown() {
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "version"
 	echo "$output" | grep -q "main:: parsing payload"
-	echo "$output" | grep -q "main:: sending notification"
+	echo "$output" | grep -q "delivery:: sending notification"
 	echo "$output" | grep -q "send_notification:: message delivered successfully via api"
 	echo "$output" | grep -q "main:: finished running send-to-slack.sh successfully"
 }

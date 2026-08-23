@@ -239,10 +239,8 @@ create_block() {
 			"context")
 				echo "create_block:: See context block docs: $DOC_URL_BLOCK_KIT_CONTEXT" >&2
 				;;
-			"markdown")
-				;;
-			"rich-text")
-				;;
+			"markdown") ;;
+			"rich-text") ;;
 			"actions")
 				echo "create_block:: See actions block docs: $DOC_URL_BLOCK_KIT_ACTIONS" >&2
 				;;
