@@ -53,7 +53,7 @@ get_commit() {
 		return 1
 	fi
 
-	if [[ ! -d "${root_path}/.git" ]]; then
+	if [[ ! -e "${root_path}/.git" ]]; then
 		return 1
 	fi
 

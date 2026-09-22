@@ -131,9 +131,9 @@ teardown() {
 		local arg
 		for arg in "$@"; do
 			case "$arg" in
-				http*)
-					printf '%s\n' "$arg" >>"$url_capture"
-					;;
+			http*)
+				printf '%s\n' "$arg" >>"$url_capture"
+				;;
 			esac
 		done
 		printf '%s\n' '{"ok": true}'
@@ -167,9 +167,9 @@ teardown() {
 		local arg
 		for arg in "$@"; do
 			case "$arg" in
-				http*)
-					printf '%s\n' "$arg" >>"$url_capture"
-					;;
+			http*)
+				printf '%s\n' "$arg" >>"$url_capture"
+				;;
 			esac
 		done
 		printf '%s\n' '{"ok": true}'

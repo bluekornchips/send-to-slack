@@ -35,7 +35,7 @@ Defaults:
 - Needs `git`, or both `curl` and `tar`, after the install script is downloaded
 - Set `GITHUB_REPO=owner/repo` to install from a fork
 
-Other options: `--version <ref>` (default `main`; `local` only works from a checkout, not from `curl | bash`), `--force` (overwrite an unsigned shim).
+Other options: `--version <ref>` or `--version=<ref>` (default `main`; `local` only works from a checkout, not from `curl | bash`), `--force` (overwrite an unsigned shim).
 
 ```bash
 # Custom prefix, then PATH if needed

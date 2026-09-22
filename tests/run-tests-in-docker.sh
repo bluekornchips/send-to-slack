@@ -213,24 +213,24 @@ EOF
 parse_args() {
 	while [[ $# -gt 0 ]]; do
 		case "$1" in
-			-i | --image)
-				if [[ -z "${2:-}" ]]; then
-					echo "parse_args:: option $1 requires an argument" >&2
-					return 1
-				fi
-				DOCKER_IMAGE="$2"
-				shift 2
-				;;
-			-m | --make)
-				if [[ -z "${2:-}" ]]; then
-					echo "parse_args:: option $1 requires an argument" >&2
-					return 1
-				fi
-				MAKE_COMMAND="$2"
-				shift 2
-				;;
-			-h | --help)
-				cat <<EOF >&2
+		-i | --image)
+			if [[ -z "${2:-}" ]]; then
+				echo "parse_args:: option $1 requires an argument" >&2
+				return 1
+			fi
+			DOCKER_IMAGE="$2"
+			shift 2
+			;;
+		-m | --make)
+			if [[ -z "${2:-}" ]]; then
+				echo "parse_args:: option $1 requires an argument" >&2
+				return 1
+			fi
+			MAKE_COMMAND="$2"
+			shift 2
+			;;
+		-h | --help)
+			cat <<EOF >&2
 usage: $0 [OPTIONS]
 
 Run tests in a Docker container by mounting the repo.
@@ -266,12 +266,12 @@ EXAMPLES:
   # Use environment variable
   DOCKER_IMAGE=c56903e46f90 $0
 EOF
-				return 2
-				;;
-			*)
-				echo "parse_args:: unknown option: $1" >&2
-				return 1
-				;;
+			return 2
+			;;
+		*)
+			echo "parse_args:: unknown option: $1" >&2
+			return 1
+			;;
 		esac
 	done
 

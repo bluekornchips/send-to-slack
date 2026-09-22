@@ -53,8 +53,8 @@ send_notification() {
 		return 1
 	fi
 
-	if [[ "$DELIVERY_METHOD" == "api" ]] \
-		&& [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN:-}" ]]; then
+	if [[ "$DELIVERY_METHOD" == "api" ]] &&
+		[[ -z "${SLACK_BOT_USER_OAUTH_TOKEN:-}" ]]; then
 		echo "send_notification:: SLACK_BOT_USER_OAUTH_TOKEN is required for API" \
 			"delivery" >&2
 		return 1

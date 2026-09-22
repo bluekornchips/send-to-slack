@@ -36,8 +36,8 @@ send_thread_replies() {
 	fi
 
 	local thread_replies
-	if ! thread_replies=$(echo "$parsed_payload" \
-		| jq '.thread_replies // empty'); then
+	if ! thread_replies=$(echo "$parsed_payload" |
+		jq '.thread_replies // empty'); then
 		return 1
 	fi
 
@@ -56,8 +56,8 @@ send_thread_replies() {
 		return 0
 	fi
 
-	if [[ -z "$input_payload_file" ]] || [[ ! -f "$input_payload_file" ]] \
-		|| [[ ! -r "$input_payload_file" ]]; then
+	if [[ -z "$input_payload_file" ]] || [[ ! -f "$input_payload_file" ]] ||
+		[[ ! -r "$input_payload_file" ]]; then
 		echo "send_thread_replies:: input_payload_file is missing or not readable: ${input_payload_file:-empty}" >&2
 		return 1
 	fi

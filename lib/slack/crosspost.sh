@@ -72,9 +72,9 @@ crosspost_notification() {
 		return 0
 	fi
 
-	if [[ -z "${_SLACK_WORKSPACE:-}" ]] \
-		|| [[ ! -d "${_SLACK_WORKSPACE}" ]] \
-		|| [[ ! -w "${_SLACK_WORKSPACE}" ]]; then
+	if [[ -z "${_SLACK_WORKSPACE:-}" ]] ||
+		[[ ! -d "${_SLACK_WORKSPACE}" ]] ||
+		[[ ! -w "${_SLACK_WORKSPACE}" ]]; then
 		return 1
 	fi
 
@@ -97,8 +97,8 @@ crosspost_notification() {
 	local original_permalink="$NOTIFICATION_PERMALINK"
 
 	# By default, append a permalink block unless no_link is true
-	if [[ "$no_link" != "true" ]] \
-		&& [[ "${DELIVERY_METHOD:-api}" != "webhook" ]]; then
+	if [[ "$no_link" != "true" ]] &&
+		[[ "${DELIVERY_METHOD:-api}" != "webhook" ]]; then
 		# Add a context block with the permalink at the end of blocks
 		local permalink_block
 		permalink_block=$(jq -n \
@@ -107,8 +107,8 @@ crosspost_notification() {
 		')
 		crosspost_params=$(echo "$crosspost_params" | jq --argjson link \
 			"$permalink_block" '.blocks = (.blocks // []) + [$link]')
-	elif [[ "$no_link" != "true" ]] \
-		&& [[ "${DELIVERY_METHOD:-api}" == "webhook" ]]; then
+	elif [[ "$no_link" != "true" ]] &&
+		[[ "${DELIVERY_METHOD:-api}" == "webhook" ]]; then
 		echo "crosspost_notification:: webhook delivery does not support" \
 			"permalink, skipping automatic link block" >&2
 	fi

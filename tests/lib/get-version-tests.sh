@@ -78,3 +78,32 @@ setup() {
 
 	rm -rf "$fixture_root"
 }
+
+@test "get_commit:: returns short hash from a linked worktree" {
+	if ! command -v "git" >/dev/null 2>&1; then
+		skip "git not available"
+	fi
+
+	local worktree_dir
+	local expected_commit
+
+	worktree_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/get-commit-worktree.XXXXXX")
+	git -C "$GIT_ROOT" worktree add "$worktree_dir" HEAD
+	expected_commit=$(git -C "$worktree_dir" rev-parse --short HEAD)
+
+	run get_commit "$worktree_dir"
+	[[ "$status" -eq 0 ]]
+	[[ "$output" == "$expected_commit" ]]
+
+	git -C "$GIT_ROOT" worktree remove --force "$worktree_dir"
+}
+
+@test "get_commit:: fails for a non-git directory" {
+	local fixture_root
+	fixture_root=$(mktemp -d "${BATS_TEST_TMPDIR}/get-commit-plain.XXXXXX")
+
+	run get_commit "$fixture_root"
+	[[ "$status" -eq 1 ]]
+
+	rm -rf "$fixture_root"
+}

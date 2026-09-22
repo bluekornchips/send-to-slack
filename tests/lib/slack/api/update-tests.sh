@@ -54,9 +54,9 @@ teardown() {
 		local arg
 		for arg in "$@"; do
 			case "$arg" in
-				http*)
-					printf '%s\n' "$arg" >>"$url_capture"
-					;;
+			http*)
+				printf '%s\n' "$arg" >>"$url_capture"
+				;;
 			esac
 		done
 		printf '%s\n' '{"ok": true, "channel": "C1", "ts": "2"}'
@@ -126,9 +126,9 @@ teardown() {
 		local arg
 		for arg in "$@"; do
 			case "$arg" in
-				http*)
-					printf '%s\n' "$arg" >>"$url_capture"
-					;;
+			http*)
+				printf '%s\n' "$arg" >>"$url_capture"
+				;;
 			esac
 		done
 		if [[ "$*" == *"chat.getPermalink"* ]]; then

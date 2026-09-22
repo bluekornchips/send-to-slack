@@ -73,8 +73,8 @@ _slack_api_post() {
 
 	if ! echo "$SLACK_LAST_RESPONSE" | jq -e '.ok == true' >/dev/null 2>&1; then
 		local error_code
-		error_code=$(echo "$SLACK_LAST_RESPONSE" \
-			| jq -r '.error // "unknown"' 2>/dev/null)
+		error_code=$(echo "$SLACK_LAST_RESPONSE" |
+			jq -r '.error // "unknown"' 2>/dev/null)
 		# shellcheck source=lib/slack/api/errors.sh
 		if _is_error_in_list "$error_code" "${ERROR_CODES_TRUE_FAILURES[@]}"; then
 			# shellcheck source=lib/slack/api/errors.sh
@@ -241,13 +241,13 @@ _finalize_slack_delivery() {
 	local channel=""
 	local message_ts=""
 
-	if [[ "$fetch_permalink" == "true" ]] && [[ -n "$response" ]] \
-		&& jq . >/dev/null 2>&1 <<<"$response"; then
+	if [[ "$fetch_permalink" == "true" ]] && [[ -n "$response" ]] &&
+		jq . >/dev/null 2>&1 <<<"$response"; then
 		channel=$(echo "${response}" | jq -r '.channel // empty')
 		message_ts=$(echo "${response}" | jq -r '.ts // empty')
-		if [[ -n "$channel" ]] && [[ -n "$message_ts" ]] \
-			&& [[ "$channel" != "null" ]] \
-			&& [[ "$message_ts" != "null" ]]; then
+		if [[ -n "$channel" ]] && [[ -n "$message_ts" ]] &&
+			[[ "$channel" != "null" ]] &&
+			[[ "$message_ts" != "null" ]]; then
 			# shellcheck source=lib/slack/api/permalink.sh
 			get_message_permalink "${channel}" "${message_ts}"
 		fi
@@ -261,8 +261,8 @@ _finalize_slack_delivery() {
 		block_count=$(echo "$payload_for_log" | jq '.blocks | length // 0' \
 			2>/dev/null || echo "0")
 		sanitized_payload=$(
-			echo "$payload_for_log" \
-				| jq 'del(.thread_ts) | .blocks |= (if type == "array" then [.[] | {type: .type}] else . end)' \
+			echo "$payload_for_log" |
+				jq 'del(.thread_ts) | .blocks |= (if type == "array" then [.[] | {type: .type}] else . end)' \
 					2>/dev/null || echo "$payload_for_log" | jq . 2>/dev/null
 		)
 		cat <<EOF >&2

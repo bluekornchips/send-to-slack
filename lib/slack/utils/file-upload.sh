@@ -277,8 +277,8 @@ EOF
 	fi
 
 	# Verify file size matches what we uploaded
-	if [[ "$file_size" != "unknown" && "$file_size" != "null" ]] \
-		&& [[ "$file_size" != "$FILE_SIZE" ]]; then
+	if [[ "$file_size" != "unknown" && "$file_size" != "null" ]] &&
+		[[ "$file_size" != "$FILE_SIZE" ]]; then
 		echo "_complete_upload:: WARNING: file size mismatch (uploaded: $FILE_SIZE," \
 			"API reports: $file_size)" >&2
 	fi

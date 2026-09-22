@@ -169,8 +169,8 @@ _resolve_from_file_path() {
 	local leading
 	leading="${raw_path%%[![:space:]]*}"
 	raw_path="${raw_path#"$leading"}"
-	if [[ -z "$raw_path" ]] || [[ "$raw_path" == "." ]] \
-		|| [[ "$raw_path" == ".." ]]; then
+	if [[ -z "$raw_path" ]] || [[ "$raw_path" == "." ]] ||
+		[[ "$raw_path" == ".." ]]; then
 		echo "parse_payload:: params.from_file is empty or invalid: ${raw_path:-empty}" >&2
 		return 1
 	fi
@@ -181,12 +181,12 @@ _resolve_from_file_path() {
 		for base in "${SEND_TO_SLACK_PAYLOAD_BASE_DIR:-}" "$PWD"; do
 			[[ -z "$base" ]] || [[ ! -d "$base" ]] && continue
 			candidate="${base}/${raw_path}"
-			[[ -f "$candidate" ]] && [[ -r "$candidate" ]] \
-				&& echo "$candidate" && return 0
+			[[ -f "$candidate" ]] && [[ -r "$candidate" ]] &&
+				echo "$candidate" && return 0
 			[[ -d "$candidate" ]] && echo \
 				"parse_payload:: params.from_file path is a directory:" \
-				" ${candidate}" >&2 \
-				&& return 1
+				" ${candidate}" >&2 &&
+				return 1
 		done
 		echo "parse_payload:: payload from file not found: ${raw_path}" >&2
 		return 1
@@ -194,8 +194,8 @@ _resolve_from_file_path() {
 
 	[[ -f "$candidate" ]] && [[ -r "$candidate" ]] && echo "$candidate" && return 0
 	[[ -d "$candidate" ]] && echo \
-		"parse_payload:: params.from_file path is a directory: ${candidate}" >&2 \
-		&& return 1
+		"parse_payload:: params.from_file path is a directory: ${candidate}" >&2 &&
+		return 1
 	echo "parse_payload:: payload from file not found: ${raw_path}" >&2
 
 	return 1

@@ -4,9 +4,9 @@
 #
 
 # Detect if script is being piped (BASH_SOURCE[0] will be /dev/stdin or similar)
-if [[ "${BASH_SOURCE[0]}" == "/dev/stdin" ]] \
-	|| [[ "${BASH_SOURCE[0]}" == "-" ]] \
-	|| [[ ! -f "${BASH_SOURCE[0]}" ]]; then
+if [[ "${BASH_SOURCE[0]}" == "/dev/stdin" ]] ||
+	[[ "${BASH_SOURCE[0]}" == "-" ]] ||
+	[[ ! -f "${BASH_SOURCE[0]}" ]]; then
 	SCRIPT_DIR=""
 	IS_PIPED=1
 else
@@ -55,10 +55,11 @@ Usage: $(basename "$0") [--prefix <dir>] [--force] [--version <tag>|local]
 [--help]
 
 Options:
---prefix <dir> Target directory for installation (default: ${DEFAULT_PREFIX})
+--prefix <dir> Target directory for installation (default: ${DEFAULT_PREFIX}).
+Also accepts --prefix=<dir>.
   --force          Overwrite existing file even if unsigned
 --version <tag> Install from specific branch/tag (default: main). Use "local" to
-install from the current repo.
+install from the current repo. Also accepts --version=<tag>.
   -h, --help       Show this help message
 
 Behavior:
@@ -131,11 +132,11 @@ ensure_prefix() {
 	fi
 
 	case "$prefix" in
-		/usr/local/*) ;;
-		/usr/* | /etc/*)
-			echo "ensure_prefix:: refusing system prefix: $prefix" >&2
-			return 1
-			;;
+	/usr/local/*) ;;
+	/usr/* | /etc/*)
+		echo "ensure_prefix:: refusing system prefix: $prefix" >&2
+		return 1
+		;;
 	esac
 
 	if [[ ! -d "$prefix" ]]; then
@@ -182,8 +183,8 @@ file_has_signature() {
 _resolve_install_root() {
 	local normalized_prefix="$1"
 
-	if [[ "$(id -u)" -eq 0 ]] || [[ "$normalized_prefix" == /usr/local/* ]] \
-		|| [[ "$normalized_prefix" == /usr/* ]]; then
+	if [[ "$(id -u)" -eq 0 ]] || [[ "$normalized_prefix" == /usr/local/* ]] ||
+		[[ "$normalized_prefix" == /usr/* ]]; then
 		echo "/usr/local/send-to-slack"
 	else
 		echo "${HOME}/.local/share/send-to-slack"
@@ -318,8 +319,8 @@ _install_lib_rel_paths() {
 	find "${root_dir}/lib" \
 		-mindepth 1 \
 		-type f \
-		-name '*.sh' \
-		| LC_ALL=C sort | while IFS= read -r abs; do
+		-name '*.sh' |
+		LC_ALL=C sort | while IFS= read -r abs; do
 		printf '%s\n' "${abs#"${root_dir}/"}"
 	done
 }
@@ -431,12 +432,12 @@ install_from_source() {
 	return 0
 }
 
-# Verify installation by checking if command is available
+# Verify the prefix contains an executable install shim
 #
 # Inputs:
 # - $1 - prefix
 # Returns:
-# - 0 if command is found, 1 if not found
+# - 0 if ${prefix}/send-to-slack is executable, 1 otherwise
 verify_installation() {
 	local prefix="$1"
 	local normalized_prefix
@@ -448,10 +449,7 @@ verify_installation() {
 
 	target_path="${normalized_prefix}/${INSTALL_BASENAME}"
 
-	# Check if the installed binary exists and is executable, or if command is
-	# available in a subshell
-	if [[ -x "$target_path" ]] \
-		|| (command -v "$INSTALL_BASENAME" >/dev/null 2>&1); then
+	if [[ -f "$target_path" && -x "$target_path" ]]; then
 		return 0
 	fi
 
@@ -498,10 +496,10 @@ print_install_info() {
 		return 0
 	fi
 
-	if command -v "git" >/dev/null 2>&1 && [[ -d "${source_dir}/.git" ]]; then
+	# Linked worktrees use a .git file, not a directory
+	if command -v "git" >/dev/null 2>&1 && [[ -e "${source_dir}/.git" ]]; then
 		commit=$(git -C "$source_dir" rev-parse HEAD 2>/dev/null || echo "unknown")
-		describe=$(git -C "$source_dir" describe --tags --always \
-			echo "$git_ref" 2>/dev/null)
+		describe=$(git -C "$source_dir" describe --tags --always 2>/dev/null || echo "$git_ref")
 	else
 		commit="unknown"
 		describe="$git_ref"
@@ -560,21 +558,16 @@ clone_repository() {
 	# Try cloning with the ref as branch/tag
 	if ! clone_output=$(git clone --depth 1 --branch "$ref" "$REPO_URL" \
 		"$temp_clone_dir" 2>&1); then
-		# Destination may already exist after a failed clone; recreate before retry.
+		# A failed clone can leave partial contents behind, and git init recreates
+		# the directory. A shallow clone only resolves branch and tag names, so
+		# fetch the ref directly to also cover commit SHAs.
 		rm -rf "$temp_clone_dir"
-		temp_clone_dir=$(mktemp -d "${output_dir}/send-to-slack.XXXXXX") || {
-			echo "clone_repository:: mktemp failed under ${output_dir}" >&2
-			return 1
-		}
-
-		if ! clone_output=$(git clone --depth 1 "$REPO_URL" \
-			"$temp_clone_dir" 2>&1); then
-			echo "clone_repository:: failed to clone repository: $clone_output" >&2
-			rm -rf "$temp_clone_dir"
-			return 1
-		fi
-		if ! clone_output=$(git -C "$temp_clone_dir" checkout "$ref" 2>&1); then
-			echo "clone_repository:: failed to checkout ref $ref: $clone_output" >&2
+		if ! clone_output=$(
+			git init -q "$temp_clone_dir" 2>&1 &&
+				git -C "$temp_clone_dir" fetch --depth 1 "$REPO_URL" "$ref" 2>&1 &&
+				git -C "$temp_clone_dir" checkout --detach FETCH_HEAD 2>&1
+		); then
+			echo "clone_repository:: failed to fetch ref $ref: $clone_output" >&2
 			rm -rf "$temp_clone_dir"
 			return 1
 		fi
@@ -589,23 +582,19 @@ clone_repository() {
 #
 # Inputs:
 # - $1 - git reference, branch/tag
+# - $2 - ref type, heads or tags. Defaults to heads
 # Outputs:
 # - Sets ARTIFACT_URL and ARTIFACT_EXT global variables
 # Returns:
 # - 0 on success, 1 on failure
 build_source_archive_url() {
 	local ref="$1"
+	local ref_type="${2:-heads}"
 	local base_url
-	local ref_type="heads"
 
 	if [[ -z "$ref" ]]; then
 		echo "build_source_archive_url:: ref is empty" >&2
 		return 1
-	fi
-
-	# If ref looks like a tag (starts with v), use tags instead of heads
-	if [[ "$ref" =~ ^v[0-9] ]]; then
-		ref_type="tags"
 	fi
 
 	# Build URL for tar.gz format
@@ -675,51 +664,55 @@ main() {
 	local prefix
 	local force
 	local version
-	local artifact_url
-	local artifact_ext
 	local archive_path
 	local extract_dir
 	local source_dir
 	local cand
+	local ref_type
 
 	prefix="$DEFAULT_PREFIX"
 	force=0
 	version=""
-	artifact_url=""
-	artifact_ext=""
 
 	while [[ $# -gt 0 ]]; do
 		case "$1" in
-			--prefix)
-				shift
-				if [[ -z "${1:-}" ]]; then
-					echo "main:: --prefix requires a value" >&2
-					return 1
-				fi
-				prefix="$1"
-				;;
-			--prefix=*)
-				prefix="${1#*=}"
-				;;
-			--force)
-				force=1
-				;;
-			--version)
-				shift
-				if [[ -z "${1:-}" ]]; then
-					echo "main:: --version requires a value" >&2
-					return 1
-				fi
-				version="$1"
-				;;
-			-h | --help)
-				usage
-				return 0
-				;;
-			*)
-				echo "main:: unknown option: $1" >&2
+		--prefix)
+			shift
+			if [[ -z "${1:-}" ]]; then
+				echo "main:: --prefix requires a value" >&2
 				return 1
-				;;
+			fi
+			prefix="$1"
+			;;
+		--prefix=*)
+			prefix="${1#*=}"
+			;;
+		--force)
+			force=1
+			;;
+		--version)
+			shift
+			if [[ -z "${1:-}" ]]; then
+				echo "main:: --version requires a value" >&2
+				return 1
+			fi
+			version="$1"
+			;;
+		--version=*)
+			version="${1#*=}"
+			if [[ -z "$version" ]]; then
+				echo "main:: --version requires a value" >&2
+				return 1
+			fi
+			;;
+		-h | --help)
+			usage
+			return 0
+			;;
+		*)
+			echo "main:: unknown option: $1" >&2
+			return 1
+			;;
 		esac
 		shift
 	done
@@ -789,13 +782,27 @@ main() {
 		fi
 	fi
 
-	# Fallback to archive download
-	build_source_archive_url "$git_ref"
-	artifact_url="$ARTIFACT_URL"
-	artifact_ext="$ARTIFACT_EXT"
-	archive_path="${_INSTALL_TMPDIR}/source${artifact_ext}"
+	# Fallback to archive download. The archive path needs curl and tar even when
+	# check_dependencies passed on git alone.
+	if ! command -v "curl" >/dev/null 2>&1 ||
+		! command -v "tar" >/dev/null 2>&1; then
+		echo "main:: archive download needs 'curl' and 'tar'" >&2
+		return 1
+	fi
 
-	if ! download_file "$artifact_url" "$archive_path"; then
+	# GitHub serves branches and tags from different archive paths
+	archive_path=""
+	for ref_type in heads tags; do
+		if ! build_source_archive_url "$git_ref" "$ref_type"; then
+			return 1
+		fi
+		if download_file "$ARTIFACT_URL" "${_INSTALL_TMPDIR}/source${ARTIFACT_EXT}"; then
+			archive_path="${_INSTALL_TMPDIR}/source${ARTIFACT_EXT}"
+			break
+		fi
+	done
+
+	if [[ -z "$archive_path" ]]; then
 		echo "main:: failed to download source archive" >&2
 		return 1
 	fi

@@ -45,41 +45,41 @@ parse_main_args() {
 
 	while [[ $# -gt 0 ]]; do
 		case "$1" in
-			-v | --version)
-				if [[ -z "$root_dir" ]]; then
-					echo "parse_main_args:: root directory is required for --version" >&2
-					return 1
-				fi
-				# shellcheck source=lib/get-version.sh
-				print_version "$root_dir"
-				return 2
-				;;
-			-h | --help)
-				usage
-				return 2
-				;;
-			--health-check)
-				health_check_mode=true
-				shift
-				;;
-			-f | -file | --file)
-				if [[ -n "${SEND_TO_SLACK_CLI_INPUT_FILE}" ]]; then
-					echo "parse_main_args:: -f|-file|--file option can only be specified" \
-						"once" >&2
-					return 1
-				fi
-				if [[ $# -lt 2 ]]; then
-					echo "parse_main_args:: -f|-file|--file requires a file path argument" >&2
-					return 1
-				fi
-				SEND_TO_SLACK_CLI_INPUT_FILE="$2"
-				shift 2
-				;;
-			*)
-				echo "parse_main_args:: unknown option: ${1}" >&2
-				echo "parse_main_args:: use -h for usage" >&2
+		-v | --version)
+			if [[ -z "$root_dir" ]]; then
+				echo "parse_main_args:: root directory is required for --version" >&2
 				return 1
-				;;
+			fi
+			# shellcheck source=lib/get-version.sh
+			print_version "$root_dir"
+			return 2
+			;;
+		-h | --help)
+			usage
+			return 2
+			;;
+		--health-check)
+			health_check_mode=true
+			shift
+			;;
+		-f | -file | --file)
+			if [[ -n "${SEND_TO_SLACK_CLI_INPUT_FILE}" ]]; then
+				echo "parse_main_args:: -f|-file|--file option can only be specified" \
+					"once" >&2
+				return 1
+			fi
+			if [[ $# -lt 2 ]]; then
+				echo "parse_main_args:: -f|-file|--file requires a file path argument" >&2
+				return 1
+			fi
+			SEND_TO_SLACK_CLI_INPUT_FILE="$2"
+			shift 2
+			;;
+		*)
+			echo "parse_main_args:: unknown option: ${1}" >&2
+			echo "parse_main_args:: use -h for usage" >&2
+			return 1
+			;;
 		esac
 	done
 

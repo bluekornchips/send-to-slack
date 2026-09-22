@@ -252,8 +252,8 @@ create_section() {
 		has_text=true
 	fi
 
-	if [[ -n "$fields" ]] && [[ "$fields" != "null" ]] \
-		&& [[ "$fields" != "[]" ]]; then
+	if [[ -n "$fields" ]] && [[ "$fields" != "null" ]] &&
+		[[ "$fields" != "[]" ]]; then
 		if ! block=$(create_fields_section "$fields"); then
 			return 1
 		fi

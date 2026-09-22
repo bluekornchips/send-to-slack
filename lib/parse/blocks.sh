@@ -342,8 +342,8 @@ process_blocks() {
 					return 1
 				fi
 				local loaded_content
-				loaded_content=$(_load_block_item_from_file "$block_from_file_path") \
-					|| return 1
+				loaded_content=$(_load_block_item_from_file "$block_from_file_path") ||
+					return 1
 				echo "process_blocks:: expanded block from file: ${block_from_file_path}" >&2
 				if echo "$loaded_content" | jq -e 'type == "array"' >/dev/null 2>&1; then
 					local nested_items
@@ -431,10 +431,10 @@ _resolve_block_color() {
 	fi
 
 	case "$block_color" in
-		"danger") echo "$DANGER_COLOR" ;;
-		"success") echo "$SUCCESS_COLOR" ;;
-		"warning") echo "$WARN_COLOR" ;;
-		*) echo "$DANGER_COLOR" ;;
+	"danger") echo "$DANGER_COLOR" ;;
+	"success") echo "$SUCCESS_COLOR" ;;
+	"warning") echo "$WARN_COLOR" ;;
+	*) echo "$DANGER_COLOR" ;;
 	esac
 
 	return 0
@@ -571,8 +571,8 @@ _process_blocks_append_block() {
 		return 1
 	fi
 
-	if [[ "$block_type" == "file" ]] \
-		&& [[ "${DELIVERY_METHOD:-api}" == "webhook" ]]; then
+	if [[ "$block_type" == "file" ]] &&
+		[[ "${DELIVERY_METHOD:-api}" == "webhook" ]]; then
 		echo "_process_blocks_append_block:: file uploads are not supported for webhook delivery" >&2
 		_cleanup_process_blocks_append_tmp_files "$create_block_out" "$merge_tmp"
 		return 1
@@ -612,8 +612,8 @@ _process_blocks_append_block() {
 	fi
 
 	if [[ -n "$block_color" ]] || [[ "$block_type" == "table" ]]; then
-		if [[ -n "$block_color" ]] \
-			&& [[ ! "$block_color" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
+		if [[ -n "$block_color" ]] &&
+			[[ ! "$block_color" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
 			block_color=$(_resolve_block_color "$block_color")
 		fi
 		if ! jq --slurpfile block "$CREATE_BLOCK_OUTPUT_FILE" \

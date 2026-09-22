@@ -231,8 +231,8 @@ create_video() {
 	title_json=$(jq '.title' <<<"$input")
 
 	local title_url
-	title_url=$(_video_optional_string "$input" '.title_url' 'title_url') \
-		|| return 1
+	title_url=$(_video_optional_string "$input" '.title_url' 'title_url') ||
+		return 1
 
 	local description_json
 	description_json=$(_video_optional_description "$input") || return 1

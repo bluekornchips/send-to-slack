@@ -24,11 +24,16 @@ setup_file() {
 	INSTALL_BASENAME_VALUE="$INSTALL_BASENAME"
 
 	# Export functions so they're available in test subshells
-	export -f _install_lib_rel_paths install_from_source normalize_prefix file_has_signature extract_archive build_source_archive_url clone_repository verify_installation print_install_info _resolve_install_root _assemble_install_staging _validate_install_tree
+	export -f _install_lib_rel_paths install_from_source normalize_prefix \
+		file_has_signature extract_archive build_source_archive_url \
+		clone_repository verify_installation print_install_info \
+		_resolve_install_root _assemble_install_staging _validate_install_tree
 
 	export GIT_ROOT
 	export INSTALL_SCRIPT
+	export INSTALL_SIGNATURE
 	export INSTALL_SIGNATURE_VALUE
+	export INSTALL_BASENAME
 	export INSTALL_BASENAME_VALUE
 	export TEST_HOME
 
@@ -130,6 +135,22 @@ teardown() {
 	actual_install_root=$(dirname "$symlink_target")
 	rm -rf "${actual_install_root}"
 	rm -rf "$container_prefix"
+}
+
+@test "install.sh:: accepts --version equals form, local" {
+	local symlink_target
+	local actual_install_root
+
+	run "$INSTALL_SCRIPT" --version=local --prefix="$PREFIX_DIR"
+	[[ "$status" -eq 0 ]]
+
+	[[ -L "$TARGET_PATH" ]]
+	[[ -x "$TARGET_PATH" ]]
+	grep -Fq "$INSTALL_SIGNATURE_VALUE" "$TARGET_PATH"
+
+	symlink_target=$(readlink "$TARGET_PATH")
+	actual_install_root=$(dirname "$symlink_target")
+	rm -rf "${actual_install_root}"
 }
 
 @test "install.sh:: accepts --prefix equals form, local" {
@@ -322,8 +343,16 @@ _run_check_dependencies_isolated() {
 
 @test "install.sh:: build_source_archive_url creates gzip URL" {
 	build_source_archive_url "main"
-	[[ "$ARTIFACT_URL" == *".tar.gz" ]]
+	[[ "$ARTIFACT_URL" == *"/refs/heads/main.tar.gz" ]]
 	[[ "$ARTIFACT_EXT" == ".tar.gz" ]]
+}
+
+@test "build_source_archive_url:: builds tag URLs when ref type is tags" {
+	build_source_archive_url "v1.2.3" "tags"
+	[[ "$ARTIFACT_URL" == *"/refs/tags/v1.2.3.tar.gz" ]]
+
+	build_source_archive_url "v2-foo" "heads"
+	[[ "$ARTIFACT_URL" == *"/refs/heads/v2-foo.tar.gz" ]]
 }
 
 # Build a local git fixture with the paths clone_repository success checks expect.
@@ -371,6 +400,35 @@ _make_clone_fixture() {
 	rm -rf "$fixture_dir" "$temp_dir"
 }
 
+@test "install.sh:: clone_repository fetches commit SHA when --branch fails" {
+	if ! command -v "git" >/dev/null 2>&1; then
+		skip "git not available"
+	fi
+
+	local fixture_dir
+	local temp_dir
+	local commit
+
+	fixture_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/clone-fixture.XXXXXX")
+	temp_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/clone-test.XXXXXX")
+	_make_clone_fixture "$fixture_dir"
+	commit=$(git -C "$fixture_dir" rev-parse HEAD)
+
+	REPO_URL="$fixture_dir"
+
+	if ! clone_repository "$commit" "$temp_dir"; then
+		echo "clone_repository failed for commit SHA fixture" >&2
+		return 1
+	fi
+	[[ -n "$CLONE_DIR" ]]
+	[[ -d "$CLONE_DIR" ]]
+	[[ -f "${CLONE_DIR}/bin/send-to-slack.sh" ]]
+	[[ "$(git -C "$CLONE_DIR" rev-parse HEAD)" == "$commit" ]]
+
+	REPO_URL="https://github.com/${GITHUB_REPO}.git"
+	rm -rf "$fixture_dir" "$temp_dir"
+}
+
 @test "install.sh:: clone_repository fails with invalid ref" {
 	if ! command -v "git" >/dev/null 2>&1; then
 		skip "git not available"
@@ -409,31 +467,34 @@ _make_clone_fixture() {
 	run verify_installation "$temp_prefix"
 	[[ "$status" -eq 0 ]]
 
-	# Clean up PATH
-	local new_path
-	new_path=$(echo "$PATH" | tr ':' '\n' | grep -v "^${temp_prefix}$" | tr '\n' ':')
-	export PATH="$new_path"
+	# Restore PATH without the temp prefix
+	PATH="${PATH#"${temp_prefix}":}"
+	export PATH
 	rm -rf "$temp_prefix"
 }
 
 @test "install.sh:: verify_installation fails when binary missing" {
 	local temp_prefix
 	local temp_binary
+	local fake_bin
 
 	temp_prefix=$(mktemp -d "${BATS_TEST_TMPDIR}/verify-test.XXXXXX")
 	temp_binary="${temp_prefix}/${INSTALL_BASENAME_VALUE}"
+	fake_bin=$(mktemp -d "${BATS_TEST_TMPDIR}/verify-path.XXXXXX")
 
-	# Ensure the binary doesn't exist
 	[[ ! -f "$temp_binary" ]]
 
-	# Use a prefix that's definitely not in PATH
-	# The function should check the specific path first, which won't exist
+	printf '#!/bin/sh\nexit 0\n' >"${fake_bin}/${INSTALL_BASENAME_VALUE}"
+	chmod +x "${fake_bin}/${INSTALL_BASENAME_VALUE}"
+	export PATH="${fake_bin}:${PATH}"
+
 	run verify_installation "$temp_prefix"
-	# This might pass if send-to-slack is installed elsewhere via command -v
-	# But we can at least verify the path check works by ensuring the file doesn't exist
+	[[ "$status" -eq 1 ]]
 	[[ ! -f "$temp_binary" ]]
 
-	rm -rf "$temp_prefix"
+	PATH="${PATH#"${fake_bin}":}"
+	export PATH
+	rm -rf "$temp_prefix" "$fake_bin"
 }
 
 # print_install_info
@@ -448,16 +509,18 @@ _make_clone_fixture() {
 	fi
 
 	local worktree_dir
+	local expected_commit
 	worktree_dir=$(mktemp -d "${BATS_TEST_TMPDIR}/print-info-worktree.XXXXXX")
 
 	git -C "$GIT_ROOT" worktree add "$worktree_dir" HEAD
+	expected_commit=$(git -C "$worktree_dir" rev-parse HEAD)
 
 	run print_install_info "$worktree_dir" "main"
 	[[ "$status" -eq 0 ]]
 
 	echo "$output" | grep -q "install:: ref:     main"
 	echo "$output" | grep -q "install:: version:"
-	echo "$output" | grep -q "install:: commit:"
+	echo "$output" | grep -q "install:: commit:  ${expected_commit}"
 
 	git -C "$GIT_ROOT" worktree remove --force "$worktree_dir"
 }
