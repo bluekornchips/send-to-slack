@@ -4,9 +4,9 @@
 #
 
 # Detect if script is being piped (BASH_SOURCE[0] will be /dev/stdin or similar)
-if [[ "${BASH_SOURCE[0]}" == "/dev/stdin" ]] ||
-	[[ "${BASH_SOURCE[0]}" == "-" ]] ||
-	[[ ! -f "${BASH_SOURCE[0]}" ]]; then
+if [[ "${BASH_SOURCE[0]}" == "/dev/stdin" ]] \
+	|| [[ "${BASH_SOURCE[0]}" == "-" ]] \
+	|| [[ ! -f "${BASH_SOURCE[0]}" ]]; then
 	SCRIPT_DIR=""
 	IS_PIPED=1
 else
@@ -132,11 +132,11 @@ ensure_prefix() {
 	fi
 
 	case "$prefix" in
-	/usr/local/*) ;;
-	/usr/* | /etc/*)
-		echo "ensure_prefix:: refusing system prefix: $prefix" >&2
-		return 1
-		;;
+		/usr/local/*) ;;
+		/usr/* | /etc/*)
+			echo "ensure_prefix:: refusing system prefix: $prefix" >&2
+			return 1
+			;;
 	esac
 
 	if [[ ! -d "$prefix" ]]; then
@@ -183,8 +183,8 @@ file_has_signature() {
 _resolve_install_root() {
 	local normalized_prefix="$1"
 
-	if [[ "$(id -u)" -eq 0 ]] || [[ "$normalized_prefix" == /usr/local/* ]] ||
-		[[ "$normalized_prefix" == /usr/* ]]; then
+	if [[ "$(id -u)" -eq 0 ]] || [[ "$normalized_prefix" == /usr/local/* ]] \
+		|| [[ "$normalized_prefix" == /usr/* ]]; then
 		echo "/usr/local/send-to-slack"
 	else
 		echo "${HOME}/.local/share/send-to-slack"
@@ -319,8 +319,8 @@ _install_lib_rel_paths() {
 	find "${root_dir}/lib" \
 		-mindepth 1 \
 		-type f \
-		-name '*.sh' |
-		LC_ALL=C sort | while IFS= read -r abs; do
+		-name '*.sh' \
+		| LC_ALL=C sort | while IFS= read -r abs; do
 		printf '%s\n' "${abs#"${root_dir}/"}"
 	done
 }
@@ -563,9 +563,9 @@ clone_repository() {
 		# fetch the ref directly to also cover commit SHAs.
 		rm -rf "$temp_clone_dir"
 		if ! clone_output=$(
-			git init -q "$temp_clone_dir" 2>&1 &&
-				git -C "$temp_clone_dir" fetch --depth 1 "$REPO_URL" "$ref" 2>&1 &&
-				git -C "$temp_clone_dir" checkout --detach FETCH_HEAD 2>&1
+			git init -q "$temp_clone_dir" 2>&1 \
+				&& git -C "$temp_clone_dir" fetch --depth 1 "$REPO_URL" "$ref" 2>&1 \
+				&& git -C "$temp_clone_dir" checkout --detach FETCH_HEAD 2>&1
 		); then
 			echo "clone_repository:: failed to fetch ref $ref: $clone_output" >&2
 			rm -rf "$temp_clone_dir"
@@ -676,43 +676,43 @@ main() {
 
 	while [[ $# -gt 0 ]]; do
 		case "$1" in
-		--prefix)
-			shift
-			if [[ -z "${1:-}" ]]; then
-				echo "main:: --prefix requires a value" >&2
+			--prefix)
+				shift
+				if [[ -z "${1:-}" ]]; then
+					echo "main:: --prefix requires a value" >&2
+					return 1
+				fi
+				prefix="$1"
+				;;
+			--prefix=*)
+				prefix="${1#*=}"
+				;;
+			--force)
+				force=1
+				;;
+			--version)
+				shift
+				if [[ -z "${1:-}" ]]; then
+					echo "main:: --version requires a value" >&2
+					return 1
+				fi
+				version="$1"
+				;;
+			--version=*)
+				version="${1#*=}"
+				if [[ -z "$version" ]]; then
+					echo "main:: --version requires a value" >&2
+					return 1
+				fi
+				;;
+			-h | --help)
+				usage
+				return 0
+				;;
+			*)
+				echo "main:: unknown option: $1" >&2
 				return 1
-			fi
-			prefix="$1"
-			;;
-		--prefix=*)
-			prefix="${1#*=}"
-			;;
-		--force)
-			force=1
-			;;
-		--version)
-			shift
-			if [[ -z "${1:-}" ]]; then
-				echo "main:: --version requires a value" >&2
-				return 1
-			fi
-			version="$1"
-			;;
-		--version=*)
-			version="${1#*=}"
-			if [[ -z "$version" ]]; then
-				echo "main:: --version requires a value" >&2
-				return 1
-			fi
-			;;
-		-h | --help)
-			usage
-			return 0
-			;;
-		*)
-			echo "main:: unknown option: $1" >&2
-			return 1
-			;;
+				;;
 		esac
 		shift
 	done
@@ -784,8 +784,8 @@ main() {
 
 	# Fallback to archive download. The archive path needs curl and tar even when
 	# check_dependencies passed on git alone.
-	if ! command -v "curl" >/dev/null 2>&1 ||
-		! command -v "tar" >/dev/null 2>&1; then
+	if ! command -v "curl" >/dev/null 2>&1 \
+		|| ! command -v "tar" >/dev/null 2>&1; then
 		echo "main:: archive download needs 'curl' and 'tar'" >&2
 		return 1
 	fi

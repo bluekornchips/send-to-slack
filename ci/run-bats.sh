@@ -109,8 +109,8 @@ main() {
 		base_ref="${BASE_BRANCH}"
 	fi
 
-	all_changed_sh=$(git diff --name-only --diff-filter="${DIFF_FILTER}" "${base_ref}..HEAD" |
-		grep -E "\.(${FILE_EXTENSIONS})$" || true)
+	all_changed_sh=$(git diff --name-only --diff-filter="${DIFF_FILTER}" "${base_ref}..HEAD" \
+		| grep -E "\.(${FILE_EXTENSIONS})$" || true)
 
 	if [[ -z "${all_changed_sh}" ]]; then
 		echo "main:: No shell files changed, skipping tests" >&2
