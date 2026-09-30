@@ -42,4 +42,4 @@ jobs:
 
       - name: Run full bats suite
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: make test
+        run: make test BATS_FLAGS='--timing --verbose-run --formatter tap'
