@@ -362,7 +362,8 @@ run_all_jobs() {
 # - Logs a warning to stderr if the send fails, does not abort the suite
 #
 # Returns:
-# - 0 always
+# - 1 on missing color or text
+# - 0 after a send attempt, including send failure
 notify_slack() {
 	local color
 	local text

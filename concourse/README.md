@@ -42,8 +42,8 @@ Webhook resources use `source.webhook_url` instead of `slack_bot_user_oauth_toke
 
 The resource type implementation lives under `concourse/resource-type/scripts/` as `check.sh`, `in.sh`, and `out.sh`, with tests under `concourse/resource-type/tests/`:
 
-- `check` - Checks for new versions (not applicable for this resource)
-- `in` - Retrieves a version (not applicable for this resource)
+- `check` - Emits the packaged VERSION, or a UTC timestamp if VERSION is missing
+- `in` - Writes that version JSON through and to `<dest>/version`
 - `out` - Sends a message to Slack
 
 See the [Concourse Resource Types Documentation](https://concourse-ci.org/implementing-resource-types.html#implementing-resource-types) for more details.

@@ -23,7 +23,7 @@ SUPPORTED_ALIGNMENTS=("left" "center" "right")
 # - Writes block JSON to the path in TABLE_BLOCK_OUTPUT_FILE (required)
 # - When total cell character count exceeds TABLE_MAX_CHAR_COUNT, writes a
 #   two-element JSON array instead: a context block and a file block pointing
-#   to a plain-text rendering of the table in _SLACK_WORKSPACE
+#   to a JSON copy of the table input in _SLACK_WORKSPACE
 #
 # Returns:
 # - 0 on successful table block creation with valid rows and cells

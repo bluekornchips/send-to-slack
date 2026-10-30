@@ -166,7 +166,7 @@ _validate_block_script() {
 #   May export BUILD_PIPELINE_INSTANCE_VARS after JSON-escaping
 #
 # Returns:
-#   0 on success
+#   0 on success or unsupported block type
 #   1 on validation or execution failure
 create_block() {
 	local block_input="$1"

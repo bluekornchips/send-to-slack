@@ -1,6 +1,7 @@
 ---
 # Example Concourse CI pipeline for Slack file blocks
-# File blocks upload files and create image blocks for images, rich_text blocks for other files
+# File blocks upload files and share them as snippet or file cards on the same
+# message as sibling blocks. Markdown files use snippet_type=markdown.
 
 resource_types:
   - name: slack-notification
@@ -206,14 +207,14 @@ jobs:
                 type: text
                 text:
                   type: mrkdwn
-                  text: "Image uploaded using file block. Image files (PNG, JPG, JPEG, GIF) create image blocks automatically."
+                  text: "Image uploaded using file block. Image files share as a file card with a preview."
             - file:
                 path: output/test-image.png
                 title: "Test Image"
             - context:
                 elements:
                   - type: plain_text
-                    text: "Image blocks created automatically for image files"
+                    text: "File cards created automatically for image files"
 
   # Mixed file types with other blocks
   - name: file-blocks-mixed-content

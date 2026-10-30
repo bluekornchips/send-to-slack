@@ -87,8 +87,8 @@ That target restarts Concourse and runs `./ci/build.sh` first. Prerequisites, sk
 
 Scripts under `concourse/resource-type/scripts/`:
 
-- `check` - version check (not applicable for this resource)
-- `in` - fetch version (not applicable for this resource)
+- `check` - emits the packaged VERSION, or a UTC timestamp if VERSION is missing
+- `in` - writes that version JSON through and to `<dest>/version`
 - `out` - send a message to Slack
 
 Tests: `concourse/resource-type/tests/`. Interface reference: [Concourse Resource Types](https://concourse-ci.org/implementing-resource-types.html#implementing-resource-types).

@@ -2,13 +2,14 @@
 
 ## GitHub Actions
 
-Scripts here and the root `Makefile` are wired into three workflows under [.github/workflows/](../.github/workflows/):
+Scripts here and the root `Makefile` are wired into four workflows under [.github/workflows/](../.github/workflows/):
 
-| Workflow                                            | When it runs                                     | Role                                                                                 |
-| --------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| [lint.yaml](../.github/workflows/lint.yaml)         | `pull_request`, push to `main`                   | Install shellcheck + shfmt, then `make lint`                                         |
-| [run-bats.yaml](../.github/workflows/run-bats.yaml) | `pull_request`, push to `main`                   | PRs: changed-file bats via `./ci/run-bats.sh`; `main`: full `make test`              |
-| [build.yaml](../.github/workflows/build.yaml)       | `pull_request` opened, synchronized, or reopened | Matrix of Docker builds via `./ci/build.sh` with healthcheck and optional Slack send |
+| Workflow                                                    | When it runs                                     | Role                                                                                 |
+| ----------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| [lint.yaml](../.github/workflows/lint.yaml)                 | `pull_request`, push to `main`                   | Install shellcheck + shfmt, then `make lint`                                         |
+| [run-bats.yaml](../.github/workflows/run-bats.yaml)         | `pull_request`, push to `main`                   | PRs: changed-file bats via `./ci/run-bats.sh`; `main`: full `make test`              |
+| [python-check.yaml](../.github/workflows/python-check.yaml) | `pull_request`, push to `main`                   | `make check` in `python/`                                                            |
+| [build.yaml](../.github/workflows/build.yaml)               | `pull_request` opened, synchronized, or reopened | Matrix of Docker builds via `./ci/build.sh` with healthcheck and optional Slack send |
 
 ### Concurrency
 
@@ -46,7 +47,7 @@ Run the script directly:
 ./ci/run-bats.sh
 ```
 
-When run locally without `GITHUB_BASE_REF`, the script compares the current branch to `origin/main`.
+When run locally without `GITHUB_BASE_REF`, the script compares the current branch to `main`.
 
 ### Configuration
 
@@ -57,7 +58,7 @@ Constants at the top of the script:
 - `TEST_DIRS`: Array of directories containing test files (default: `("tests" "concourse/resource-type/tests")`)
 - `FILE_EXTENSIONS`: Pipe-separated list of file extensions to process (default: `"sh|bats"`)
 
-Always fetches the base branch from origin before comparing.
+Fetches the base branch from origin only when `GITHUB_BASE_REF` is set.
 
 ### Examples
 
@@ -122,10 +123,6 @@ GitHub Actions mode:
 ### GitHub Actions variables, used with `--gha`
 
 - `GITHUB_EVENT_NAME`, `GITHUB_HEAD_REF`, `GITHUB_REF_NAME`, `GITHUB_SHA`, `GITHUB_REPOSITORY`, `GITHUB_SERVER_URL`, `GITHUB_RUN_ID`, `GITHUB_EVENT_PULL_REQUEST_NUMBER`, `GITHUB_EVENT_PULL_REQUEST_HTML_URL`
-
-### Notes
-
-- build-verification.sh and notification.json are removed; the test-message flow now lives behind `--send-test-message`.
 
 ## run-all-examples.sh
 

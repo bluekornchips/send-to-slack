@@ -39,6 +39,7 @@ _get_safe_payload_size() {
 #
 # Returns:
 # - 0 on successful metadata creation
+# - 1 on metadata JSON assembly failure
 create_metadata() {
 	local payload="$1"
 	local message_ts="${2:-}"

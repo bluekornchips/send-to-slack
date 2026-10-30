@@ -48,8 +48,6 @@ handle_slack_api_error() {
 		"rate_limited")
 			echo "handle_slack_api_error:: Rate limited. Slack API is throttling" \
 				"requests." >&2
-			echo "handle_slack_api_error:: Consider implementing retry logic or" \
-				"reducing request frequency." >&2
 			echo "handle_slack_api_error:: See: $DOC_URL_RATE_LIMITS" >&2
 			;;
 		"invalid_auth")

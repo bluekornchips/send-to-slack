@@ -238,3 +238,60 @@ teardown() {
 }
 
 ########################################################
+# send_notification file share
+########################################################
+
+@test "send_notification:: files use completeUploadExternal not chat.postMessage" {
+	DRY_RUN="false"
+	export DRY_RUN
+	DELIVERY_METHOD="api"
+	RETRY_INITIAL_DELAY=0
+	export RETRY_INITIAL_DELAY
+	unset EPHEMERAL_USER
+
+	local arg_capture
+	arg_capture=$(mktemp "${BATS_TEST_TMPDIR}/slack-api-tests.file-share-args.XXXXXX")
+	export arg_capture
+
+	curl() {
+		printf '%s\n' "$*" >>"$arg_capture"
+		echo '{"ok": true, "files": [{"id": "F1"}]}'
+		return 0
+	}
+	export -f curl
+
+	local payload
+	payload=$(jq -n '{
+		channel: "C1234567890",
+		blocks: [{type: "context", elements: [{type: "mrkdwn", text: "author"}]}],
+		files: [{id: "F1", title: "report.md", name: "report.md"}]
+	}')
+
+	run send_notification "$payload"
+	[[ "$status" -eq 0 ]]
+	grep -q "files.completeUploadExternal" "$arg_capture"
+	grep -q "channel_id=C1234567890" "$arg_capture"
+	grep -q "blocks=" "$arg_capture"
+	! grep -q "chat.postMessage" "$arg_capture"
+	! grep -q "initial_comment" "$arg_capture"
+}
+
+@test "send_notification:: files plus ephemeral fails" {
+	DRY_RUN="false"
+	export DRY_RUN
+	DELIVERY_METHOD="api"
+	EPHEMERAL_USER="U123"
+	export EPHEMERAL_USER
+
+	local payload
+	payload=$(jq -n '{
+		channel: "C1234567890",
+		files: [{id: "F1", title: "t"}]
+	}')
+
+	run send_notification "$payload"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "file uploads are not supported for ephemeral messages"
+}
+
+########################################################

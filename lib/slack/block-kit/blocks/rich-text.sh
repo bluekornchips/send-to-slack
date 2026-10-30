@@ -45,7 +45,7 @@ EXAMPLE_RICH_TEXT_BLOCK=$(
 # upload script
 #
 # Outputs:
-# - Block JSON for the file attachment to stdout
+# - Upload metadata JSON with id, title, and name to stdout
 #
 # Returns:
 # - 0 on success, 1 on resolution or upload failure
@@ -55,7 +55,6 @@ handle_oversize_text() {
 	local file_path
 	file_path=$(mktemp "$_SLACK_WORKSPACE/rich-text.oversize.XXXXXX")
 
-	# Write the extracted text to the file
 	echo "$extracted_text" >"$file_path"
 
 	local text
@@ -116,7 +115,6 @@ ${MAX_RICH_TEXT_CHARS}. Content has been uploaded and is available as a file."
 			'{ file: { path: $path, text: $text } }'
 	)"
 
-	# Upload the file
 	block=$("$upload_script_path" <<<"$new_block_input_json")
 
 	echo "$block"
@@ -130,7 +128,8 @@ ${MAX_RICH_TEXT_CHARS}. Content has been uploaded and is available as a file."
 # - Reads JSON from stdin with rich text configuration
 #
 # Side Effects:
-# - Outputs Slack Block Kit rich text block JSON to stdout
+# - Outputs Slack Block Kit rich text block JSON to stdout, or upload metadata
+# JSON with id, title, and name when text exceeds MAX_RICH_TEXT_CHARS
 create_rich_text() {
 	local input
 	input=$(cat)

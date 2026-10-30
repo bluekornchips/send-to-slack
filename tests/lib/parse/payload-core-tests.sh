@@ -399,6 +399,87 @@ teardown() {
 	rm -f "$tmp_file"
 }
 
+@test "parse_payload:: file block metadata is in files not blocks" {
+	local tmp_file
+	tmp_file=$(mktemp "${BATS_TEST_TMPDIR}/payload-tests.file-meta.XXXXXX.md")
+	echo "# hello" >"$tmp_file"
+
+	jq -n \
+		--arg file "$tmp_file" \
+		--arg channel "$CHANNEL" \
+		'{
+			source: { slack_bot_user_oauth_token: "xoxb-test" },
+			params: {
+				channel: $channel,
+				dry_run: true,
+				blocks: [
+					{ context: { elements: [{ type: "mrkdwn", text: "author" }] } },
+					{ file: { path: $file, title: "report.md" } }
+				]
+			}
+		}' >"$TEST_PAYLOAD_FILE"
+
+	local payload_output
+	payload_output=$(parse_payload "$TEST_PAYLOAD_FILE")
+	echo "$payload_output" | jq -e '.files | length == 1' >/dev/null
+	echo "$payload_output" | jq -e '.files[0].id == "F-DRY-RUN"' >/dev/null
+	echo "$payload_output" | jq -e '.files[0].title == "report.md"' >/dev/null
+	echo "$payload_output" | jq -e '.blocks | length == 1' >/dev/null
+	echo "$payload_output" | jq -e '.blocks[0].type == "context"' >/dev/null
+	echo "$payload_output" | jq -e '[.blocks[].type] | index("rich_text") | not' \
+		>/dev/null
+
+	rm -f "$tmp_file"
+}
+
+@test "parse_payload:: file blocks fail for ephemeral messages" {
+	local tmp_file
+	tmp_file=$(mktemp "${BATS_TEST_TMPDIR}/payload-tests.file-eph.XXXXXX")
+	echo "hello" >"$tmp_file"
+
+	jq -n \
+		--arg file "$tmp_file" \
+		'{
+			source: { slack_bot_user_oauth_token: "xoxb-test" },
+			params: {
+				channel: "C1234567890",
+				dry_run: true,
+				ephemeral_user: "U123",
+				blocks: [{ file: { path: $file } }]
+			}
+		}' >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "file uploads are not supported for ephemeral messages"
+
+	rm -f "$tmp_file"
+}
+
+@test "parse_payload:: file blocks fail when updating a message" {
+	local tmp_file
+	tmp_file=$(mktemp "${BATS_TEST_TMPDIR}/payload-tests.file-upd.XXXXXX")
+	echo "hello" >"$tmp_file"
+
+	jq -n \
+		--arg file "$tmp_file" \
+		'{
+			source: { slack_bot_user_oauth_token: "xoxb-test" },
+			params: {
+				channel: "C1234567890",
+				dry_run: true,
+				message_ts: "123.456",
+				blocks: [{ file: { path: $file } }]
+			}
+		}' >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "file uploads are not supported when updating a message"
+
+	rm -f "$tmp_file"
+}
+
 @test "parse_payload:: missing slack_bot_user_oauth_token" {
 	unset SLACK_BOT_USER_OAUTH_TOKEN
 	unset WEBHOOK_URL
@@ -1482,6 +1563,34 @@ teardown() {
 	run _build_slack_payload "" "" "$raw"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | jq -e '.thread_replies | length == 1' >/dev/null
+}
+
+@test "_build_slack_payload:: includes files when FILES_FILE is non-empty" {
+	local bf af ff
+	bf=$(mktemp "$_SLACK_WORKSPACE/bsl-b.XXXXXX")
+	af=$(mktemp "$_SLACK_WORKSPACE/bsl-a.XXXXXX")
+	ff=$(mktemp "$_SLACK_WORKSPACE/bsl-f.XXXXXX")
+	echo '[{"type":"context"}]' >"$bf"
+	echo '[]' >"$af"
+	echo '[{"id":"F1","title":"report.md","name":"report.md"}]' >"$ff"
+	jq -n '{params:{}}' >"$TEST_PAYLOAD_FILE"
+	INPUT_PAYLOAD="$TEST_PAYLOAD_FILE"
+	export INPUT_PAYLOAD
+	unset EPHEMERAL_USER
+	CHANNEL="C1234567890"
+	export CHANNEL
+	DELIVERY_METHOD="api"
+	export DELIVERY_METHOD
+	BLOCKS_FILE="$bf"
+	ATTACHMENTS_FILE="$af"
+	FILES_FILE="$ff"
+	export BLOCKS_FILE ATTACHMENTS_FILE FILES_FILE
+
+	run _build_slack_payload "" "" ""
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.files | length == 1' >/dev/null
+	echo "$output" | jq -e '.files[0].id == "F1"' >/dev/null
+	echo "$output" | jq -e '.blocks[0].type == "context"' >/dev/null
 }
 
 ########################################################

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # File upload orchestration for Slack
-# Coordinates the 3-step file upload process to Slack
+# Steps 1-2 upload bytes. files.completeUploadExternal shares into a channel
+# at send time so sibling blocks ride on the same snippet message.
 # Ref: https://docs.slack.dev/messaging/working-with-files/#upload
 #
 
@@ -20,7 +21,7 @@ MAX_FILE_SIZE=$((1024 * 1024 * 1024)) # 1 GB in bytes
 #
 # Returns:
 #   0 on success
-#   1 if file path is empty
+#   1 if file path is empty or stat fails
 get_file_permissions() {
 	local file_path="$1"
 
@@ -41,21 +42,36 @@ get_file_permissions() {
 
 # Step 1 of Slack file upload: Request upload URL
 # Calls files.getUploadURLExternal API to obtain upload URL and file ID
+# Sends snippet_type=markdown when FILENAME ends in .md or .markdown
 #
 # Ref: https://docs.slack.dev/messaging/working-with-files/#upload-step-1
 #
 # Side Effects:
 # - Sets FILE_ID and UPLOAD_URL environment variables
 #
+# Returns:
+#   0 on success
+#   1 on API or parse failure
 _get_upload_url() {
 
+	local curl_args
+	curl_args=(
+		-s -X POST
+		-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}"
+		-F "filename=${FILENAME}"
+		-F "length=${FILE_SIZE}"
+		--max-time 30
+		--connect-timeout 10
+	)
+
+	local lower_name
+	lower_name=$(printf '%s' "$FILENAME" | tr '[:upper:]' '[:lower:]')
+	if [[ "$lower_name" == *.md || "$lower_name" == *.markdown ]]; then
+		curl_args+=(-F "snippet_type=markdown")
+	fi
+
 	local api_response
-	if ! api_response=$(curl -s -X POST \
-		-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
-		-F "filename=${FILENAME}" \
-		-F "length=${FILE_SIZE}" \
-		--max-time 30 \
-		--connect-timeout 10 \
+	if ! api_response=$(curl "${curl_args[@]}" \
 		"https://slack.com/api/files.getUploadURLExternal"); then
 		echo "_get_upload_url:: failed to get upload URL: $api_response" >&2
 		return 1
@@ -119,6 +135,9 @@ EOF
 #
 # Ref: https://docs.slack.dev/messaging/working-with-files/#upload-step-2
 #
+# Returns:
+#   0 on success
+#   1 on HTTP or size verification failure
 _post_file_contents() {
 
 	local http_response
@@ -158,7 +177,6 @@ $FILE_PATH" >&2
 		return 1
 	fi
 
-	# Verify file size matches
 	echo "_post_file_contents:: file size verification: sent=$FILE_SIZE bytes,
 response=$response_size bytes" >&2
 	if [[ "$response_size" != "$FILE_SIZE" ]]; then
@@ -173,26 +191,125 @@ verified: $FILE_SIZE bytes" >&2
 	return 0
 }
 
-# Step 3 of Slack file upload: Complete upload and share file.
+# Extract channel and ts from a complete-upload response for permalink lookup.
 #
-# Calls files.completeUploadExternal API to finalize upload and optionally
-# share the file to a channel. Supports channel name/ID resolution.
+# Arguments:
+#   $1 - api_response: JSON body from files.completeUploadExternal
+#   $2 - channel_id: Channel ID sent in the complete-upload request
+#
+# Outputs:
+#   Writes JSON with channel and ts fields merged onto api_response
+#
+# Returns:
+#   0 on success
+#   1 if jq fails
+_normalize_complete_upload_response() {
+	local api_response="$1"
+	local channel_id="$2"
+
+	if [[ -z "$api_response" ]]; then
+		echo "_normalize_complete_upload_response:: api_response is required" >&2
+		return 1
+	fi
+
+	if [[ -z "$channel_id" ]]; then
+		echo "_normalize_complete_upload_response:: channel_id is required" >&2
+		return 1
+	fi
+
+	jq -c --arg ch "$channel_id" '
+		. + {
+			channel: (
+				.channel
+				// .files[0].channels[0]
+				// $ch
+			),
+			ts: (
+				.ts
+				// .files[0].shares.public[$ch][0].ts
+				// .files[0].shares.private[$ch][0].ts
+				// empty
+			)
+		}
+	' <<<"$api_response"
+
+	return 0
+}
+
+# Step 3 of Slack file upload: complete upload and share into a channel.
+#
+# Calls files.completeUploadExternal as multipart form fields. channel_id must
+# be in the body. Slack ignores channel_id on the query string for JSON POSTs.
+# Do not set initial_comment; Slack drops blocks when that field is present.
 #
 # Ref: https://docs.slack.dev/messaging/working-with-files/#upload-step-3
 #
-# Side Effects:
-# - Outputs file metadata JSON on success
+# Arguments:
+#   $1 - files_json: JSON array of {id, title} objects
+#   $2 - channel_id: resolved Slack channel ID
+#   $3 - blocks_json: Block Kit array JSON, empty or [] to omit
+#   $4 - thread_ts: optional thread timestamp
+#   $5 - username: optional bot username
+#   $6 - icon_emoji: optional icon emoji
+#   $7 - icon_url: optional icon URL
 #
+# Side Effects:
+# - Sets SLACK_LAST_RESPONSE to the API body with channel and ts when found
+#
+# Returns:
+#   0 on success
+#   1 on validation or API failure
 _complete_upload() {
+	local files_json="$1"
+	local channel_id="$2"
+	local blocks_json="${3:-}"
+	local thread_ts="${4:-}"
+	local username="${5:-}"
+	local icon_emoji="${6:-}"
+	local icon_url="${7:-}"
+
+	if [[ -z "$files_json" ]]; then
+		echo "_complete_upload:: files_json is required" >&2
+		return 1
+	fi
+
+	if [[ -z "$channel_id" ]]; then
+		echo "_complete_upload:: channel_id is required" >&2
+		return 1
+	fi
+
+	local curl_args
+	curl_args=(
+		-s -X POST
+		-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}"
+		-F "files=${files_json}"
+		-F "channel_id=${channel_id}"
+		--max-time 30
+		--connect-timeout 10
+	)
+
+	if [[ -n "$blocks_json" && "$blocks_json" != "[]" &&
+		"$blocks_json" != "null" ]]; then
+		curl_args+=(-F "blocks=${blocks_json}")
+	fi
+
+	if [[ -n "$thread_ts" && "$thread_ts" != "null" ]]; then
+		curl_args+=(-F "thread_ts=${thread_ts}")
+	fi
+
+	if [[ -n "$username" ]]; then
+		curl_args+=(-F "username=${username}")
+	fi
+	if [[ -n "$icon_emoji" ]]; then
+		curl_args+=(-F "icon_emoji=${icon_emoji}")
+	fi
+	if [[ -n "$icon_url" ]]; then
+		curl_args+=(-F "icon_url=${icon_url}")
+	fi
 
 	local api_response
-	if ! api_response=$(curl -s -X POST \
-		-H "Authorization: Bearer ${SLACK_BOT_USER_OAUTH_TOKEN}" \
-		-H "Content-Type: application/json; charset=utf-8" \
-		-d @"${UPLOAD_PAYLOAD_FILE}" \
-		--max-time 30 \
-		--connect-timeout 10 \
-		"${API_URL}"); then
+	if ! api_response=$(curl "${curl_args[@]}" \
+		"https://slack.com/api/files.completeUploadExternal"); then
 		echo "_complete_upload:: failed to complete upload: $api_response" >&2
 		return 1
 	fi
@@ -202,14 +319,12 @@ _complete_upload() {
 		return 1
 	fi
 
-	# Validate JSON response
 	if ! jq -e . >/dev/null 2>&1 <<<"$api_response"; then
 		echo "_complete_upload:: invalid JSON response from Slack API" >&2
 		echo "_complete_upload:: response: $api_response" >&2
 		return 1
 	fi
 
-	# Check for API success
 	local ok
 	ok=$(jq -r '.ok // false' <<<"$api_response")
 	if [[ "$ok" != "true" ]]; then
@@ -221,18 +336,11 @@ EOF
 		return 1
 	fi
 
-	# LIMITATION: Currently only handles the first file from the API response
-	# The Slack API supports multiple files, but this implementation processes only
-	# one
-	# To support multiple files, iterate over .files[] array and process each file
 	local files_count
 	files_count=$(jq '.files | length' <<<"$api_response")
 	echo "_complete_upload:: files count in response: $files_count" >&2
 
-	local first_file
-	first_file=$(jq '.files[0]' <<<"$api_response")
-
-	if [[ -z "$first_file" || "$first_file" == "null" ]]; then
+	if [[ "$files_count" == "0" || "$files_count" == "null" ]]; then
 		cat <<EOF >&2
 _complete_upload:: missing files in Slack response
 response:
@@ -241,136 +349,14 @@ EOF
 		return 1
 	fi
 
-	# Debug file metadata
-	local file_id file_size file_name file_type permalink mimetype
-	media_display_type
-	file_id=$(jq -r '.id // "unknown"' <<<"$first_file")
-	file_size=$(jq -r '.size // "unknown"' <<<"$first_file")
-	file_name=$(jq -r '.name // "unknown"' <<<"$first_file")
-	file_type=$(jq -r '.filetype // "unknown"' <<<"$first_file")
-	permalink=$(jq -r '.permalink // "unknown"' <<<"$first_file")
-	mimetype=$(jq -r '.mimetype // "unknown"' <<<"$first_file")
-	media_display_type=$(jq -r '.media_display_type // "unknown"' <<<"$first_file")
-
-	cat >&2 <<-EOF
-		_complete_upload:: file details:
-		_complete_upload::   id: $file_id
-		_complete_upload::   name: $file_name
-		_complete_upload::   size: $file_size bytes
-		_complete_upload::   type: $file_type
-		_complete_upload::   mimetype: $mimetype
-		_complete_upload::   media_display_type: $media_display_type
-		_complete_upload::   permalink: $permalink
-	EOF
-
-	if [[ -n "$FILE_PATH" && -f "$FILE_PATH" ]]; then
-		local file_perms_after
-		local file_readable
-		file_perms_after=$(get_file_permissions "$FILE_PATH")
-		file_readable=$([ -r "$FILE_PATH" ] && echo "yes" || echo "no")
-		cat >&2 <<-EOF
-			_complete_upload:: file permissions after upload: $file_perms_after
-			_complete_upload:: original file path: $FILE_PATH
-			_complete_upload:: original file size: $FILE_SIZE bytes
-			_complete_upload:: file readable: $file_readable
-		EOF
-	fi
-
-	# Verify file size matches what we uploaded
-	if [[ "$file_size" != "unknown" && "$file_size" != "null" ]] \
-		&& [[ "$file_size" != "$FILE_SIZE" ]]; then
-		echo "_complete_upload:: WARNING: file size mismatch (uploaded: $FILE_SIZE," \
-			"API reports: $file_size)" >&2
-	fi
-
-	echo "$first_file"
-
-	return 0
-}
-
-# Create Block Kit blocks from uploaded file metadata
-#
-# Inputs:
-# - Reads file metadata JSON from stdin (file object from
-# files.completeUploadExternal)
-#
-# Side Effects:
-# - Outputs Block Kit block JSON to stdout
-#
-# Returns:
-# - 0 on successful block creation
-# - 1 if input is invalid or missing required fields
-#
-# Ref:
-# https://docs.slack.dev/reference/block-kit/composition-objects/
-# slack-file-object/
-# Ref:
-# https://docs.slack.dev/reference/objects/file-object/
-create_file_blocks() {
-	local file_metadata
-	file_metadata=$(cat)
-
-	if [[ -z "$file_metadata" ]]; then
-		echo "create_file_blocks:: file metadata is required" >&2
+	local normalized
+	if ! normalized=$(_normalize_complete_upload_response \
+		"$api_response" "$channel_id"); then
 		return 1
 	fi
 
-	if ! jq -e . >/dev/null 2>&1 <<<"$file_metadata"; then
-		echo "create_file_blocks:: file metadata must be valid JSON" >&2
-		return 1
-	fi
-
-	local file_id
-	local permalink
-	local filename
-	local filetype
-
-	file_id=$(jq -r '.id // empty' <<<"$file_metadata")
-	permalink=$(jq -r '.permalink // empty' <<<"$file_metadata")
-	filename=$(jq -r '.name // "file"' <<<"$file_metadata")
-	filetype=$(jq -r '.filetype // ""' <<<"$file_metadata")
-
-	if [[ -z "$file_id" || "$file_id" == "null" ]]; then
-		echo "create_file_blocks:: file metadata missing id field" >&2
-		return 1
-	fi
-
-	# Create appropriate block based on file type (per Slack's file object
-	# recommendations)
-	if [[ "$filetype" =~ ^(png|jpg|jpeg|gif)$ ]]; then
-		# For images: use image block with slack_file object
-		local image_block
-		image_block=$(jq -n \
-			--arg file_id "$file_id" \
-			'{
-				type: "image",
-				slack_file: {
-					id: $file_id
-				}
-			}')
-
-		echo "[$image_block]"
-	else
-		# For non-image files: use section block with markdown link
-		local file_link_text
-		if [[ -n "$permalink" ]]; then
-			file_link_text="<${permalink}|${filename}>"
-		else
-			file_link_text="$filename"
-		fi
-
-		local section_block
-		section_block=$(jq -n \
-			--arg text "$file_link_text" \
-			'{ type: "section",
-				text: {
-					type: "mrkdwn",
-					text: $text
-				}
-			}')
-
-		echo "[$section_block]"
-	fi
+	SLACK_LAST_RESPONSE="$normalized"
+	export SLACK_LAST_RESPONSE
 
 	return 0
 }
@@ -381,8 +367,7 @@ create_file_blocks() {
 #   $1 - input_json: JSON string with file configuration
 #
 # Side Effects:
-#   Sets FILE_PATH, FILENAME, FILE_SIZE, title, output_var
-#   Exports FILENAME, FILE_SIZE, and output_var if specified
+#   Sets FILE_PATH
 #
 # Returns:
 #   0 on successful validation
@@ -486,9 +471,11 @@ validate_file_path() {
 # Arguments:
 #   $1 - file_config: JSON string with file configuration
 #
+# Outputs:
+#   Writes the display title to stdout
+#
 # Side Effects:
-#   Sets title and output_var
-#   Exports output_var if specified
+#   Exports the env var named by interpolate_file_contents_to_var
 #
 # Returns:
 #   0 on success
@@ -514,29 +501,13 @@ extract_file_metadata() {
 	return 0
 }
 
-# Validate required environment variables for file upload
+# Validate required environment variables for byte upload, steps 1-2.
+# Channel is not required here. Sharing happens in share_uploaded_files.
 #
 # Returns:
-#   0 if all required variables are set and valid
-#   1 if any required variable is missing or invalid
+#   0 if the bot token is set
+#   1 if the bot token is missing
 validate_upload_environment() {
-	if [[ -z "$CHANNEL" ]]; then
-		echo "file_upload:: CHANNEL environment variable is required" >&2
-		return 1
-	fi
-
-	# Validate channel ID format (basic check)
-	# Supports: C (public), G (private/groups), D (direct), Z (shared) IDs
-	# Also allows channel names (alphanumeric with hyphens/underscores)
-	if [[ ! "$CHANNEL" =~ ^[CGDZ][A-Z0-9]{8,}$ ]] && [[ ! "$CHANNEL" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-		cat >&2 <<-EOF
-			file_upload:: invalid channel format: $CHANNEL
-			file_upload:: channel must be a valid Slack ID (C/G/D/Z prefix) or channel \
-				name
-		EOF
-		return 1
-	fi
-
 	if [[ -z "${SLACK_BOT_USER_OAUTH_TOKEN}" ]]; then
 		echo "file_upload:: SLACK_BOT_USER_OAUTH_TOKEN environment variable is required" >&2
 		return 1
@@ -545,25 +516,24 @@ validate_upload_environment() {
 	return 0
 }
 
-# Orchestrate the complete 3-step file upload process
+# Upload file bytes, steps 1-2. Sharing is share_uploaded_files at send time.
 #
 # Inputs:
 # - JSON from stdin with structure:
 #   {
 #     "file": {
-#       "path": "{path to file}", // required
-#       "title": "{title of file}", // optional, defaults to basename
-#       "text": "{text to include with file}", // optional, defaults to filename
-#       "interpolate-file-contents": "{variable name}" // optional
+#       "path": "{path to file}",
+#       "title": "{title of file}",
+#       "interpolate_file_contents_to_var": "{variable name}"
 #     }
 #   }
 #
 # Side Effects:
-# - Uploads file to Slack via 3-step process
-# - Outputs rich_text block JSON to stdout on success
+# - Uploads file bytes to Slack unless DRY_RUN is true
+# - Outputs {id, title, name} JSON to stdout on success
 #
 # Returns:
-# - 0 on successful upload and share
+# - 0 on successful upload or dry-run
 # - 1 if validation fails, file operations fail, or API calls fail
 file_upload() {
 	local input_json
@@ -591,6 +561,20 @@ file_upload() {
 
 	echo "file_upload:: file title: $title" >&2
 
+	if [[ "${DRY_RUN:-}" == "true" ]]; then
+		echo "file_upload:: DRY_RUN enabled, skipping Slack file upload" >&2
+		if ! jq -nc \
+			--arg id "F-DRY-RUN" \
+			--arg title "$title" \
+			--arg name "$FILENAME" \
+			'{id: $id, title: $title, name: $name}'; then
+			echo "file_upload:: failed to build metadata JSON" >&2
+			return 1
+		fi
+
+		return 0
+	fi
+
 	if ! validate_upload_environment; then
 		return 1
 	fi
@@ -605,64 +589,85 @@ file_upload() {
 		return 1
 	fi
 
-	local upload_payload_file
-	upload_payload_file=$(mktemp "$_SLACK_WORKSPACE/file-upload.payload.XXXXXX")
-
-	jq -n \
-		--arg file_id "$FILE_ID" \
+	if ! jq -nc \
+		--arg id "$FILE_ID" \
 		--arg title "$title" \
-		'{ files: [{
-				id: $file_id,
-				title: $title
-			}]
-		}' >"$upload_payload_file"
-
-	echo "file_upload:: complete upload payload:" >&2
-	jq . <"$upload_payload_file" >&2
-
-	API_URL="https://slack.com/api/files.completeUploadExternal?""\
-channel_id=${CHANNEL}"
-	export API_URL
-	export UPLOAD_PAYLOAD_FILE="$upload_payload_file"
-
-	local file_metadata
-	if ! file_metadata=$(_complete_upload); then
+		--arg name "$FILENAME" \
+		'{id: $id, title: $title, name: $name}'; then
+		echo "file_upload:: failed to build metadata JSON" >&2
 		return 1
 	fi
 
-	local rich_text_block
-	local permalink
-	local file_id_from_metadata
-	local file_size_from_metadata
-	file_id_from_metadata=$(jq -r '.id // "unknown"' <<<"$file_metadata")
-	file_size_from_metadata=$(jq -r '.size // "unknown"' <<<"$file_metadata")
-	permalink=$(jq -r '.permalink // empty' <<<"$file_metadata")
+	return 0
+}
 
-	echo "file_upload:: file metadata:" >&2
-	echo "$file_metadata" | jq . >&2
+# Share uploaded files into a channel via files.completeUploadExternal.
+#
+# Sibling Block Kit on payload.blocks is sent as the blocks form field so the
+# author line and the snippet card land on one message.
+#
+# Arguments:
+#   $1 - payload: parsed Slack payload JSON with files array and channel
+#
+# Side Effects:
+# - Resolves payload.channel to a channel ID
+# - POSTs files.completeUploadExternal as multipart form fields
+# - Sets SLACK_LAST_RESPONSE
+#
+# Returns:
+#   0 on success
+#   1 on validation or API failure
+share_uploaded_files() {
+	local payload="$1"
 
-	if [[ -z "$permalink" || "$permalink" == "null" ||
-		"$permalink" == "empty" ]]; then
+	if [[ -z "$payload" ]]; then
+		echo "share_uploaded_files:: payload is required" >&2
 		return 1
 	fi
 
-	# Create rich_text with file link
-	rich_text_block=$(jq -n \
-		--arg link "$permalink" \
-		--arg filename "$FILENAME" \
-		'{
-			type: "rich_text",
-			elements: [
-				{
-					type: "rich_text_section",
-					elements: [
-						{ type: "link", url: $link, text: $filename }
-					]
-				}
-			]
-		}')
+	if ! jq -e '.files | type == "array" and length > 0' >/dev/null 2>&1 \
+		<<<"$payload"; then
+		echo "share_uploaded_files:: payload.files must be a non-empty array" >&2
+		return 1
+	fi
 
-	echo "$rich_text_block"
+	local channel
+	channel=$(jq -r '.channel // empty' <<<"$payload")
+	if [[ -z "$channel" || "$channel" == "null" ]]; then
+		echo "share_uploaded_files:: payload.channel is required" >&2
+		return 1
+	fi
+
+	local channel_id
+	if ! channel_id=$(resolve_channel_id "$channel"); then
+		echo "share_uploaded_files:: failed to resolve channel id" >&2
+		return 1
+	fi
+
+	local files_json
+	if ! files_json=$(jq -c \
+		'[.files[] | {id: .id, title: (.title // .name // "")}]' \
+		<<<"$payload"); then
+		echo "share_uploaded_files:: failed to build files list" >&2
+		return 1
+	fi
+
+	local blocks_json
+	blocks_json=$(jq -c '.blocks // []' <<<"$payload")
+
+	local thread_ts
+	local username
+	local icon_emoji
+	local icon_url
+	thread_ts=$(jq -r '.thread_ts // empty' <<<"$payload")
+	username=$(jq -r '.username // empty' <<<"$payload")
+	icon_emoji=$(jq -r '.icon_emoji // empty' <<<"$payload")
+	icon_url=$(jq -r '.icon_url // empty' <<<"$payload")
+
+	if ! _complete_upload "$files_json" "$channel_id" "$blocks_json" \
+		"$thread_ts" "$username" "$icon_emoji" "$icon_url"; then
+		return 1
+	fi
 
 	return 0
 }

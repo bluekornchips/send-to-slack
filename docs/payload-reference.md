@@ -140,4 +140,4 @@ Worked example and fixtures: [examples/blocks-from-file.yaml](../examples/blocks
 
 - 50 blocks per message (including blocks inside attachments)
 - 20 attachments per message
-- 40,000 characters for `text` fields
+- 40,000 characters for `params.text`

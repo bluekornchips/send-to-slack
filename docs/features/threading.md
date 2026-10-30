@@ -1,6 +1,6 @@
 # Threading
 
-Reply to existing threads and send follow up replies. Incoming Webhook delivery skips `params.thread.replies` and threaded sends that depend on `params.thread_ts`.
+Reply to existing threads and send follow up replies. Incoming Webhook delivery skips `params.thread.replies`.
 
 `params.thread_ts` can be a Slack timestamp or a message permalink; the tool converts permalinks automatically.
 

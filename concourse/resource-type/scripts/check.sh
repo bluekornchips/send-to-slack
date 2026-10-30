@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # Concourse resource 'check' script implementation
-# For notification resources, we emit the packaged VERSION so downstream succeeds
+# For notification resources, we emit the packaged VERSION so downstream succeeds.
+# Falls back to a UTC timestamp when VERSION is missing.
 # Ref: https://concourse-ci.org/implementing-resource-types.html#resource-check
 #
 
@@ -16,7 +17,8 @@ exec 1>&2
 #
 # Side Effects:
 # - Validates JSON input
-# - Outputs a single version array with the resource VERSION to stdout
+# - Outputs a single version array with the resource VERSION to stdout, or a UTC
+# timestamp when VERSION is missing
 #
 # Returns:
 # - 0 on successful validation

@@ -9,7 +9,6 @@ api_test_setup_file() {
 		fail "Failed to get git root"
 	fi
 
-	# shellcheck source=lib/loader.sh
 	source "${GIT_ROOT}/lib/loader.sh"
 
 	SCRIPT="${GIT_ROOT}/lib/slack/api.sh"
@@ -22,10 +21,12 @@ api_test_setup_file() {
 }
 
 api_test_setup() {
-	# shellcheck source=lib/loader.sh
 	source "${GIT_ROOT}/lib/loader.sh"
-	# shellcheck source=lib/slack/api.sh
 	source "$SCRIPT"
+	source "${GIT_ROOT}/lib/slack/utils/resolve-mentions.sh"
+	source "${GIT_ROOT}/lib/slack/utils/file-upload.sh"
+
+	unset EPHEMERAL_USER
 
 	SLACK_BOT_USER_OAUTH_TOKEN="test-token"
 	DRY_RUN="true"

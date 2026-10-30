@@ -59,7 +59,7 @@ Webhook delivery, keyed block format, and first-run guidance: [Getting Started](
 
 - Slack Block Kit with either native `type` blocks or keyed format
 - Delivery via bot token (Web API) or Incoming Webhook (`source.webhook_url` or `WEBHOOK_URL`)
-- File upload support with automatic image or rich-text block creation (Web API only; webhook delivery skips `file` blocks)
+- File upload support that shares a snippet or file card on the same message as sibling blocks (Web API only; webhook delivery rejects `file` blocks)
 - Crossposting with permalinks and optional custom text (Web API only)
 - Thread replies via `params.thread_ts` and `params.thread.replies` (Web API only)
 - Update an existing channel message with `chat.update` via `params.message_ts` or `params.message_ts_file` (Web API only)

@@ -10,12 +10,12 @@ Install `send-to-slack`, then send a first message with a bot token or an Incomi
 
 Other scopes used by optional features:
 
-| Scope                                     | Used for                                    |
-| ----------------------------------------- | ------------------------------------------- |
-| `chat:write.customize`                    | `params.username`, `icon_emoji`, `icon_url` |
-| `files:write`, `files:read`               | File uploads                                |
-| `users:read`                              | Mention resolution                          |
-| `channels:read`, `groups:read`, `im:read` | Channel and DM lookups                      |
+| Scope                          | Used for                                    |
+| ------------------------------ | ------------------------------------------- |
+| `chat:write.customize`         | `params.username`, `icon_emoji`, `icon_url` |
+| `files:write`                  | File uploads                                |
+| `users:read`                   | Mention resolution                          |
+| `channels:read`, `groups:read` | Channel lookups                             |
 
 Full Slack scope reference: [api.slack.com/scopes](https://api.slack.com/scopes).
 
