@@ -45,7 +45,6 @@ main() {
 	fi
 	trap 'rm -f "${SEND_TO_SLACK_OUTPUT}" "${input_file}"' EXIT ERR RETURN
 
-	# Read the contents of stdin into the input file
 	cat >"${input_file}"
 
 	# Change to destination directory if provided (where task outputs are available)

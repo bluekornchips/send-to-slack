@@ -63,11 +63,11 @@ install from the current repo. Also accepts --version=<tag>.
   -h, --help       Show this help message
 
 Behavior:
-- Installs lib/, bin helpers, and send-to-slack under a fixed install root, then
-symlinks the prefix to that tree
+- Copies the CLI, lib/, and VERSION when present under a fixed install root, then
+symlinks send-to-slack into the prefix
   - With --version local, installs from the repository containing this script
   - Appends a signature comment for safe uninstall validation
-  - Refuses system prefixes like /usr or /etc; choose a writable user path
+  - Refuses /usr and /etc except /usr/local/*; choose a writable user path
   - Creates the prefix if missing and sets mode 0755 on the installed script
 EOF
 	return 0

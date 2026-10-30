@@ -1,6 +1,6 @@
 # Message Management
 
-Update messages, crosspost to other channels, and upload files. Web API only; Incoming Webhooks skip updates, crosspost, and `file` blocks.
+Update messages, crosspost to other channels, and upload files. Web API only; Incoming Webhooks skip crosspost, and reject updates and `file` blocks.
 
 Related: [Payload Reference](../payload-reference.md), [Threading](threading.md), [Examples catalog](../../examples/README.md)
 
@@ -59,7 +59,11 @@ Example: [examples/crosspost.yaml](../../examples/crosspost.yaml).
 
 ## File uploads
 
-Use a `file` block (`files.getUploadURLExternal`). Requires `path` and a resolvable channel (`params.channel` or `CHANNEL`).
+Use a `file` block (`files.getUploadURLExternal` plus `files.completeUploadExternal`). Requires `path` and a resolvable channel (`params.channel` or `CHANNEL`). Token needs `files:write`.
+
+The file is shared into the channel as a snippet or file card on the same message as sibling blocks. That is how a context header and a `.md` preview land together. Images are file cards, not image blocks. `.md` / `.markdown` files set `snippet_type=markdown` so Slack renders a markdown snippet.
+
+`file` blocks cannot be used with Incoming Webhooks, `params.ephemeral_user`, or `params.message_ts` / `params.message_ts_file`.
 
 | Field                              | Notes                                           |
 | ---------------------------------- | ----------------------------------------------- |
@@ -67,6 +71,6 @@ Use a `file` block (`files.getUploadURLExternal`). Requires `path` and a resolva
 | `title`                            | Display title (optional; defaults to filename)  |
 | `interpolate_file_contents_to_var` | Export file contents to this env var (optional) |
 
-Max size 1 GB. Images (`png`, `jpg`, `jpeg`, `gif`) become image blocks; other types become rich-text links.
+Max size 1 GB.
 
 Examples: [file-upload.yaml](../../examples/file-upload.yaml), [file-blocks.yaml](../../examples/file-blocks.yaml).

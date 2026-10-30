@@ -32,7 +32,6 @@ create_divider() {
 		fi
 	fi
 
-	# Create the divider block
 	local block
 	block=$(jq -n --arg block_type "$BLOCK_TYPE" '{ type: $block_type }')
 

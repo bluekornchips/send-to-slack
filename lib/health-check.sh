@@ -169,7 +169,7 @@ _health_check_slack_api() {
 # - Writes status lines to stdout and stderr
 #
 # Returns:
-# - 0 if all checks pass
+# - 0 if all checks pass, including a reachable Slack API that returns invalid_auth
 # - 1 if any check fails
 health_check() {
 	local errors=0

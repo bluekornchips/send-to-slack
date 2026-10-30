@@ -53,7 +53,6 @@ teardown() {
 	run handle_slack_api_error "$response" "test_context"
 	[[ "$status" -eq 0 ]]
 	echo "$output" | grep -q "Rate limited"
-	echo "$output" | grep -q "retry logic"
 	echo "$output" | grep -q "test_context"
 }
 

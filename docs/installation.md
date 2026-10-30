@@ -44,7 +44,7 @@ curl -fsSL https://raw.githubusercontent.com/bluekornchips/send-to-slack/main/bi
 export PATH="${HOME}/.local/bin:${PATH}"
 ```
 
-The installer copies the CLI, `lib/`, and helpers into an install root, symlinks `send-to-slack` into the prefix, and appends a signature used by uninstall.
+The installer copies the CLI, `lib/`, and `VERSION` when present into an install root, symlinks `send-to-slack` into the prefix, and appends a signature used by uninstall.
 
 ## Uninstall
 
@@ -52,7 +52,7 @@ The installer copies the CLI, `lib/`, and helpers into an install root, symlinks
 ./bin/uninstall.sh
 ```
 
-Removes the signed shim only; use `--force` to remove an unsigned file. No-op if already absent.
+Removes the prefix symlink or shim and, when it points at a known install root, deletes that tree too. Use `--force` to remove an unsigned file. No-op if already absent.
 
 ## Containers
 

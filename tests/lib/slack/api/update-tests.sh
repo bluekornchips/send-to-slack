@@ -115,6 +115,14 @@ teardown() {
 	echo "$output" | grep -q "message_ts is required"
 }
 
+@test "update_message:: fails when payload has files" {
+	DRY_RUN="false"
+
+	run update_message "C1" "123.456" '{"channel":"C1","files":[{"id":"F1"}]}'
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "file uploads are not supported when updating a message"
+}
+
 @test "update_message:: succeeds when API returns ok" {
 	DRY_RUN="false"
 

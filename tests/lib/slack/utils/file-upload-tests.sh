@@ -34,7 +34,6 @@ setup() {
 
 	TEST_FILE="${BATS_TEST_TMPDIR}/file-upload-tests.test.txt"
 	CHANNEL="test-channel"
-	COMMENT="test comment"
 	TITLE="test title"
 	SLACK_BOT_USER_OAUTH_TOKEN="test-token"
 
@@ -42,20 +41,16 @@ setup() {
 
 	export TEST_FILE
 	export CHANNEL
-	export COMMENT
 	export TITLE
 	export SLACK_BOT_USER_OAUTH_TOKEN
 
-	# Create JSON input for tests
 	JSON_INPUT=$(jq -n \
 		--arg path "$TEST_FILE" \
 		--arg title "$TITLE" \
-		--arg text "$COMMENT" \
 		'{
 			file: {
 				path: $path,
-				title: $title,
-				text: $text
+				title: $title
 			}
 		}')
 
@@ -82,14 +77,6 @@ mock_get_upload_url_success() {
 mock_post_file_contents_success() {
 	_post_file_contents() {
 		echo "OK - $FILE_SIZE"
-		return 0
-	}
-	return 0
-}
-
-mock_complete_upload_success() {
-	_complete_upload() {
-		echo '{"id": "test123", "name": "test.txt", "permalink": "https://test.slack.com/files/test123"}'
 		return 0
 	}
 	return 0
@@ -212,15 +199,7 @@ mock_complete_upload_success() {
 	echo "$output" | grep -q "file_upload:: file not found: nonexistent.txt"
 }
 
-@test "file_upload:: channel not set" {
-	unset CHANNEL
-
-	run file_upload <<<"$JSON_INPUT"
-	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "file_upload:: CHANNEL environment variable is required"
-}
-
-@test "file_upload:: text defaults to filename when empty" {
+@test "file_upload:: outputs metadata json with id title and name" {
 	local json_input
 	json_input=$(jq -n --arg path "$TEST_FILE" '{file: {path: $path}}')
 
@@ -237,21 +216,19 @@ mock_complete_upload_success() {
 		return 0
 	}
 
-	_complete_upload() {
-		echo '{"id": "test123", "name": "test.txt", "permalink": "https://test.slack.com/files/test123"}'
-		return 0
-	}
-
 	export -f _get_upload_url
 	export -f _post_file_contents
-	export -f _complete_upload
 
 	run file_upload <<<"$json_input"
 	[[ "$status" -eq 0 ]]
-	# Should output rich_text block with file link using the file basename as text
-	echo "$output" | grep -q '"type": "rich_text"'
-	echo "$output" | grep -q "\"text\": \"$(basename "$TEST_FILE")\""
-	echo "$output" | grep -q '"url": "https://test.slack.com/files/test123"'
+	local meta
+	meta=$(echo "$output" | grep -E '^\{')
+	echo "$meta" | jq -e '.id == "test123"' >/dev/null
+	echo "$meta" | jq -e --arg name "$(basename "$TEST_FILE")" \
+		'.name == $name' >/dev/null
+	echo "$meta" | jq -e --arg name "$(basename "$TEST_FILE")" \
+		'.title == $name' >/dev/null
+	! echo "$output" | grep -q '"type": "rich_text"'
 }
 
 @test "file_upload:: title defaults to basename when not set" {
@@ -260,16 +237,26 @@ mock_complete_upload_success() {
 	mock_get_upload_url_success
 	mock_post_file_contents_success
 
-	# Mock _complete_upload
-	_complete_upload() {
-		echo '{"id": "test123", "name": "test.txt", "permalink": "https://test.slack.com/files/test123"}'
-		return 0
-	}
-
-	export -f _complete_upload
-
 	run file_upload <<<"$json_input"
 	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -E '^\{' | jq -e --arg name "$(basename "$TEST_FILE")" \
+		'.title == $name' >/dev/null
+}
+
+@test "file_upload:: dry-run skips Slack HTTP and prints placeholder id" {
+	DRY_RUN="true"
+	export DRY_RUN
+
+	curl() {
+		echo "curl should not be called in dry-run" >&2
+		return 1
+	}
+	export -f curl
+
+	run file_upload <<<"$JSON_INPUT"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "DRY_RUN enabled"
+	echo "$output" | grep -E '^\{' | jq -e '.id == "F-DRY-RUN"' >/dev/null
 }
 
 @test "file_upload:: slack bot user oauth token not set" {
@@ -342,13 +329,13 @@ mock_complete_upload_success() {
 
 	mock_get_upload_url_success
 	mock_post_file_contents_success
-	mock_complete_upload_success
 
 	local json_input
 	json_input=$(jq -n --arg path "$test_file" '{file: {path: $path}}')
 
 	run file_upload <<<"$json_input"
 	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -E '^\{' | jq -e '.id == "test123"' >/dev/null
 
 	rm -f "$test_file"
 	trap - EXIT
@@ -427,6 +414,144 @@ mock_complete_upload_success() {
 
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "glob matched"
+}
+
+########################################################
+# _get_upload_url snippet_type
+########################################################
+
+@test "_get_upload_url:: md filename sends snippet_type markdown" {
+	local arg_capture
+	arg_capture=$(mktemp "${BATS_TEST_TMPDIR}/file-upload-tests.curl-args.XXXXXX")
+	export arg_capture
+
+	FILENAME="pipeline.md"
+	FILE_SIZE="12"
+	export FILENAME
+	export FILE_SIZE
+
+	curl() {
+		printf '%s\n' "$*" >"$arg_capture"
+		echo '{"ok": true, "upload_url": "https://files.slack.com/upload/v1/x", "file_id": "F1"}'
+		return 0
+	}
+	export -f curl
+
+	run _get_upload_url
+	[[ "$status" -eq 0 ]]
+	grep -q "snippet_type=markdown" "$arg_capture"
+	grep -q "files.getUploadURLExternal" "$arg_capture"
+}
+
+@test "_get_upload_url:: txt filename omits snippet_type" {
+	local arg_capture
+	arg_capture=$(mktemp "${BATS_TEST_TMPDIR}/file-upload-tests.curl-args.XXXXXX")
+	export arg_capture
+
+	FILENAME="notes.txt"
+	FILE_SIZE="12"
+	export FILENAME
+	export FILE_SIZE
+
+	curl() {
+		printf '%s\n' "$*" >"$arg_capture"
+		echo '{"ok": true, "upload_url": "https://files.slack.com/upload/v1/x", "file_id": "F1"}'
+		return 0
+	}
+	export -f curl
+
+	run _get_upload_url
+	[[ "$status" -eq 0 ]]
+	! grep -q "snippet_type=" "$arg_capture"
+}
+
+########################################################
+# _complete_upload / share_uploaded_files
+########################################################
+
+@test "_complete_upload:: puts channel_id in form body not query string" {
+	local arg_capture
+	arg_capture=$(mktemp "${BATS_TEST_TMPDIR}/file-upload-tests.complete-args.XXXXXX")
+	export arg_capture
+
+	curl() {
+		printf '%s\n' "$*" >"$arg_capture"
+		echo '{"ok": true, "files": [{"id": "F1"}]}'
+		return 0
+	}
+	export -f curl
+
+	run _complete_upload '[{"id":"F1","title":"t"}]' "C1234567890"
+	[[ "$status" -eq 0 ]]
+	grep -q "channel_id=C1234567890" "$arg_capture"
+	grep -q "files.completeUploadExternal" "$arg_capture"
+	! grep -q "completeUploadExternal?channel_id=" "$arg_capture"
+	! grep -q "initial_comment" "$arg_capture"
+}
+
+@test "_complete_upload:: sends blocks and omits them when empty" {
+	local arg_capture
+	arg_capture=$(mktemp "${BATS_TEST_TMPDIR}/file-upload-tests.complete-blocks.XXXXXX")
+	export arg_capture
+
+	curl() {
+		printf '%s\n' "$*" >"$arg_capture"
+		echo '{"ok": true, "files": [{"id": "F1"}]}'
+		return 0
+	}
+	export -f curl
+
+	run _complete_upload '[{"id":"F1","title":"t"}]' "C1234567890" \
+		'[{"type":"context"}]'
+	[[ "$status" -eq 0 ]]
+	grep -q "blocks=" "$arg_capture"
+
+	run _complete_upload '[{"id":"F1","title":"t"}]' "C1234567890" "[]"
+	[[ "$status" -eq 0 ]]
+	! grep -q "blocks=" "$arg_capture"
+}
+
+@test "share_uploaded_files:: requires payload channel" {
+	resolve_channel_id() {
+		echo "C1234567890"
+		return 0
+	}
+
+	run share_uploaded_files '{"files":[{"id":"F1","title":"t"}]}'
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "payload.channel is required"
+}
+
+@test "share_uploaded_files:: shares with resolved channel and sibling blocks" {
+	local arg_capture
+	arg_capture=$(mktemp "${BATS_TEST_TMPDIR}/file-upload-tests.share-args.XXXXXX")
+	export arg_capture
+
+	resolve_channel_id() {
+		echo "C1234567890"
+		return 0
+	}
+
+	curl() {
+		printf '%s\n' "$*" >"$arg_capture"
+		echo '{"ok": true, "files": [{"id": "F1", "shares": {"public": {"C1234567890": [{"ts": "1.2"}]}}}]}'
+		return 0
+	}
+	export -f curl
+
+	local payload
+	payload=$(jq -n '{
+		channel: "alerts",
+		blocks: [{type: "context", elements: [{type: "mrkdwn", text: "author"}]}],
+		files: [{id: "F1", title: "report.md", name: "report.md"}]
+	}')
+
+	run share_uploaded_files "$payload"
+	[[ "$status" -eq 0 ]]
+	grep -q "channel_id=C1234567890" "$arg_capture"
+	grep -q "blocks=" "$arg_capture"
+	! grep -q "initial_comment" "$arg_capture"
+	! grep -q "chat.postMessage" "$arg_capture"
 }
 
 teardown() {

@@ -45,7 +45,7 @@ convert_thread_ts() {
 	return 0
 }
 
-# Sanitize payload by redacting sensitive information, auth tokens, PII
+# Sanitize payload by redacting source.slack_bot_user_oauth_token
 #
 # Arguments:
 #   $1 - payload_json: JSON payload string to sanitize
@@ -65,7 +65,6 @@ _sanitize_payload() {
 	fi
 
 	# Redact sensitive fields from source (auth tokens)
-	# Set slack_bot_user_oauth_token to "[REDACTED]"
 	local sanitized
 	sanitized=$(echo "$payload_json" | jq '
 		if .source then
@@ -524,7 +523,8 @@ load_configuration() {
 #
 # Side Effects:
 #   Sets global INPUT_PAYLOAD variable
-#   Exports SLACK_BOT_USER_OAUTH_TOKEN, CHANNEL, DRY_RUN
+#   Exports SLACK_BOT_USER_OAUTH_TOKEN, CHANNEL, DRY_RUN, WEBHOOK_URL,
+# DELIVERY_METHOD, EPHEMERAL_USER
 #
 # Returns:
 #   0 on success

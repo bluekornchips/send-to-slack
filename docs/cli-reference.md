@@ -13,7 +13,7 @@ Command line options, environment variables, health check, and debug mode for `s
 
 ## Health check
 
-Use `--health-check` to validate dependencies `jq` and `curl`, report whether `envsubst` is available for block variable interpolation, and optionally test Slack Web API connectivity if `SLACK_BOT_USER_OAUTH_TOKEN` is set. There is no separate probe for Incoming Webhook URLs. A missing `envsubst` is reported as a warning and does not fail the check; payloads that use variable interpolation in blocks still need `envsubst` on PATH at send time. Returns exit code 0 on success, 1 on failure. Skips the API check if `DRY_RUN` or `SKIP_SLACK_API_CHECK` is set.
+Use `--health-check` to validate dependencies `jq` and `curl`, report whether `envsubst` is available for block variable interpolation, and optionally test Slack Web API connectivity if `SLACK_BOT_USER_OAUTH_TOKEN` is set. There is no separate probe for Incoming Webhook URLs. A missing `envsubst` is reported as a warning and does not fail the check; payloads that use variable interpolation in blocks still need `envsubst` on PATH at send time. Returns exit code 0 on success, 1 on failure. A reachable Slack API that returns `invalid_auth` still exits 0. Skips the API check if `DRY_RUN` or `SKIP_SLACK_API_CHECK` is set.
 
 ## Environment variables
 
@@ -36,7 +36,7 @@ Enable debug mode by setting `params.debug: true` in your payload. When enabled,
 
 ### Features
 
-- Sanitized Payload Logging: Logs the input payload to stderr with sensitive authentication tokens redacted as `[REDACTED]`. This allows you to inspect the payload structure without exposing credentials.
+- Sanitized Payload Logging: Logs the input payload to stderr with `source.slack_bot_user_oauth_token` redacted as `[REDACTED]`. This allows you to inspect the payload structure without exposing credentials.
 - Automatic Metadata Override: Forces `SHOW_METADATA` and `SHOW_PAYLOAD` to `true`, and sets `LOG_VERBOSE` to `true`, regardless of prior environment variable settings.
 - Extended Debug Output: When enabled, also logs input source, block processing flow (type and destination per block), payload loading source (raw or from_file), configuration (channel, dry_run), send/crosspost request summaries, file upload steps, and mention resolution (user/channel/DM lookups).
 

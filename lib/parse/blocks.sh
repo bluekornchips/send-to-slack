@@ -200,7 +200,7 @@ _validate_thread_replies() {
 #   $2 - text_field: params.text value or empty
 #   $3 - thread_replies_raw: JSON array string for thread replies or empty
 #
-# Uses global variables: CHANNEL, BLOCKS_FILE, ATTACHMENTS_FILE,
+# Uses global variables: CHANNEL, BLOCKS_FILE, ATTACHMENTS_FILE, FILES_FILE,
 # DELIVERY_METHOD, INPUT_PAYLOAD, EPHEMERAL_USER
 #
 # Outputs:
@@ -208,7 +208,8 @@ _validate_thread_replies() {
 #
 # Returns:
 #   0 on success
-#   1 if text length exceeds MAX_TEXT_LENGTH
+#   1 if channel is missing for API delivery, block files are unset, or text
+# length exceeds MAX_TEXT_LENGTH
 _build_slack_payload() {
 	local thread_ts="$1"
 	local text_field="$2"
@@ -286,12 +287,22 @@ _build_slack_payload() {
 			'. + {icon_url: $icon_url}' <<<"$payload")
 	fi
 
+	if [[ -n "${FILES_FILE:-}" && -f "${FILES_FILE}" ]]; then
+		local files_count
+		files_count=$(jq 'length' "$FILES_FILE")
+		if ((files_count > 0)); then
+			payload=$(jq --slurpfile files "$FILES_FILE" \
+				'. + {files: $files[0]}' <<<"$payload")
+		fi
+	fi
+
 	echo "$payload"
 
 	return 0
 }
 
-# Process blocks array and create Slack payload with blocks and attachments
+# Process blocks array and create Slack payload with blocks, attachments, and
+# uploaded file metadata
 #
 # Uses global variables: INPUT_PAYLOAD, CHANNEL, DELIVERY_METHOD from
 # load_configuration
@@ -303,7 +314,7 @@ _build_slack_payload() {
 #   0 on success
 #   1 if block processing fails
 process_blocks() {
-	unset BLOCKS_FILE ATTACHMENTS_FILE
+	unset BLOCKS_FILE ATTACHMENTS_FILE FILES_FILE
 
 	local blocks_json
 	blocks_json=$(jq -r '.params.blocks // []' "$INPUT_PAYLOAD")
@@ -316,10 +327,15 @@ process_blocks() {
 		"$_SLACK_WORKSPACE/process_blocks.attachments.XXXXXX")
 	echo '[]' >"$attachments_file"
 
+	local files_file
+	files_file=$(mktemp "$_SLACK_WORKSPACE/process_blocks.files.XXXXXX")
+	echo '[]' >"$files_file"
+
 	BLOCKS_FILE="$blocks_file"
 	ATTACHMENTS_FILE="$attachments_file"
+	FILES_FILE="$files_file"
 
-	export BLOCKS_FILE ATTACHMENTS_FILE
+	export BLOCKS_FILE ATTACHMENTS_FILE FILES_FILE
 
 	if [[ "$blocks_json" == "[]" ]]; then
 		echo "process_blocks:: no blocks to process, assembling text-only payload" >&2
@@ -328,7 +344,6 @@ process_blocks() {
 		local block_items
 		block_items=$(jq -r -c '.[]' <<<"$blocks_json") || return 1
 
-		# Process each block in the blocks array
 		while read -r block_item; do
 			[[ -z "$block_item" ]] && continue
 			# Expand block-level from_file before type/value extraction
@@ -363,9 +378,12 @@ process_blocks() {
 
 		local block_count_debug
 		local attachment_count_debug
+		local file_count_debug
 		block_count_debug=$(jq '. | length' "$BLOCKS_FILE")
 		attachment_count_debug=$(jq '. | length' "$ATTACHMENTS_FILE")
-		echo "process_blocks:: completed: ${block_count_debug} blocks, ${attachment_count_debug} attachments" >&2
+		file_count_debug=$(jq '. | length' "$FILES_FILE")
+		echo "process_blocks:: completed: ${block_count_debug} blocks," \
+			"${attachment_count_debug} attachments, ${file_count_debug} files" >&2
 
 		if ! _validate_block_counts "$BLOCKS_FILE" "$ATTACHMENTS_FILE"; then
 			return 1
@@ -508,19 +526,20 @@ _cleanup_process_blocks_append_tmp_files() {
 	return 0
 }
 
-# Helper used by process_blocks to process a single block_item and append to
-# blocks/attachments
+# Process one block_item. File metadata goes to FILES_FILE. Other blocks go to
+# BLOCKS_FILE or ATTACHMENTS_FILE.
 #
 # Inputs:
 #   block_item - JSON object for one block in type-field or key-based format
 #
 # Side Effects:
-#   Updates blocks, attachments, block_index in caller scope
+#   Updates BLOCKS_FILE, ATTACHMENTS_FILE, FILES_FILE, and block_index in caller
+# scope
 #   Writes to stderr on failure
 #
 # Returns:
 #   0 on success
-#   1 if create_block fails
+#   1 if the block is rejected or create_block fails
 _process_blocks_append_block() {
 	local block_item="$1"
 
@@ -556,8 +575,8 @@ _process_blocks_append_block() {
 	CREATE_BLOCK_OUTPUT_FILE="$create_block_out"
 	export CREATE_BLOCK_OUTPUT_FILE
 
-	# Allocate a temp file for in-place jq updates to BLOCKS_FILE /
-	# ATTACHMENTS_FILE
+	# Allocate a temp file for in-place jq updates to BLOCKS_FILE,
+	# ATTACHMENTS_FILE, and FILES_FILE
 	local merge_tmp
 	merge_tmp=$(mktemp "$_SLACK_WORKSPACE/process_blocks.merge_tmp.XXXXXX")
 	if [[ -z "$merge_tmp" ]]; then
@@ -571,11 +590,32 @@ _process_blocks_append_block() {
 		return 1
 	fi
 
-	if [[ "$block_type" == "file" ]] \
-		&& [[ "${DELIVERY_METHOD:-api}" == "webhook" ]]; then
-		echo "_process_blocks_append_block:: file uploads are not supported for webhook delivery" >&2
-		_cleanup_process_blocks_append_tmp_files "$create_block_out" "$merge_tmp"
-		return 1
+	if [[ "$block_type" == "file" ]]; then
+		if [[ "${DELIVERY_METHOD:-api}" == "webhook" ]]; then
+			echo "_process_blocks_append_block:: file uploads are not supported for webhook delivery" >&2
+			_cleanup_process_blocks_append_tmp_files "$create_block_out" "$merge_tmp"
+			return 1
+		fi
+
+		if [[ -n "${EPHEMERAL_USER:-}" ]]; then
+			echo "_process_blocks_append_block:: file uploads are not supported for ephemeral messages" >&2
+			_cleanup_process_blocks_append_tmp_files "$create_block_out" "$merge_tmp"
+			return 1
+		fi
+
+		if [[ -n "${INPUT_PAYLOAD:-}" && -f "${INPUT_PAYLOAD}" ]]; then
+			local update_ts
+			local message_ts_file
+			update_ts=$(jq -r '.params.message_ts // empty' "$INPUT_PAYLOAD")
+			message_ts_file=$(jq -r '.params.message_ts_file // empty' \
+				"$INPUT_PAYLOAD")
+			if [[ -n "$update_ts" || -n "$message_ts_file" ]]; then
+				echo "_process_blocks_append_block:: file uploads are not supported when updating a message" >&2
+				_cleanup_process_blocks_append_tmp_files "$create_block_out" \
+					"$merge_tmp"
+				return 1
+			fi
+		fi
 	fi
 
 	if ! create_block "$block_value" "$block_type"; then
@@ -602,6 +642,43 @@ _process_blocks_append_block() {
 		done <<<"$array_items"
 
 		_cleanup_process_blocks_append_tmp_files "$create_block_out" "$merge_tmp"
+		return 0
+	fi
+
+	if [[ "$block_type" == "file" ]]; then
+		if [[ -z "${FILES_FILE:-}" ]]; then
+			echo "_process_blocks_append_block:: FILES_FILE is required for file blocks" >&2
+			_cleanup_process_blocks_append_tmp_files "$create_block_out" \
+				"$merge_tmp"
+			return 1
+		fi
+
+		if ! jq -e '.id' "$CREATE_BLOCK_OUTPUT_FILE" >/dev/null 2>&1; then
+			echo "_process_blocks_append_block:: file upload metadata missing id" >&2
+			_cleanup_process_blocks_append_tmp_files "$create_block_out" \
+				"$merge_tmp"
+			return 1
+		fi
+
+		if ! jq --slurpfile file "$CREATE_BLOCK_OUTPUT_FILE" \
+			'. += [$file[0]]' \
+			"$FILES_FILE" >"$merge_tmp"; then
+			echo "_process_blocks_append_block:: failed to append file metadata" >&2
+			_cleanup_process_blocks_append_tmp_files "$create_block_out" \
+				"$merge_tmp"
+			return 1
+		fi
+
+		if ! mv "$merge_tmp" "$FILES_FILE"; then
+			echo "_process_blocks_append_block:: failed to update files file" >&2
+			_cleanup_process_blocks_append_tmp_files "$create_block_out" \
+				"$merge_tmp"
+			return 1
+		fi
+
+		block_index=$((block_index + 1))
+		_cleanup_process_blocks_append_tmp_files "$create_block_out" "$merge_tmp"
+
 		return 0
 	fi
 

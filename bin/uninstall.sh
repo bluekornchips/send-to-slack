@@ -28,9 +28,10 @@ Options:
   -h, --help       Show this help message
 
 Behavior:
-- Removes the installed send-to-slack shim when it carries the install signature
-  - Refuses system prefixes like /usr or /etc; choose a writable user path
-  - No-op if the target file does not exist
+- Removes the prefix symlink or shim when it carries the install signature
+- When the shim points at a known install root, deletes that tree too
+- Refuses /usr and /etc except /usr/local/*; choose a writable user path
+- No-op if the target file does not exist
 EOF
 	return 0
 }

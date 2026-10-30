@@ -528,7 +528,7 @@ teardown() {
 	payload_output=$(parse_payload "$TEST_PAYLOAD_FILE")
 	# Table blocks go into attachments
 	echo "$payload_output" | jq -e '.attachments | length == 1' >/dev/null
-	# Table blocks are placed in attachments (table conversion to section blocks happens in table processing)
+	# Table blocks are placed in attachments
 	echo "$payload_output" | jq -e '.attachments[0].blocks | length > 0' >/dev/null
 	# Verify table structure is preserved
 	echo "$payload_output" | jq -e '.attachments[0].blocks[0].rows != null' >/dev/null

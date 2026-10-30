@@ -1,17 +1,25 @@
 #!/usr/bin/env bash
-# shellcheck source=lib/slack/api/http.sh
 #
 # chat.update helpers
 # Loaded by lib/slack/api.sh
 # Depends on: http.sh _execute_slack_delivery
 #
 
+# One chat.update attempt for update_message.
+#
+# Arguments:
+#   $1 - payload_file: temp file with the JSON body
+#   $2 - payload: JSON body string
+#
+# Returns:
+#   0 on success
+#   1 on retryable failure
+#   2 on permanent API failure
 _update_message_attempt() {
 	local payload_file="$1"
 	local payload="$2"
 
 	echo "update_message:: chat.update attempt" >&2
-	# shellcheck source=lib/slack/api/http.sh
 	_send_update_by_api "$payload_file" "$payload"
 }
 
@@ -69,6 +77,12 @@ update_message() {
 
 	if [[ -z "$payload" ]]; then
 		echo "update_message:: payload is required" >&2
+		return 1
+	fi
+
+	if jq -e '.files | type == "array" and length > 0' >/dev/null 2>&1 \
+		<<<"$payload"; then
+		echo "update_message:: file uploads are not supported when updating a message" >&2
 		return 1
 	fi
 

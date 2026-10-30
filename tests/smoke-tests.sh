@@ -37,10 +37,10 @@ setup_file() {
 }
 
 setup() {
-	# shellcheck source=lib/loader.sh
 	source "$GIT_ROOT/lib/loader.sh"
-	# shellcheck source=lib/slack/api.sh
 	source "$GIT_ROOT/lib/slack/api.sh"
+	source "$GIT_ROOT/lib/slack/utils/resolve-mentions.sh"
+	source "$GIT_ROOT/lib/slack/utils/file-upload.sh"
 	source "$GIT_ROOT/lib/metadata.sh"
 	source "$GIT_ROOT/lib/parse/payload.sh"
 	source "$GIT_ROOT/lib/parse/blocks.sh"
@@ -1113,6 +1113,56 @@ smoke_parse_payload_capture() {
 	trap - EXIT
 
 	[[ "$test_result" -eq 0 ]]
+}
+
+@test "smoke_test:: markdown file plus context shares a snippet" {
+	local md_file
+	md_file=$(mktemp "${BATS_TEST_TMPDIR}/smoke-tests.snippet.XXXXXX.md")
+	trap 'rm -f "$md_file" 2>/dev/null || true' EXIT
+	cat >"$md_file" <<'EOF'
+# Active Pipeline State
+
+| Flags | --variant test |
+| Skips | no-skip |
+EOF
+
+	local blocks_json
+	blocks_json=$(jq -n --arg path "$md_file" \
+		'[
+			{ "context": { "elements": [{ "type": "mrkdwn", "text": "snippet share test" }] } },
+			{ "file": { "path": $path, "title": "pipeline-state.md" } }
+		]')
+
+	smoke_test_setup "$blocks_json"
+
+	local parsed_payload
+	if ! smoke_parse_payload_capture "$SMOKE_TEST_PAYLOAD_FILE"; then
+		echo "parse_payload failed" >&2
+		rm -f "$md_file"
+		return 1
+	fi
+	parsed_payload="$SMOKE_PARSED_PAYLOAD"
+
+	echo "$parsed_payload" | jq -e '.files | length == 1' >/dev/null
+	echo "$parsed_payload" | jq -e '.blocks[0].type == "context"' >/dev/null
+
+	run send_notification "$parsed_payload"
+	local test_result=$status
+
+	if [[ "$test_result" -ne 0 ]]; then
+		rm -f "$md_file"
+		trap - EXIT
+		return 1
+	fi
+
+	echo "${RESPONSE:-}" | jq -e '.ok == true' >/dev/null
+	echo "${RESPONSE:-}" | jq -e '
+		(.files[0].channels | type == "array" and length > 0)
+		or (.files[0].shares | type == "object")
+	' >/dev/null
+
+	rm -f "$md_file"
+	trap - EXIT
 }
 
 @test "smoke_test:: file permissions debug after upload" {

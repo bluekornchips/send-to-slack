@@ -9,7 +9,8 @@
 # shellcheck source=lib/runtime.sh
 #
 # Send to Slack script
-# Processes JSON payload from stdin and sends message to Slack channel via API
+# Processes JSON payload from stdin and sends message to Slack via Web API or
+# Incoming Webhook
 # Supports Block Kit formatting, file uploads, and attachments
 #
 # Library loading lives in lib/loader.sh. Helpers are loaded from an explicit
