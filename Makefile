@@ -1,6 +1,6 @@
-VERSION := $(shell cat VERSION 2>/dev/null || echo "Unavailable")
-TAG       ?= $(VERSION)
-BATS_JOBS ?= $(shell nproc 2>/dev/null || echo 4)
+VERSION     := $(shell cat VERSION 2>/dev/null || echo "Unavailable")
+TAG         ?= $(VERSION)
+BATS_JOBS   ?= $(shell nproc 2>/dev/null || echo 4)
 
 TEST_FILES  := $(shell find tests concourse -name '*-tests.sh' -type f \
 	! -name 'smoke-tests.sh' ! -name 'acceptance-tests.sh')
@@ -11,7 +11,7 @@ SHFMT_FLAGS := -i 0 -ci -bn -ln=bats
 
 .DEFAULT_GOAL := ci
 
-.PHONY: lint fmt test test-serial test-smoke test-acceptance test-all \
+.PHONY: lint format test test-serial test-smoke test-acceptance test-all \
 	test-in-docker concourse-start concourse-stop concourse-load-examples \
 	concourse-clean-restart concourse-run-all-examples ci
 
@@ -19,11 +19,11 @@ SHFMT_FLAGS := -i 0 -ci -bn -ln=bats
 # Lint & Format
 #################################################
 
-fmt:
+format:
 	@command -v shfmt >/dev/null 2>&1 || { echo "shfmt is not installed" >&2; exit 1; }
-	@echo "fmt: shfmt $$(echo $(SHELL_FILES) | wc -w) files"
+	@echo "format: shfmt $$(echo $(SHELL_FILES) | wc -w) files"
 	@shfmt -w $(SHFMT_FLAGS) $(SHELL_FILES)
-	@echo "fmt: shfmt ok"
+	@echo "format: shfmt ok"
 
 lint:
 	@command -v shfmt >/dev/null 2>&1 || { echo "shfmt is not installed" >&2; exit 1; }
@@ -81,10 +81,10 @@ concourse-load-examples:
 	done
 
 concourse-clean-restart:
-	clear && \
-		$(MAKE) concourse-stop && \
-		$(MAKE) concourse-start && \
-		./ci/build.sh
+	clear
+	$(MAKE) concourse-stop
+	$(MAKE) concourse-start
+	./ci/build.sh
 
 concourse-run-all-examples: concourse-clean-restart
 	./ci/run-all-examples.sh

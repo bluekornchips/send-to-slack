@@ -82,11 +82,11 @@ mock_create_block() {
 	[[ "$status" -eq 0 ]]
 }
 
-@test "parse_payload:: attachment count exceeds 20 attachments limit" {
+@test "parse_payload:: attachment count exceeds 100 attachments limit" {
 	mock_create_block
 
 	local colored_blocks
-	colored_blocks=$(jq -n '[range(21) | {
+	colored_blocks=$(jq -n '[range(101) | {
 		section: {
 			type: "text",
 			text: {type: "plain_text", text: "Colored block \(.)"},
@@ -111,15 +111,14 @@ mock_create_block() {
 
 	run parse_payload "$TEST_PAYLOAD_FILE"
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "attachment count.*exceeds Slack's maximum of 20 attachments"
+	echo "$output" | grep -q "attachment count.*exceeds Slack's maximum of 100 attachments"
 }
 
-@test "parse_payload:: attachment count exactly at 20 attachments limit succeeds" {
+@test "parse_payload:: attachment count of 21 attachments succeeds" {
 	mock_create_block
 
-	# Create a payload with exactly 20 blocks with color (which become attachments)
 	local colored_blocks
-	colored_blocks=$(jq -n '[range(20) | {
+	colored_blocks=$(jq -n '[range(21) | {
 		section: {
 			type: "text",
 			text: {type: "plain_text", text: "Colored block \(.)"},
@@ -261,4 +260,88 @@ mock_create_block() {
 
 	[[ -n "$payload_output" ]]
 	echo "$payload_output" | jq -e --arg text "$test_text" '.text == $text' >/dev/null
+}
+
+@test "parse_payload:: single markdown block at 12000 characters succeeds" {
+	local max_text
+	max_text=$(printf 'x%.0s' {1..12000})
+
+	local test_payload
+	test_payload=$(jq -n \
+		--arg text "$max_text" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "test-token"
+			},
+			params: {
+				channel: "test-channel",
+				blocks: [{markdown: {text: $text}}]
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+}
+
+@test "parse_payload:: cumulative markdown over 12000 characters fails" {
+	local chunk
+	chunk=$(printf 'x%.0s' {1..7000})
+
+	local test_payload
+	test_payload=$(jq -n \
+		--arg a "$chunk" \
+		--arg b "$chunk" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "test-token"
+			},
+			params: {
+				channel: "test-channel",
+				blocks: [
+					{markdown: {text: $a}},
+					{markdown: {text: $b}}
+				]
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "markdown text length"
+	echo "$output" | grep -q "12000"
+}
+
+@test "parse_payload:: second table overflows when message char budget is exhausted" {
+	TABLE_MESSAGE_CHAR_BUDGET=5
+	export TABLE_MESSAGE_CHAR_BUDGET
+
+	local table_block
+	table_block=$(jq -n '{
+		table: {
+			rows: [[{type: "raw_text", text: "ABC"}]]
+		}
+	}')
+
+	local test_payload
+	test_payload=$(jq -n \
+		--argjson t1 "$table_block" \
+		--argjson t2 "$table_block" \
+		'{
+			source: {
+				slack_bot_user_oauth_token: "test-token"
+			},
+			params: {
+				channel: "test-channel",
+				blocks: [$t1, $t2]
+			}
+		}')
+
+	echo "$test_payload" >"$TEST_PAYLOAD_FILE"
+
+	run parse_payload "$TEST_PAYLOAD_FILE"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "falling back to file attachment"
 }

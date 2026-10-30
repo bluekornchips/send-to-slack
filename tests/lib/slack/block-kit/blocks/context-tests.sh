@@ -92,6 +92,33 @@ teardown() {
 	echo "$output" | grep -q "elements array must not be empty"
 }
 
+@test "create_context:: elements array cannot exceed 10 items" {
+	local input
+	input=$(jq -n '{elements: [range(11) | {type: "plain_text", text: "x"}]}')
+	run create_context <<<"$input"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "elements array cannot exceed 10 items"
+}
+
+@test "create_context:: elements array at 10 items succeeds" {
+	local input
+	input=$(jq -n '{elements: [range(10) | {type: "plain_text", text: "x"}]}')
+	run create_context <<<"$input"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.elements | length == 10' >/dev/null
+}
+
+@test "create_context:: element text too long" {
+	local long_text
+	long_text=$(printf 'x%.0s' {1..3001})
+	local input
+	input=$(jq -n --arg text "$long_text" \
+		'{elements: [{type: "plain_text", text: $text}]}')
+	run create_context <<<"$input"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "element text must be 3000 characters or less"
+}
+
 @test "create_context:: basic context with text element" {
 	local input=$(
 		cat <<-'EOF'

@@ -8,7 +8,8 @@
 # Constants
 ########################################################
 BLOCK_TYPE="context"
-MAX_ELEMENT_TEXT_LENGTH=2000
+MAX_ELEMENTS=10
+MAX_ELEMENT_TEXT_LENGTH=3000
 
 ########################################################
 # Documentation URLs
@@ -82,6 +83,11 @@ create_context() {
 		return 1
 	fi
 
+	if ((elements_length > MAX_ELEMENTS)); then
+		echo "create_context:: elements array cannot exceed $MAX_ELEMENTS items" >&2
+		return 1
+	fi
+
 	# Validate each element's text length (only for text-based elements)
 	local element_index=0
 	local element_entries
@@ -102,6 +108,7 @@ create_context() {
 				local element_text_length
 				element_text_length=${#element_text}
 				if ((element_text_length > MAX_ELEMENT_TEXT_LENGTH)); then
+					echo "create_context:: element text must be $MAX_ELEMENT_TEXT_LENGTH characters or less" >&2
 					return 1
 				fi
 			fi

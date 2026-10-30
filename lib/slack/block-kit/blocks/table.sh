@@ -21,8 +21,9 @@ SUPPORTED_ALIGNMENTS=("left" "center" "right")
 #
 # Side Effects:
 # - Writes block JSON to the path in TABLE_BLOCK_OUTPUT_FILE (required)
-# - When total cell character count exceeds TABLE_MAX_CHAR_COUNT, writes a
-#   two-element JSON array instead: a context block and a file block pointing
+# - When total cell character count exceeds TABLE_MAX_CHAR_COUNT, or the
+#   remaining message-wide table budget in TABLE_MESSAGE_CHARS_REMAINING, writes
+#   a two-element JSON array instead: a context block and a file block pointing
 #   to a JSON copy of the table input in _SLACK_WORKSPACE
 #
 # Returns:
@@ -153,8 +154,6 @@ create_table() {
 		done
 	fi
 
-	# Check total character count across all cells; fall back to file attachment if
-	# over limit.
 	# For raw_text cells, count .text length.
 	# For rich_text cells, sum all nested .text leaf string lengths.
 	local total_chars
@@ -166,8 +165,15 @@ create_table() {
 		] | add // 0
 	' "$input_json")
 
-	if ((total_chars > TABLE_MAX_CHAR_COUNT)); then
-		if ! _table_overflow_to_file "$input_json" "$total_chars"; then
+	local effective_max
+	effective_max="$TABLE_MAX_CHAR_COUNT"
+	if [[ -n "${TABLE_MESSAGE_CHARS_REMAINING:-}" ]] \
+		&& ((TABLE_MESSAGE_CHARS_REMAINING < effective_max)); then
+		effective_max="$TABLE_MESSAGE_CHARS_REMAINING"
+	fi
+
+	if ((total_chars > effective_max)); then
+		if ! _table_overflow_to_file "$input_json" "$total_chars" "$effective_max"; then
 			return 1
 		fi
 
@@ -199,6 +205,7 @@ create_table() {
 # Inputs:
 # - $1 - input_json_file: path to validated table input JSON file
 # - $2 - total_chars: total character count across all cells
+# - $3 - char_limit: limit used for overflow, defaults to TABLE_MAX_CHAR_COUNT
 #
 # Side Effects:
 # - Writes a .json file to _SLACK_WORKSPACE
@@ -210,13 +217,14 @@ create_table() {
 _table_overflow_to_file() {
 	local input_json_file="$1"
 	local total_chars="$2"
+	local char_limit="${3:-$TABLE_MAX_CHAR_COUNT}"
 
 	local row_count
 	local col_count
 	row_count=$(jq '.rows | length' "$input_json_file")
 	col_count=$(jq '.rows[0] | length' "$input_json_file")
 
-	echo "create_table:: table exceeds ${TABLE_MAX_CHAR_COUNT} char limit" \
+	echo "create_table:: table exceeds ${char_limit} char limit" \
 		"(${total_chars} chars, ${row_count}x${col_count} cells)," \
 		"falling back to file attachment" >&2
 
@@ -225,7 +233,7 @@ _table_overflow_to_file() {
 	cp "$input_json_file" "$json_file"
 
 	local context_msg context_block
-	context_msg="Table too large for inline display (${total_chars} chars, limit ${TABLE_MAX_CHAR_COUNT}). Attached as JSON."
+	context_msg="Table too large for inline display (${total_chars} chars, limit ${char_limit}). Attached as JSON."
 	context_block=$(jq -n \
 		--arg msg "$context_msg" \
 		'{

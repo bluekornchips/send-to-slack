@@ -88,8 +88,13 @@ handle_slack_api_error() {
 				"issues:" >&2
 			echo "handle_slack_api_error:: - Attachment structure must match Slack's" \
 				"format" >&2
-			echo "handle_slack_api_error:: - Maximum 20 attachments per message" >&2
+			echo "handle_slack_api_error:: - Maximum 100 attachments per message" >&2
 			echo "handle_slack_api_error:: See: $DOC_URL_LEGACY_ATTACHMENTS" >&2
+			;;
+		"too_many_attachments")
+			echo "handle_slack_api_error:: Too many attachments. Slack allows a" \
+				"maximum of 100 attachments per message." >&2
+			echo "handle_slack_api_error:: See: $DOC_URL_CHAT_POSTMESSAGE_ERRORS" >&2
 			;;
 		*)
 			echo "handle_slack_api_error:: Slack API error: $error_code" >&2

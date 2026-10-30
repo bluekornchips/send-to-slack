@@ -10,6 +10,7 @@
 BLOCK_TYPE="image"
 MAX_ALT_TEXT_LENGTH=2000
 MAX_TITLE_TEXT_LENGTH=2000
+MAX_IMAGE_URL_LENGTH=3000
 MAX_BLOCK_ID_LENGTH=255
 
 ########################################################
@@ -94,6 +95,10 @@ create_image() {
 	if [[ "$has_image_url" == true ]]; then
 		if ! image_url=$(jq -r '.image_url' <<<"$input"); then
 			echo "create_image:: invalid JSON format" >&2
+			return 1
+		fi
+		if [[ "${#image_url}" -gt "$MAX_IMAGE_URL_LENGTH" ]]; then
+			echo "create_image:: image_url must be $MAX_IMAGE_URL_LENGTH characters or less" >&2
 			return 1
 		fi
 	fi
