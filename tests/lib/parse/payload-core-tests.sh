@@ -1338,7 +1338,7 @@ teardown() {
 	bf=$(mktemp "$_SLACK_WORKSPACE/validate-bc-b.XXXXXX")
 	af=$(mktemp "$_SLACK_WORKSPACE/validate-bc-a.XXXXXX")
 	echo '[]' >"$bf"
-	jq -n '[range(21) | {color:"#FF0000", blocks:[{type:"section"}]}]' >"$af"
+	jq -n '[range(101) | {color:"#FF0000", blocks:[{type:"section"}]}]' >"$af"
 
 	run _validate_block_counts "$bf" "$af"
 	[[ "$status" -eq 1 ]]
@@ -1359,6 +1359,69 @@ teardown() {
 
 @test "_validate_block_counts:: fails when paths missing" {
 	run _validate_block_counts "" "/tmp/x"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "required"
+}
+
+@test "_validate_block_counts:: succeeds at 100 attachments with empty nested blocks" {
+	local bf af
+	bf=$(mktemp "$_SLACK_WORKSPACE/validate-bc-b.XXXXXX")
+	af=$(mktemp "$_SLACK_WORKSPACE/validate-bc-a.XXXXXX")
+	echo '[]' >"$bf"
+	jq -n '[range(100) | {color:"#FF0000", blocks:[]}]' >"$af"
+
+	run _validate_block_counts "$bf" "$af"
+	[[ "$status" -eq 0 ]]
+}
+
+########################################################
+# _validate_markdown_payload_length
+########################################################
+
+@test "_validate_markdown_payload_length:: within limit succeeds" {
+	local bf af
+	bf=$(mktemp "$_SLACK_WORKSPACE/validate-md-b.XXXXXX")
+	af=$(mktemp "$_SLACK_WORKSPACE/validate-md-a.XXXXXX")
+	jq -n '[{type:"markdown", text: "hello"}]' >"$bf"
+	echo '[]' >"$af"
+
+	run _validate_markdown_payload_length "$bf" "$af"
+	[[ "$status" -eq 0 ]]
+}
+
+@test "_validate_markdown_payload_length:: fails when cumulative markdown exceeds 12000" {
+	local bf af
+	local chunk
+	bf=$(mktemp "$_SLACK_WORKSPACE/validate-md-b.XXXXXX")
+	af=$(mktemp "$_SLACK_WORKSPACE/validate-md-a.XXXXXX")
+	chunk=$(printf 'x%.0s' {1..6001})
+	jq -n --arg a "$chunk" --arg b "$chunk" \
+		'[{type:"markdown", text: $a}, {type:"markdown", text: $b}]' >"$bf"
+	echo '[]' >"$af"
+
+	run _validate_markdown_payload_length "$bf" "$af"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "markdown text length"
+	echo "$output" | grep -q "12000"
+}
+
+@test "_validate_markdown_payload_length:: counts markdown inside attachments" {
+	local bf af
+	local chunk
+	bf=$(mktemp "$_SLACK_WORKSPACE/validate-md-b.XXXXXX")
+	af=$(mktemp "$_SLACK_WORKSPACE/validate-md-a.XXXXXX")
+	chunk=$(printf 'x%.0s' {1..6001})
+	echo '[]' >"$bf"
+	jq -n --arg a "$chunk" --arg b "$chunk" \
+		'[{color:"#FF0000", blocks:[{type:"markdown", text: $a}]}, {color:"#00FF00", blocks:[{type:"markdown", text: $b}]}]' >"$af"
+
+	run _validate_markdown_payload_length "$bf" "$af"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "markdown text length"
+}
+
+@test "_validate_markdown_payload_length:: fails when paths missing" {
+	run _validate_markdown_payload_length "" "/tmp/x"
 	[[ "$status" -eq 1 ]]
 	echo "$output" | grep -q "required"
 }

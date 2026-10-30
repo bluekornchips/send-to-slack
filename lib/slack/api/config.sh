@@ -26,6 +26,7 @@ ERROR_CODES_TRUE_FAILURES=(
 	"missing_scope"
 	"invalid_blocks"
 	"invalid_attachments"
+	"too_many_attachments"
 	"message_not_found"
 	"cant_update_message")
 

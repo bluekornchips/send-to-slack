@@ -120,6 +120,32 @@ teardown() {
 	echo "$output" | grep -q "title text must be 2000 characters or less"
 }
 
+@test "create_image:: image_url too long" {
+	local long_url
+	long_url="https://example.com/$(printf 'x%.0s' {1..3000})"
+	local test_input
+	test_input=$(jq -n \
+		--arg image_url "$long_url" \
+		--arg alt_text "Test image" \
+		'{image_url: $image_url, alt_text: $alt_text}')
+	run create_image <<<"$test_input"
+	[[ "$status" -eq 1 ]]
+	echo "$output" | grep -q "image_url must be 3000 characters or less"
+}
+
+@test "create_image:: image_url at maximum length succeeds" {
+	local max_url
+	max_url=$(printf 'x%.0s' {1..3000})
+	local test_input
+	test_input=$(jq -n \
+		--arg image_url "$max_url" \
+		--arg alt_text "Test image" \
+		'{image_url: $image_url, alt_text: $alt_text}')
+	run create_image <<<"$test_input"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.image_url | length == 3000' >/dev/null
+}
+
 @test "create_image:: block_id too long" {
 	local long_block_id
 	long_block_id=$(printf 'x%.0s' {1..256})

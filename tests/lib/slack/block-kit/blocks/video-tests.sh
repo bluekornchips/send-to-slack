@@ -203,7 +203,7 @@ teardown() {
 
 @test "create_video:: title text too long" {
 	local long_text
-	long_text=$(printf 'x%.0s' {1..2001})
+	long_text=$(printf 'x%.0s' {1..201})
 	local test_input
 	test_input=$(jq -n \
 		--arg video_url "https://example.com/video.mp4" \
@@ -213,12 +213,27 @@ teardown() {
 		'{video_url: $video_url, thumbnail_url: $thumbnail_url, alt_text: $alt_text, title: {type: "plain_text", text: $title_text}}')
 	run create_video <<<"$test_input"
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "title text must be 2000 characters or less"
+	echo "$output" | grep -q "title text must be 200 characters or less"
+}
+
+@test "create_video:: title text at maximum length succeeds" {
+	local max_text
+	max_text=$(printf 'x%.0s' {1..200})
+	local test_input
+	test_input=$(jq -n \
+		--arg video_url "https://example.com/video.mp4" \
+		--arg thumbnail_url "https://example.com/thumb.jpg" \
+		--arg alt_text "Test video" \
+		--arg title_text "$max_text" \
+		'{video_url: $video_url, thumbnail_url: $thumbnail_url, alt_text: $alt_text, title: {type: "plain_text", text: $title_text}}')
+	run create_video <<<"$test_input"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.title.text | length == 200' >/dev/null
 }
 
 @test "create_video:: description text too long" {
 	local long_text
-	long_text=$(printf 'x%.0s' {1..2001})
+	long_text=$(printf 'x%.0s' {1..201})
 	local test_input
 	test_input=$(jq -n \
 		--arg video_url "https://example.com/video.mp4" \
@@ -229,12 +244,12 @@ teardown() {
 		'{video_url: $video_url, thumbnail_url: $thumbnail_url, alt_text: $alt_text, title: $title, description: {type: "plain_text", text: $desc_text}}')
 	run create_video <<<"$test_input"
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "description text must be 2000 characters or less"
+	echo "$output" | grep -q "description text must be 200 characters or less"
 }
 
 @test "create_video:: author_name too long" {
 	local long_text
-	long_text=$(printf 'x%.0s' {1..2001})
+	long_text=$(printf 'x%.0s' {1..51})
 	local test_input
 	test_input=$(jq -n \
 		--arg video_url "https://example.com/video.mp4" \
@@ -245,7 +260,23 @@ teardown() {
 		'{video_url: $video_url, thumbnail_url: $thumbnail_url, alt_text: $alt_text, title: $title, author_name: $author_name}')
 	run create_video <<<"$test_input"
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "author_name must be 2000 characters or less"
+	echo "$output" | grep -q "author_name must be 50 characters or less"
+}
+
+@test "create_video:: author_name at maximum length succeeds" {
+	local max_name
+	max_name=$(printf 'x%.0s' {1..50})
+	local test_input
+	test_input=$(jq -n \
+		--arg video_url "https://example.com/video.mp4" \
+		--arg thumbnail_url "https://example.com/thumb.jpg" \
+		--arg alt_text "Test video" \
+		--argjson title '{"type": "plain_text", "text": "Video"}' \
+		--arg author_name "$max_name" \
+		'{video_url: $video_url, thumbnail_url: $thumbnail_url, alt_text: $alt_text, title: $title, author_name: $author_name}')
+	run create_video <<<"$test_input"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | jq -e '.author_name | length == 50' >/dev/null
 }
 
 @test "create_video:: provider_name too long" {
@@ -571,11 +602,11 @@ teardown() {
 @test "_video_optional_string:: field over max length returns 1" {
 	local input
 	local long_val
-	long_val=$(printf 'x%.0s' {1..2001})
+	long_val=$(printf 'x%.0s' {1..51})
 	input=$(jq -n --arg val "$long_val" '{author_name: $val}')
-	run _video_optional_string "$input" '.author_name' 'author_name' '2000'
+	run _video_optional_string "$input" '.author_name' 'author_name' '50'
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "author_name must be 2000 characters or less"
+	echo "$output" | grep -q "author_name must be 50 characters or less"
 }
 
 @test "_video_optional_string:: invalid JSON returns 1" {
@@ -643,14 +674,14 @@ teardown() {
 
 @test "_video_optional_description:: description text too long returns 1" {
 	local long_text
-	long_text=$(printf 'x%.0s' {1..2001})
+	long_text=$(printf 'x%.0s' {1..201})
 	local input
 	input=$(jq -n \
 		--arg text "$long_text" \
 		'{description: {type: "plain_text", text: $text}}')
 	run _video_optional_description "$input"
 	[[ "$status" -eq 1 ]]
-	echo "$output" | grep -q "description text must be 2000 characters or less"
+	echo "$output" | grep -q "description text must be 200 characters or less"
 }
 
 @test "_video_optional_description:: description present but empty text returns 1" {

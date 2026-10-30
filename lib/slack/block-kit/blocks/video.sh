@@ -10,9 +10,9 @@
 BLOCK_TYPE="video"
 REQUIRED_TITLE_TYPE="plain_text"
 MAX_ALT_TEXT_LENGTH=2000
-MAX_TITLE_TEXT_LENGTH=2000
-MAX_DESCRIPTION_TEXT_LENGTH=2000
-MAX_AUTHOR_NAME_LENGTH=2000
+MAX_TITLE_TEXT_LENGTH=200
+MAX_DESCRIPTION_TEXT_LENGTH=200
+MAX_AUTHOR_NAME_LENGTH=50
 MAX_PROVIDER_NAME_LENGTH=2000
 MAX_BLOCK_ID_LENGTH=255
 
@@ -100,7 +100,7 @@ _video_optional_description() {
 	fi
 
 	if [[ "${#description_text}" -gt "$MAX_DESCRIPTION_TEXT_LENGTH" ]]; then
-		echo "create_video:: description text must be 2000 characters or less" >&2
+		echo "create_video:: description text must be $MAX_DESCRIPTION_TEXT_LENGTH characters or less" >&2
 		return 1
 	fi
 

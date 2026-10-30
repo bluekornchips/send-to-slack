@@ -26,7 +26,9 @@ source "${SEND_TO_SLACK_ROOT}/lib/slack/block-kit/create-block.sh"
 
 MAX_TEXT_LENGTH=40000
 MAX_BLOCKS=50
-MAX_ATTACHMENTS=20
+MAX_ATTACHMENTS=100
+MAX_MARKDOWN_PAYLOAD_CHARS=12000
+TABLE_MESSAGE_CHAR_BUDGET=10000
 MAX_BLOCK_INPUT_BYTES=524288 # 512 KiB
 
 # Validate block input JSON byte size before dispatching to a block script.
@@ -146,6 +148,45 @@ _validate_block_counts() {
 	if ((total_block_count > MAX_BLOCKS)); then
 		echo "parse_payload:: total block count ($total_block_count) exceeds Slack's maximum of $MAX_BLOCKS blocks per message" >&2
 		echo "parse_payload:: See block limits: $DOC_URL_BLOCK_KIT_BLOCKS" >&2
+		return 1
+	fi
+
+	return 0
+}
+
+# Validate cumulative markdown character count against Slack's payload limit.
+# Slack caps the sum of all markdown block text in one payload at 12,000 chars.
+#
+# Arguments:
+#   $1 - blocks_file: path to JSON array file of blocks
+#   $2 - attachments_file: path to JSON array file of attachments
+#
+# Returns:
+#   0 when within limit
+#   1 when a limit is exceeded or required arguments are missing
+_validate_markdown_payload_length() {
+	local blocks_file="$1"
+	local attachments_file="$2"
+
+	if [[ -z "$blocks_file" ]] || [[ -z "$attachments_file" ]]; then
+		echo "_validate_markdown_payload_length:: blocks_file and attachments_file are required" >&2
+		return 1
+	fi
+
+	local blocks_chars
+	local attachment_chars
+	blocks_chars=$(jq \
+		'([.[] | select(.type == "markdown") | .text | length] | add // 0)' \
+		"$blocks_file")
+	attachment_chars=$(jq \
+		'([.[].blocks[]? | select(.type == "markdown") | .text | length] | add // 0)' \
+		"$attachments_file")
+
+	local total_chars
+	total_chars=$((blocks_chars + attachment_chars))
+	if ((total_chars > MAX_MARKDOWN_PAYLOAD_CHARS)); then
+		echo "parse_payload:: markdown text length ($total_chars) exceeds Slack's maximum of $MAX_MARKDOWN_PAYLOAD_CHARS characters" >&2
+		echo "parse_payload:: across all markdown blocks" >&2
 		return 1
 	fi
 
@@ -337,6 +378,9 @@ process_blocks() {
 
 	export BLOCKS_FILE ATTACHMENTS_FILE FILES_FILE
 
+	TABLE_MESSAGE_CHARS_REMAINING="$TABLE_MESSAGE_CHAR_BUDGET"
+	export TABLE_MESSAGE_CHARS_REMAINING
+
 	if [[ "$blocks_json" == "[]" ]]; then
 		echo "process_blocks:: no blocks to process, assembling text-only payload" >&2
 	else
@@ -386,6 +430,10 @@ process_blocks() {
 			"${attachment_count_debug} attachments, ${file_count_debug} files" >&2
 
 		if ! _validate_block_counts "$BLOCKS_FILE" "$ATTACHMENTS_FILE"; then
+			return 1
+		fi
+
+		if ! _validate_markdown_payload_length "$BLOCKS_FILE" "$ATTACHMENTS_FILE"; then
 			return 1
 		fi
 	fi
@@ -643,6 +691,23 @@ _process_blocks_append_block() {
 
 		_cleanup_process_blocks_append_tmp_files "$create_block_out" "$merge_tmp"
 		return 0
+	fi
+
+	if [[ "$block_type" == "table" ]]; then
+		local table_chars
+		# Keep this jq aligned with create_table cell character counting.
+		if ! table_chars=$(jq '
+			[.rows[][] |
+				if .type == "raw_text" then (.text | length)
+				elif .type == "rich_text" then ([.. | .text? | strings | length] | add // 0)
+				else 0 end
+			] | add // 0
+		' "$CREATE_BLOCK_OUTPUT_FILE"); then
+			_cleanup_process_blocks_append_tmp_files "$create_block_out" "$merge_tmp"
+			return 1
+		fi
+		TABLE_MESSAGE_CHARS_REMAINING=$((TABLE_MESSAGE_CHARS_REMAINING - table_chars))
+		export TABLE_MESSAGE_CHARS_REMAINING
 	fi
 
 	if [[ "$block_type" == "file" ]]; then

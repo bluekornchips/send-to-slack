@@ -504,3 +504,38 @@ teardown() {
 	echo "$output_content" | jq -e 'type == "object"' >/dev/null
 	echo "$output_content" | jq -e '.type == "table"' >/dev/null
 }
+
+@test "create_table:: remaining message budget overflow produces file fallback" {
+	TABLE_MESSAGE_CHARS_REMAINING=1
+	export TABLE_MESSAGE_CHARS_REMAINING
+
+	local overflow_input
+	overflow_input=$(jq -n '{rows: [[{type: "raw_text", text: "AB"}]]}')
+
+	run create_table <<<"$overflow_input"
+	[[ "$status" -eq 0 ]]
+
+	local output_content
+	output_content=$(cat "$TABLE_BLOCK_OUTPUT_FILE")
+
+	echo "$output_content" | jq -e 'type == "array"' >/dev/null
+	echo "$output_content" | jq -e '.[0].type == "context"' >/dev/null
+	echo "$output_content" | jq -e '.[1].file.path | test(".json$")' >/dev/null
+}
+
+@test "create_table:: table within remaining message budget stays inline" {
+	TABLE_MESSAGE_CHARS_REMAINING=10
+	export TABLE_MESSAGE_CHARS_REMAINING
+
+	local small_input
+	small_input=$(jq -n '{rows: [[{type: "raw_text", text: "AB"}]]}')
+
+	run create_table <<<"$small_input"
+	[[ "$status" -eq 0 ]]
+
+	local output_content
+	output_content=$(cat "$TABLE_BLOCK_OUTPUT_FILE")
+
+	echo "$output_content" | jq -e 'type == "object"' >/dev/null
+	echo "$output_content" | jq -e '.type == "table"' >/dev/null
+}

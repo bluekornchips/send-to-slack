@@ -138,6 +138,13 @@ Worked example and fixtures: [examples/blocks-from-file.yaml](../examples/blocks
 
 ## Limits
 
-- 50 blocks per message (including blocks inside attachments)
-- 20 attachments per message
+Rich text over 4,000 characters and tables over the table character budget become a file attachment instead of failing the send.
+
+- 50 blocks per message, including blocks inside attachments
+- 100 attachments per message
 - 40,000 characters for `params.text`
+- 12,000 characters across all `markdown` blocks in one payload
+- 10,000 characters across all table cells in one table, and across all tables in one message
+- Context blocks: at most 10 elements; each text element at most 3,000 characters
+- Image `image_url`: at most 3,000 characters
+- Video `title` and `description` text: at most 200 characters; `author_name`: at most 50 characters

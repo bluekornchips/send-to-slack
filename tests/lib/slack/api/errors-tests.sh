@@ -118,6 +118,22 @@ teardown() {
 	echo "$output" | grep -q "channels:read"
 }
 
+@test "handle_slack_api_error:: handles too_many_attachments error" {
+	local response=$(
+		cat <<-'EOF'
+			{
+			  "ok": false,
+			  "error": "too_many_attachments"
+			}
+		EOF
+	)
+	run handle_slack_api_error "$response" "test_context"
+	[[ "$status" -eq 0 ]]
+	echo "$output" | grep -q "Too many attachments"
+	echo "$output" | grep -q "100 attachments"
+	echo "$output" | grep -q "test_context"
+}
+
 @test "handle_slack_api_error:: handles unknown error" {
 	local response=$(
 		cat <<-'EOF'
